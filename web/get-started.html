@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>MetaTrader Tick Explorer - Get Started</title>
+<style>
+  :root {
+    --bg: #0a0e17;
+    --panel: #0d1220;
+    --border: #1e2531;
+    --text: #e6e9ef;
+    --muted: #7d8697;
+    --gold: #f0b429;
+    --up: #3fb68b;
+    --down: #e5484d;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 14px/1.55 "Segoe UI", system-ui, sans-serif;
+    display: flex; overflow: hidden; user-select: none;
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #232b3a; border-radius: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* ---------------- sidebar ---------------- */
+  #sidebar {
+    width: 300px; flex: 0 0 300px; background: var(--panel);
+    padding: 28px 26px; display: flex; flex-direction: column;
+  }
+  #brand { display: flex; align-items: center; gap: 10px; margin-bottom: 44px; }
+  #brand img { width: 34px; height: 34px; }
+  #brand span { font-size: 15px; font-weight: 600; letter-spacing: .2px; }
+  .step { display: flex; gap: 14px; position: relative; padding-bottom: 26px; }
+  .step:last-child { padding-bottom: 0; }
+  .step::after {
+    content: ""; position: absolute; left: 17px; top: 36px; bottom: 4px;
+    width: 1px; background: #242c3b;
+  }
+  .step:last-child::after { display: none; }
+  .step .dot {
+    width: 34px; height: 34px; flex: 0 0 34px; border-radius: 50%;
+    border: 1px solid #2c3446; background: #151b28; color: var(--muted);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 600; z-index: 1; transition: .18s;
+  }
+  .step .label { font-size: 15px; color: #aeb6c4; }
+  .step .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .step.active .dot { background: var(--gold); border-color: var(--gold); color: #10141d; }
+  .step.active .label { color: #fff; font-weight: 600; }
+  .step.done .dot { background: rgba(240,180,41,.16); border-color: var(--gold); color: var(--gold); }
+  .step.done::after { background: var(--gold); opacity: .5; }
+
+  /* ---------------- content ---------------- */
+  #content { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #topbar { height: 52px; display: flex; align-items: center; justify-content: flex-end; padding: 0 18px; }
+  #drag { flex: 1; height: 100%; }
+  #close {
+    width: 34px; height: 34px; border: 0; background: transparent; color: #8b93a3;
+    font-size: 20px; line-height: 1; cursor: pointer; border-radius: 6px;
+  }
+  #close:hover { background: rgba(229,72,77,.18); color: #fff; }
+  #pane { flex: 1; overflow: auto; padding: 8px 56px 16px 56px; }
+  .eyebrow { color: var(--gold); letter-spacing: 2px; font-size: 12px; font-weight: 700; }
+  h1 { font-size: 46px; line-height: 1.12; margin: 14px 0 0; font-weight: 700; }
+  h1 .accent { color: var(--gold); }
+  .lede { color: #9aa3b2; margin-top: 14px; font-size: 15px; }
+  h2 { font-size: 26px; margin: 10px 0 6px; }
+  p { margin: 10px 0; color: #b6bdc9; }
+  ul { color: #b6bdc9; margin: 10px 0; padding-left: 20px; }
+  li { margin: 6px 0; }
+  code { background: #161d2b; padding: 1px 6px; border-radius: 4px; color: var(--gold); }
+  .note {
+    border-left: 3px solid var(--gold); background: rgba(240,180,41,.07);
+    padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 14px 0; color: #cdd4df;
+  }
+  .error { border-left-color: var(--down); background: rgba(229,72,77,.09); }
+  .ok { border-left-color: var(--up); background: rgba(63,182,139,.09); }
+
+  img#prepare-img {
+    display: block; width: 100%; max-width: 420px; height: auto;
+    border: 1px solid var(--border); border-radius: 10px; margin: 8px auto 0;
+  }
+
+  /* symbol picker */
+  #symbol-search {
+    width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: #0f1523; color: var(--text); outline: none; margin: 12px 0 10px;
+  }
+  #symbol-search:focus { border-color: var(--gold); }
+  #symbol-list {
+    max-height: 250px; overflow: auto; border: 1px solid var(--border); border-radius: 10px;
+    background: #0f1523;
+  }
+  .sym {
+    display: flex; gap: 12px; padding: 9px 14px; cursor: pointer; border-bottom: 1px solid #141b28;
+  }
+  .sym:hover { background: rgba(255,255,255,.04); }
+  .sym.sel { background: rgba(240,180,41,.14); }
+  .sym .n { flex: 0 0 150px; font-weight: 600; }
+  .sym .d { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ---------------- footer ---------------- */
+  #footer { display: flex; align-items: center; padding: 18px 56px 30px; gap: 16px; }
+  #dots { display: flex; gap: 9px; flex: 1; }
+  #dots i { width: 8px; height: 8px; border-radius: 50%; background: #2a3243; display: block; }
+  #dots i.on { background: var(--gold); }
+  button.primary {
+    background: var(--gold); color: #10141d; border: 0; border-radius: 8px;
+    padding: 13px 30px; font-size: 15px; font-weight: 600; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 10px;
+  }
+  button.primary:hover { filter: brightness(1.07); }
+  button.primary:disabled { opacity: .5; cursor: default; filter: none; }
+  button.ghost {
+    background: transparent; color: #c3cad6; border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 22px; font-size: 14px; cursor: pointer;
+  }
+  button.ghost:hover { background: rgba(255,255,255,.05); }
+  button.danger { background: var(--down); color: #fff; }
+  .spin {
+    width: 14px; height: 14px; border: 2px solid rgba(16,20,29,.35); border-top-color: #10141d;
+    border-radius: 50%; animation: sp .7s linear infinite; display: inline-block;
+  }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+  <div id="sidebar" class="drag-area">
+    <div id="brand">
+      <img src="assets/icon.svg" alt="" />
+      <span id="brand-title">MetaTrader Tick Explorer</span>
+    </div>
+    <div id="steps"></div>
+  </div>
+
+  <div id="content">
+    <div id="topbar" class="drag-area">
+      <div id="drag"></div>
+      <button id="close" title="Exit">&times;</button>
+    </div>
+    <div id="pane"></div>
+    <div id="footer">
+      <div id="dots"></div>
+      <button class="ghost hidden" id="btn-secondary"></button>
+      <button class="primary" id="btn-primary">Next <span>&rarr;</span></button>
+    </div>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  var STEPS = [
+    { n: 1, label: "Welcome", sub: "Let's get started" },
+    { n: 2, label: "MetaTrader Preparation", sub: "Enable Python Integration" },
+    { n: 3, label: "Choose Symbol", sub: "Configure your workspace" },
+    { n: 4, label: "Finish", sub: "You're all set" }
+  ];
+
+  var api = null;
+  var S = {
+    step: 1, maxDays: 3, server: "", symbols: [], selected: "",
+    busy: false, message: "", messageKind: "",
+    prefill: null, prefillTimer: null, filter: ""
+  };
+
+  var pane = document.getElementById("pane");
+  var stepsEl = document.getElementById("steps");
+  var dotsEl = document.getElementById("dots");
+  var btnPrimary = document.getElementById("btn-primary");
+  var btnSecondary = document.getElementById("btn-secondary");
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+
+  function renderSidebar() {
+    stepsEl.innerHTML = STEPS.map(function (s) {
+      var cls = s.n === S.step ? "step active" : (s.n < S.step ? "step done" : "step");
+      return '<div class="' + cls + '"><div class="dot">' + s.n + '</div><div>' +
+        '<div class="label">' + s.label + '</div><div class="sub">' + s.sub + '</div></div></div>';
+    }).join("");
+    dotsEl.innerHTML = STEPS.map(function (s) {
+      return '<i class="' + (s.n === S.step ? "on" : "") + '"></i>';
+    }).join("");
+  }
+
+  function messageHtml() {
+    if (!S.message) return "";
+    return '<div class="note ' + (S.messageKind || "") + '">' + esc(S.message) + "</div>";
+  }
+
+  // ------------------------------------------------------------------ views
+  function viewWelcome() {
+    return '<div class="eyebrow">GET STARTED</div>' +
+      '<h1>Welcome to<br><span class="accent">MetaTrader Tick Explorer</span></h1>' +
+      '<div class="lede">Set up your workspace in a few simple steps.</div>';
+  }
+
+  function viewPreparation() {
+    return '<h2>MetaTrader Preparation</h2>' +
+      '<p>In MetaTrader 5 open <code>Tools &rsaquo; Options &rsaquo; Community</code> and make sure ' +
+      '<b>Python integration</b> is enabled — without it this app cannot read any data from your terminal.</p>' +
+      '<p>You must also be <b>logged in to an account</b> (demo or real) in the terminal. Without a logged-in ' +
+      'account the broker provides no data at all.</p>' +
+      '<img id="prepare-img" src="assets/prepare.png" alt="Tools > Options > Community > Python integration" />' +
+      '<p>When both are done, press <b>Next</b> and the app will try to connect and read your broker\'s symbol list.</p>' +
+      messageHtml();
+  }
+
+  function viewSymbol() {
+    var filter = S.filter.trim().toLowerCase();
+    var list = S.symbols;
+    if (filter) {
+      list = list.filter(function (s) {
+        return s.symbol.toLowerCase().indexOf(filter) >= 0 ||
+               (s.description || "").toLowerCase().indexOf(filter) >= 0;
+      });
+    }
+    // Only a bounded slice is put into the DOM: a broker list can be 1000+
+    // symbols and rendering all of them makes the window feel slow.
+    var shown = list.slice(0, 200);
+    var rows = shown.map(function (s) {
+      return '<div class="sym' + (s.symbol === S.selected ? " sel" : "") + '" data-sym="' + esc(s.symbol) + '">' +
+        '<div class="n">' + esc(s.symbol) + '</div><div class="d">' + esc(s.description || "") + "</div></div>";
+    }).join("") || '<div class="sym"><div class="d">No symbol matches your search.</div></div>';
+
+    var html = '<h2>Choose Symbol</h2>' +
+      "<p>Symbols below come from your broker: <b>" + esc(S.server) + "</b> (" + S.symbols.length + " symbols).</p>" +
+      '<input id="symbol-search" placeholder="Search symbol or description ..." value="' + esc(S.filter) + '" />' +
+      '<div id="symbol-list">' + rows + "</div>" +
+      (list.length > shown.length ? '<p style="font-size:12px">Showing the first ' + shown.length +
+        " of " + list.length + " matches — refine your search to see more.</p>" : "") +
+      '<div class="note">By default the app downloads the last <b>' + S.maxDays +
+      " day(s)</b> of data (Max prefill Days) for the selected symbol. You can extend this range any time later " +
+      "from <b>Setting &rsaquo; Market Data Overview</b>.</div>";
+
+    if (S.prefill) {
+      var p = S.prefill;
+      html += '<div class="note ' + (p.state === "done" ? "ok" : "") + '">' +
+        (p.state === "done"
+          ? "Downloaded " + p.candles.toLocaleString() + " candles for " + esc(p.symbol) + "."
+          : "Downloading " + esc(p.symbol) + " ... " + p.candles.toLocaleString() +
+            " candles so far (" + esc(p.status) + ", " + p.elapsed + "s).") +
+        (p.hint ? "<br>" + esc(p.hint) : "") + "</div>";
+    }
+    html += messageHtml();
+    return html;
+  }
+
+  function viewFinish() {
+    return '<div class="eyebrow">ALL SET</div>' +
+      '<h1>You\'re <span class="accent">ready to go</span></h1>' +
+      "<div class=\"lede\">" + esc(S.selected) + " on " + esc(S.server) +
+      " is ready. Press Finish to open the chart — this window will not appear again.</div>";
+  }
+
+  // ------------------------------------------------------------- rendering
+  function render() {
+    renderSidebar();
+    if (S.step === 1) pane.innerHTML = viewWelcome();
+    else if (S.step === 2) pane.innerHTML = viewPreparation();
+    else if (S.step === 3) pane.innerHTML = viewSymbol();
+    else pane.innerHTML = viewFinish();
+
+    if (S.step === 3) {
+      var search = document.getElementById("symbol-search");
+      search.addEventListener("input", function () {
+        S.filter = search.value;
+        var at = search.selectionStart;
+        render();
+        var again = document.getElementById("symbol-search");
+        again.focus();
+        again.setSelectionRange(at, at);
+      });
+      document.getElementById("symbol-list").addEventListener("click", function (e) {
+        var row = e.target.closest(".sym");
+        if (!row || !row.dataset.sym) return;
+        S.selected = row.dataset.sym;
+        S.message = "";
+        render();
+      });
+    }
+    renderFooter();
+  }
+
+  function renderFooter() {
+    btnSecondary.classList.add("hidden");
+    btnPrimary.classList.remove("danger");
+    btnPrimary.disabled = S.busy;
+
+    if (S.step === 3 && S.prefill && S.prefill.state !== "done") {
+      btnPrimary.innerHTML = '<span class="spin"></span> Downloading ...';
+      btnPrimary.disabled = true;
+      return;
+    }
+    if (S.step === 4) {
+      btnPrimary.textContent = "Finish";
+      return;
+    }
+    if (S.busy) {
+      btnPrimary.innerHTML = '<span class="spin"></span> ' +
+        (S.step === 2 ? "Connecting ..." : "Please wait ...");
+      btnPrimary.disabled = true;
+      return;
+    }
+    btnPrimary.innerHTML = "Next <span>&rarr;</span>";
+  }
+
+  // --------------------------------------------------------------- actions
+  function goto(step) {
+    S.step = step;
+    S.message = "";
+    api.save_step(step);
+    render();
+  }
+
+  function connectMt5() {
+    S.busy = true; S.message = ""; render();
+    api.connect_mt5().then(function (result) {
+      S.busy = false;
+      if (!result || !result.ok) {
+        S.message = (result && result.error ? result.error + " " : "") +
+          "Please re-check the points on this page (Python integration enabled, terminal open " +
+          "and logged in), then press Next again.";
+        S.messageKind = "error";
+        render();
+        return;
+      }
+      S.server = result.server;
+      S.symbols = result.symbols || [];
+      S.selected = S.symbols.length ? S.symbols[0].symbol : "";
+      goto(3);
+    });
+  }
+
+  function startPrefill() {
+    if (!S.selected) {
+      S.message = "Select a symbol first."; S.messageKind = "error"; render(); return;
+    }
+    S.busy = true; render();
+    api.start_prefill(S.selected).then(function (result) {
+      S.busy = false;
+      if (!result || !result.ok) {
+        S.message = (result && result.error) || "Could not start the download.";
+        S.messageKind = "error"; render(); return;
+      }
+      S.prefill = { state: "working", candles: 0, status: "connecting", elapsed: 0, hint: "", symbol: S.selected };
+      render();
+      pollPrefill();
+    });
+  }
+
+  function pollPrefill() {
+    clearTimeout(S.prefillTimer);
+    api.poll_prefill().then(function (p) {
+      if (!p || p.state === "idle") return;
+      S.prefill = p;
+      if (p.state === "done") {
+        render();
+        goto(4);
+        return;
+      }
+      render();
+      S.prefillTimer = setTimeout(pollPrefill, 1000);
+    });
+  }
+
+  btnPrimary.addEventListener("click", function () {
+    if (S.step === 1) { goto(2); return; }
+    if (S.step === 2) { connectMt5(); return; }
+    if (S.step === 3) { startPrefill(); return; }
+    api.finish();
+  });
+
+
+  document.getElementById("close").addEventListener("click", function () { api.exit_app(); });
+
+  // V66.2: drag the window from any .drag-area (sidebar, top bar). JS only
+  // signals begin/end; the native move loop lives in src/win_drag.py.
+  document.addEventListener("mousedown", function (e) {
+    if (e.button !== 0 || !api) return;
+    if (!e.target.closest(".drag-area")) return;
+    if (e.target.closest("button, input, select, textarea, a")) return;
+    e.preventDefault();
+    api.drag_begin();
+  });
+  function endDrag() { if (api) api.drag_end(); }
+  window.addEventListener("mouseup", endDrag);
+  window.addEventListener("blur", endDrag);
+
+  function boot() {
+    api = window.pywebview.api;
+    // v67.2: brand text/document title come from the same single-source
+    // app name/version (src/version.py) as the main chart window's title
+    // bar - see SetupBridge.get_app_info() / ChartBridge.get_app_info().
+    if (api.get_app_info) {
+      api.get_app_info().then(function (info) {
+        if (!info || !info.title) return;
+        var brandEl = document.getElementById("brand-title");
+        if (brandEl) brandEl.textContent = info.title;
+        document.title = info.title + " - Get Started";
+      }).catch(function () { /* keep the static HTML fallback */ });
+    }
+    api.get_state().then(function (state) {
+      S.step = state.step || 1;
+      S.server = state.server || "";
+      S.symbols = state.symbols || [];
+      S.selected = state.symbol || (S.symbols.length ? S.symbols[0].symbol : "");
+      S.maxDays = state.max_prefill_days || 3;
+      render();
+    });
+  }
+
+  if (window.pywebview && window.pywebview.api) boot();
+  else window.addEventListener("pywebviewready", boot);
+})();
+</script>
+</body>
+</html>

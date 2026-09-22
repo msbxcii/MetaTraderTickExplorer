@@ -1,0 +1,4287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>MetaTrader Tick Explorer</title>
+<!-- v27.1: switched back from the unpkg CDN to a locally-vendored copy of
+     Lightweight Charts v5.2.1 (was on CDN briefly in the first v27 build),
+     so the chart no longer needs internet access to load — matching how
+     v4.2.3 was vendored before. See README.md, "v27.1 — vendored v5.2.1
+     locally instead of CDN" for the full rationale and download link. -->
+<script src="vendor/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root {
+    --bg: #0a0e17;
+    --panel: #11161f;
+    --border: #1e2531;
+    --text: #e6e9ef;
+    --muted: #6b7686;
+    --up: #3fb68b;
+    --down: #e5484d;
+    --gold: #c9a227;
+    /* v50.1: shared hover/active "state layer" overlays used throughout
+       the app's buttons/rows/list-items. Defined once here (instead of
+       each rule hardcoding rgba(255,255,255,X)) so v50.2's Light Theme
+       can flip them from a white lighten-on-hover to a dark darken-on-
+       hover without touching every individual rule. */
+    --ov3: rgba(255, 255, 255, 0.03);
+    --ov4: rgba(255, 255, 255, 0.04);
+    --ov45: rgba(255, 255, 255, 0.045);
+    --ov5: rgba(255, 255, 255, 0.05);
+    --ov6: rgba(255, 255, 255, 0.06);
+    --ov8: rgba(255, 255, 255, 0.08);
+  }
+
+  /* =========================================================================
+     v50.2 Update 1 — Light Theme.
+     Unchecking "Enable Dark Theme" in the Canvas tab (canvas-settings.js)
+     toggles this class onto <body>. Every element in the app is already
+     built on the var(--bg)/var(--panel)/var(--border)/var(--text)/
+     var(--muted)/var(--up)/var(--down)/var(--gold)/var(--ov*) custom
+     properties above instead of hardcoded colors, so redefining them here
+     re-themes the whole app (header, Setting panel + all its tabs,
+     drawing-tool context menu, Object Tree panel, Bar Replay bar, symbol/
+     timeframe dropdowns, scrollbars, etc.) in one place, with no other
+     file needing to know which theme is active.
+
+     Built as a deliberate mirror image of the Dark palette above --
+     background/panel/border/text/muted all inverted from dark-on-light to
+     light-on-dark's opposite (light backgrounds, dark readable text) --
+     while --up/--down/--gold are kept identical to Dark Mode: bullish/
+     bearish candle colors and the app's gold accent are a fixed brand
+     identity in both themes, exactly like TradingView's own light/dark
+     presets keep the same up/down colors in both themes.
+     ========================================================================= */
+  body.light-theme {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --border: #d7dbe2;
+    --text: #1a1d24;
+    --muted: #5a6472;
+    /* --up / --down / --gold intentionally unchanged from Dark Mode. */
+    --ov3: rgba(0, 0, 0, 0.03);
+    --ov4: rgba(0, 0, 0, 0.04);
+    --ov45: rgba(0, 0, 0, 0.045);
+    --ov5: rgba(0, 0, 0, 0.05);
+    --ov6: rgba(0, 0, 0, 0.06);
+    --ov8: rgba(0, 0, 0, 0.08);
+  }
+
+  * { box-sizing: border-box; }
+
+  /* =========================================================================
+     v57 Update 16 — app-wide UI consistency.
+
+     Three things that had been handled per-component (or not at all), pulled
+     up to one place so anything added later inherits them for free instead of
+     having to remember to opt in.
+     ========================================================================= */
+
+  /* 1. Scrollbars. Four components already themed their own scrollbar
+        individually (.objects-panel-list, .settings-panes,
+        .dcm-fib-table-body, the symbol dropdown) with the same values; every
+        OTHER scrollable area in the app - the timeframe dropdowns, the
+        companion panels' mini dropdowns, any future list - still fell back to
+        the browser's default chunky light-grey bar, which reads as foreign
+        against this theme (and doubly so in Dark Mode). Setting it once here
+        covers all of them; the existing per-component rules stay valid and
+        simply agree with this. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) var(--panel);
+  }
+  *::-webkit-scrollbar { width: 6px; height: 6px; }
+  *::-webkit-scrollbar-track { background: var(--panel); }
+  *::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  *::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+  *::-webkit-scrollbar-corner { background: var(--panel); }
+
+  /* 2. Text selection. Dragging on the chart, panning it, or dragging an
+        object across the header used to leave the browser's blue
+        text-selection highlight smeared over labels and buttons - the usual
+        giveaway that a desktop-looking app is really a web page. Suppressed
+        on the app's chrome only; every input, and the panes that show
+        information worth copying, keep normal selection. */
+  header, #draw-toolbar, #layout-switcher, .pill-group, .tf-dropdown,
+  .objects-panel, .replay-bar, .chart-panel-header, .draw-context-menu,
+  .settings-tabs, .hint-toast {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  input, textarea, [contenteditable] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  ::selection { background: rgba(201, 162, 39, 0.35); }
+
+  /* 3. Keyboard focus. Nearly every input in this app sets `outline: none`
+        on :focus (so a mouse click doesn't leave a browser-default ring on a
+        themed field) - which also removed the only visible cue for anyone
+        navigating by Tab. :focus-visible fires exclusively for keyboard
+        focus, so this restores that cue in the app's own accent without
+        bringing the mouse-click ring back. */
+  :focus-visible {
+    outline: 1px solid var(--gold);
+    outline-offset: 1px;
+  }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    overflow: hidden;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  /* =========================================================================
+     v53 — Custom frameless title bar.
+     Replaces the native OS window frame (see webview.create_window(
+     frameless=True) in app.py) with a minimal, theme-matched strip so the
+     app no longer has a white, off-theme caption bar. Kept as short as
+     possible (28px) since its only job is: let the window be dragged/
+     moved, and offer minimize/maximize/close - everything else (symbol,
+     timeframe, tools) already lives in <header> right below it.
+     v55.4: window dragging is handled explicitly by window-controls.js
+     and chart_bridge.py's window_drag_* methods using cumulative screen
+     deltas. This avoids backend-specific drag-region behavior.
+     ========================================================================= */
+  #custom-titlebar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 28px;
+    flex: 0 0 auto;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  #custom-titlebar .titlebar-drag {
+    flex: 1 1 auto;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-left: 10px;
+    min-width: 0;
+  }
+
+  #custom-titlebar .titlebar-icon {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 auto;
+    opacity: 0.9;
+  }
+
+  #custom-titlebar .titlebar-title {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #custom-titlebar .titlebar-controls {
+    display: flex;
+    align-items: stretch;
+    height: 100%;
+    flex: 0 0 auto;
+  }
+
+  #custom-titlebar .titlebar-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 100%;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 0;
+  }
+
+  #custom-titlebar .titlebar-btn:hover {
+    background: var(--ov6);
+    color: var(--text);
+  }
+
+  #custom-titlebar .titlebar-btn.close-btn:hover {
+    background: var(--down);
+    color: #fff;
+  }
+
+  #custom-titlebar .titlebar-btn svg {
+    width: 10px;
+    height: 10px;
+    pointer-events: none;
+  }
+
+  #custom-titlebar .titlebar-btn svg * {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1;
+  }
+
+  /* Invisible edge/corner hit-areas used to resize the frameless window,
+     since a frameless window loses the OS's native resize-by-edge (see
+     chart_bridge.py's window_resize() docstring). Thin enough to stay out
+     of the way of normal chart interaction. */
+  .resize-grip {
+    position: fixed;
+    z-index: 500;
+  }
+  .resize-grip-n  { top: 0; left: 6px; right: 6px; height: 4px; cursor: ns-resize; }
+  .resize-grip-s  { bottom: 0; left: 6px; right: 6px; height: 4px; cursor: ns-resize; }
+  .resize-grip-e  { top: 6px; right: 0; bottom: 6px; width: 4px; cursor: ew-resize; }
+  .resize-grip-w  { top: 6px; left: 0; bottom: 6px; width: 4px; cursor: ew-resize; }
+  .resize-grip-ne { top: 0; right: 0; width: 8px; height: 8px; cursor: nesw-resize; }
+  .resize-grip-nw { top: 0; left: 0; width: 8px; height: 8px; cursor: nwse-resize; }
+  .resize-grip-se { bottom: 0; right: 0; width: 8px; height: 8px; cursor: nwse-resize; }
+  .resize-grip-sw { bottom: 0; left: 0; width: 8px; height: 8px; cursor: nesw-resize; }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    /* v53.3: shrunk to hug the toolbar controls themselves (the symbol/
+       timeframe pills and tool icons, tallest at ~30px) instead of
+       leaving generous breathing room - the custom title bar above this
+       already reclaimed most of the old native-frame height, so this
+       squeezes out the rest. */
+    padding: 4px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    flex: 0 0 auto;
+  }
+
+  .title-block {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex: 0 0 auto;
+  }
+
+  .symbol {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  .symbol .dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--muted);
+    margin-right: 8px;
+    position: relative;
+    top: -1px;
+  }
+
+  .symbol .dot.live {
+    background: var(--up);
+    box-shadow: 0 0 0 0 rgba(63, 182, 139, 0.6);
+    animation: pulse 2s infinite;
+  }
+
+  /* (v24) Shown instead of .live for the moment between a reconnect and
+     the gap between old and live data actually being closed — see
+     mergeLiveCandleSet() in chart-core.js. Amber + a faster pulse so it
+     reads as "catching up", distinct from the steady green "live" dot.
+     (v25.3) Also shown whenever the backend itself reports "syncing"
+     (mid-backfill, connected but not yet at the live edge) — see
+     updateStatusDot() in chart-core.js. */
+  .symbol .dot.syncing {
+    background: var(--gold);
+    box-shadow: 0 0 0 0 rgba(201, 162, 39, 0.6);
+    animation: pulse 0.9s infinite;
+  }
+
+  /* (v25.3) No live tick data can be obtained at all right now (not yet
+     connected to MT5, or MT5 stopped answering) — deliberately a plain,
+     non-pulsing dot so it visually reads as "stalled/not working" rather
+     than "actively doing something", unlike the other two states. */
+  .symbol .dot.offline {
+    background: var(--down);
+    box-shadow: none;
+    animation: none;
+  }
+
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(63, 182, 139, 0.5); }
+    70%  { box-shadow: 0 0 0 6px rgba(63, 182, 139, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(63, 182, 139, 0); }
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 auto;
+    justify-content: flex-end;
+    min-width: 0;
+  }
+
+  /* ---- Shared "pill group" look used by both the toolbar and the
+     timeframe dropdown button, so they read as one family of controls. */
+  .pill-group {
+    display: flex;
+    gap: 4px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px;
+    flex: 0 0 auto;
+  }
+
+  .pill-btn {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    padding: 4px 9px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1;
+  }
+
+  .pill-btn:hover { color: var(--text); background: var(--ov4); }
+
+  .pill-btn.active {
+    background: var(--gold);
+    color: #1a1500;
+    font-weight: 600;
+  }
+
+  .pill-btn svg { width: 15px; height: 15px; display: block; }
+
+  /* ---- Timeframe dropdown (replaces the old row of one-per-timeframe
+     buttons: a single button that opens a list, per Update 1). */
+  .tf-dropdown {
+    position: relative;
+    flex: 0 0 auto;
+  }
+
+  /* v54: premium single-column symbol picker. The search field stays fixed
+     at the top while only the symbol rows scroll. The scrollbar deliberately
+     matches the Object Tree scrollbar: thin, muted and contained. */
+  .symbol-dropdown { min-width: 0; }
+  .symbol-dropdown .tf-dropdown-btn {
+    max-width: 180px;
+    min-width: 92px;
+    padding-left: 10px;
+    padding-right: 9px;
+    gap: 7px;
+  }
+  .symbol-dropdown .tf-dropdown-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .symbol-dropdown .tf-dropdown-list {
+    left: 0;
+    right: auto;
+    width: min(360px, calc(100vw - 28px));
+    min-width: min(340px, calc(100vw - 28px));
+    max-width: min(360px, calc(100vw - 28px));
+    max-height: 390px;
+    scrollbar-gutter: stable;
+    padding: 8px;
+    gap: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) var(--panel);
+  }
+  .symbol-dropdown .tf-dropdown-list::-webkit-scrollbar { width: 6px; height: 0; }
+  .symbol-dropdown .tf-dropdown-list::-webkit-scrollbar-track { background: var(--panel); }
+  .symbol-dropdown .tf-dropdown-list::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+  }
+  .symbol-dropdown .tf-dropdown-list::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+  .symbol-dropdown .tf-dropdown-list::-webkit-scrollbar-corner { background: var(--panel); }
+
+  /* v54: fixed geometry for the search control. The box is always the same
+     width and its icon/input/clear button occupy fixed grid columns. The
+     parent reserves scrollbar space even when filtering removes the overflow,
+     so the search box never changes width while typing. */
+  .symbol-search-wrap {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr) 22px;
+    align-items: center;
+    width: 100%;
+    min-width: 100%;
+    max-width: 100%;
+    flex: 0 0 100%;
+    flex-shrink: 0;
+    height: 38px;
+    margin: 0 0 6px 0;
+    padding: 0 8px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.28);
+  }
+  .symbol-search-wrap:focus-within { border-color: var(--gold); }
+  .symbol-search-icon {
+    position: relative;
+    display: block;
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    pointer-events: none;
+  }
+  .symbol-search-icon::before {
+    content: "";
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    left: 4px;
+    top: 3px;
+    border: 1.5px solid var(--muted);
+    border-radius: 50%;
+    box-sizing: border-box;
+  }
+  .symbol-search-icon::after {
+    content: "";
+    position: absolute;
+    width: 6px;
+    height: 1.5px;
+    left: 12px;
+    top: 13px;
+    background: var(--muted);
+    border-radius: 1px;
+    transform: rotate(45deg);
+    transform-origin: left center;
+  }
+  .symbol-search-input {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    padding: 0 7px;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .symbol-search-input::placeholder { color: var(--muted); opacity: 0.9; }
+  .symbol-search-clear {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    visibility: hidden;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none !important;
+    border-radius: 50% !important;
+    background: transparent !important;
+    color: var(--muted) !important;
+    font-family: sans-serif !important;
+    font-size: 18px !important;
+    font-weight: 400 !important;
+    line-height: 1 !important;
+    text-align: center !important;
+    cursor: pointer;
+  }
+  .symbol-search-clear.visible { visibility: visible; }
+  .symbol-search-clear:hover { color: var(--text) !important; background: var(--ov6) !important; }
+
+  .symbol-options { display: flex; flex-direction: column; min-width: 0; }
+  .symbol-option {
+    width: 100%;
+    min-height: 56px;
+    display: block;
+    appearance: none;
+    border: none !important;
+    border-bottom: 1px solid var(--border) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: var(--text);
+    padding: 8px 10px 9px !important;
+    margin: 0 !important;
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    line-height: 1.25;
+    text-align: left !important;
+    cursor: pointer;
+    overflow: hidden;
+  }
+  .symbol-option:last-child { border-bottom: none !important; }
+  .symbol-option:hover {
+    background: var(--ov45) !important;
+    color: var(--text);
+  }
+  .symbol-dropdown .tf-dropdown-list .symbol-option.active {
+    background: rgba(201,162,39,0.12) !important;
+    color: var(--text);
+    box-shadow: inset 2px 0 0 var(--gold);
+  }
+  .symbol-option-symbol {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 16px;
+  }
+  .symbol-option-symbol-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  /* v65.2: minimal pin-to-top marker for symbols that already have a local
+     candle database - a small solid gold dot, same accent color the rest of
+     the UI already uses for "active/selected" state, so it reads as
+     "already yours" rather than introducing a new color language. */
+  .symbol-option-db-dot {
+    flex: none;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--gold);
+    box-shadow: 0 0 0 2px rgba(201,162,39,0.18);
+  }
+  .symbol-options .symbol-pin-divider {
+    padding: 6px 10px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--muted) 82%, transparent);
+    border-bottom: 1px solid var(--border);
+  }
+  .symbol-option-description {
+    display: block;
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: color-mix(in srgb, var(--muted) 78%, transparent);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 15px;
+  }
+  .symbol-search-empty {
+    padding: 18px 10px;
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+  }
+
+  .tf-dropdown-btn {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 5px 10px 5px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .tf-dropdown-btn:hover { border-color: var(--gold); }
+  /* v40: disabled while Bar Replay is active — switching timeframe mid
+     replay is not supported (the replay engine is bound to one tf for the
+     whole session; see js/replay-bar.js), so the control is simply locked
+     instead of allowing an inconsistent half-switched state. */
+  .tf-dropdown-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .replay-bar.rb-waiting .replay-icon-btn:not(#replay-select-date-btn):not(.replay-close-btn) {
+    opacity: 0.35;
+    pointer-events: none;
+  }
+  .tf-dropdown-btn .caret { color: var(--muted); font-size: 10px; transition: transform 0.15s ease; }
+  .tf-dropdown.open .tf-dropdown-btn .caret { transform: rotate(180deg); }
+  .tf-dropdown.open .tf-dropdown-btn { border-color: var(--gold); }
+
+  .tf-dropdown-list {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 90px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+    z-index: 40;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  .tf-dropdown.open .tf-dropdown-list { display: flex; }
+
+  .tf-dropdown-list button {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    text-align: left;
+    padding: 7px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+
+  .tf-dropdown-list button:hover { background: var(--ov6); }
+
+  .tf-dropdown-list button.active {
+    background: var(--gold);
+    color: #1a1500;
+    font-weight: 600;
+  }
+
+  #chart-container {
+    flex: 1 1 auto;
+    position: relative;
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  /* v37: row of 1-3 chart panels. #chart-surface used to be the direct
+     flex-growing sibling of #objects-panel; that role now belongs to this
+     element, with #chart-surface (panel 1) as its first child, so adding
+     panel 2/3 never disturbs the existing primary-chart layout math. */
+  .chart-panels-row {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    min-width: 0;
+    min-height: 0;
+    gap: 1px;
+    background: var(--border); /* shows through the 1px gaps as thin dividers */
+  }
+
+  .chart-panel {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+  }
+
+  /* Only panel 1 exists until the layout switcher asks for more, so a
+     single panel silently fills the whole row exactly as #chart-surface
+     always did — no visual change at layout "1". */
+  .chart-panels-row-1 .chart-panel { flex: 1 1 100%; }
+
+  .chart-panel-primary {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  /* Companion panels (2 & 3): a minimal mini-header (timeframe picker only
+     — no drawing tools, no Object Tree, no Auto Fit button, matching "one
+     symbol, several timeframes side by side" rather than duplicating the
+     full toolset per panel) above a bare chart mount. */
+  .chart-panel-companion {
+    position: relative;
+  }
+
+  /* v38 layout refresh: the boxed bar that used to sit above companion
+     panels 2 & 3 (background + border-bottom) is gone — their timeframe
+     picker now floats directly over the top-right corner of the chart
+     itself, matching the borderless look of the primary chart's own
+     Auto Fit / Object Tree corner controls instead of duplicating the
+     header's bar. */
+  .chart-panel-header {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+  }
+
+  .chart-panel-mount {
+    flex: 1 1 auto;
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  /* Smaller variant of .tf-dropdown for companion-panel headers. */
+  .tf-dropdown.mini .tf-dropdown-btn {
+    padding: 4px 8px 4px 10px;
+    font-size: 11px;
+  }
+  .tf-dropdown.mini .tf-dropdown-list { min-width: 70px; }
+
+  .layout-switcher .pill-btn { padding: 5px 8px; }
+  .layout-switcher .pill-btn svg { width: 16px; height: 12px; }
+
+  /* v33.1 Fix 1: the chart's own drawing surface (status banner, draw
+     canvas, hint toast, autofit button, panel-toggle button) now lives in
+     this flex-growing sibling of the Object Tree panel, instead of the
+     panel floating on top of it via position:absolute. That way, opening
+     the panel actually shrinks this element's content box, which the
+     existing ResizeObserver (see chart-core.js, watching #chart-container)
+     picks up automatically and resizes both the Lightweight Charts canvas
+     and the drawing overlay canvas to match — so the price axis and chart
+     are never hidden underneath the panel again. */
+  #chart-surface {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  #status-banner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 13px;
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  /* ---- Drawing overlay canvas (Update 2). Sits above the chart's own
+     canvas; pointer-events toggles between "none" (cursor tool — normal
+     chart pan/zoom/crosshair passes straight through to the chart) and
+     "auto" (a drawing tool is active — the overlay itself captures the
+     mouse so the chart doesn't also pan while the user is drawing). */
+  #draw-canvas {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  #draw-canvas.drawing { cursor: crosshair; pointer-events: auto; }
+
+  /* v38: same overlay behavior as #draw-canvas above, for every companion
+     multi-chart panel's own drawing surface (see multi-panel.js /
+     drawing-engine.js's createPanelSurface). Class-based rather than
+     ID-based since there can be up to two of these on screen at once. */
+  .chart-panel-draw-canvas {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    pointer-events: none;
+  }
+  .chart-panel-draw-canvas.drawing { cursor: crosshair; pointer-events: auto; }
+
+  /* ---- v28: Auto Fit toggle button ("A"), bottom-right corner of the
+     price chart — same spot/behavior as TradingView web's own Auto Fit
+     button. Sits above #draw-canvas (higher z-index) so it stays
+     clickable even while a drawing tool has the canvas capturing the
+     mouse. White-on-black when Auto Fit is ON, black-on-white when a
+     manual price-scale drag (or the button itself) has turned it OFF. */
+  #autofit-btn {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    z-index: 20;
+    width: 22px;
+    height: 22px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  #autofit-btn.active {
+    background: #ffffff;
+    color: #000000;
+    border-color: #ffffff;
+  }
+
+  /* v56.5 Update 1: same Auto Fit ("A") button, one per companion panel
+     (2/3) in Multi Chart — class-based since there can be more than one on
+     screen at once (see .chart-panel-draw-canvas above for the same
+     ID->class reasoning). Sits inside .chart-panel-mount (position:
+     relative), bottom-right corner of that panel's own chart. */
+  .panel-autofit-btn {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    z-index: 20;
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .panel-autofit-btn.active {
+    background: #ffffff;
+    color: #000000;
+    border-color: #ffffff;
+  }
+
+  /* ---- Right-click style editor for a drawn object. */
+  .draw-context-menu {
+    position: fixed;
+    z-index: 100;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    width: 300px;
+    font-size: 12px;
+    color: var(--text);
+    display: none;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  .draw-context-menu.open { display: flex; }
+
+  /* v40: minimal Hide/Lock/Delete menu shown on right-click of an object
+     that's part of a multi-selection — reuses the same panel look/feel
+     as .draw-context-menu but as a tight list of plain action rows. */
+  .draw-group-context-menu {
+    width: 160px;
+    padding: 6px;
+    gap: 2px;
+  }
+  .dcm-group-item {
+    padding: 8px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 12.5px;
+    color: var(--text);
+    user-select: none;
+  }
+  .dcm-group-item:hover { background: var(--ov8); }
+  .dcm-group-item-danger { color: var(--down); }
+  .dcm-group-item-danger:hover { background: rgba(229, 72, 77, 0.15); }
+
+  /* v30.2: centered Jump Time dialog. It deliberately reuses the drawing
+     editor's date/time control styling so both panels share one visual
+     language, while being slightly wider/taller for the dedicated jump. */
+  .jump-time-panel {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 340px;
+    padding: 14px;
+    z-index: 120;
+  }
+  .jump-time-panel .dcm-title { font-size: 13px; }
+  .jump-time-status {
+    min-height: 16px;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  .jump-time-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 7px;
+    margin-top: 2px;
+  }
+  .jump-time-actions button {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    border-radius: 5px;
+    font-size: 12px;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+  .jump-time-actions button:hover { border-color: var(--muted); }
+  .jump-time-actions #jump-time-go {
+    background: var(--gold);
+    color: #111;
+    border-color: var(--gold);
+    font-weight: 700;
+  }
+  .jump-time-actions #jump-time-go.disabled,
+  .jump-time-actions #jump-time-go:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .draw-context-menu .dcm-title {
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .draw-context-menu .dcm-title .dcm-close {
+    cursor: pointer;
+    color: var(--muted);
+    font-family: monospace;
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  .draw-context-menu .dcm-title .dcm-close:hover { color: var(--text); }
+
+  /* v37 Fix 1: Lock/Hide/Delete header icons — same minimal look and
+     icon set as the Object Tree panel's own row buttons, placed to the
+     left of the ✕ close icon at the top-right of the panel. */
+  .draw-context-menu .dcm-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .dcm-header-btn {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+  }
+  .dcm-header-btn svg { width: 13px; height: 13px; display: block; }
+  .dcm-header-btn:hover { color: var(--text); background: var(--ov8); }
+  .dcm-header-btn.active { color: var(--gold); }
+  .dcm-header-btn-danger:hover { color: var(--down); background: rgba(229, 72, 77, 0.15); }
+
+  /* v37 Fix 3: grouped, labeled sections (Border / Fill / Middle Line)
+     with their variables sharing one compact row each, instead of a long
+     stack of one-field-per-row lines. */
+  .draw-context-menu .dcm-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border);
+  }
+  .draw-context-menu .dcm-section-title {
+    color: var(--muted);
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .draw-context-menu .dcm-row-compact {
+    justify-content: flex-start;
+  }
+  .draw-context-menu .dcm-row-compact > * { flex: 1 1 0; min-width: 0; }
+  .draw-context-menu .dcm-row-compact .dcm-color-swatch { flex: 0 0 24px; }
+  .draw-context-menu .dcm-row-compact input[type="range"] { flex: 1 1 auto; width: auto; }
+  .draw-context-menu .dcm-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .draw-context-menu .dcm-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .draw-context-menu label {
+    color: var(--muted);
+    flex: 0 0 auto;
+  }
+
+  /* v38 Fix 1: themed color+opacity swatch buttons, replacing native
+     <input type="color"> everywhere a style color is picked. A native
+     color input opens the OS/browser's own unstyleable popup — this
+     button instead opens color-picker.js's dark, panel-matching popover,
+     which folds an opacity slider and a small pasteable hex box into the
+     same place the color itself is picked. */
+  .draw-context-menu .dcm-color-swatch {
+    -webkit-appearance: none;
+    appearance: none;
+    position: relative;
+    width: 24px;
+    height: 22px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+  }
+  .draw-context-menu .dcm-color-swatch:hover { border-color: var(--gold); }
+  .draw-context-menu .dcm-color-swatch-fill {
+    position: absolute;
+    inset: 2px;
+    border-radius: 3px;
+    background-image:
+      linear-gradient(var(--sw-color, #c9a227), var(--sw-color, #c9a227)),
+      repeating-conic-gradient(#3a3f4a 0% 25%, #262b34 0% 50%);
+    background-size: auto, 8px 8px;
+  }
+
+  /* Shared popover the swatches above open — see color-picker.js. Its
+     background uses --bg (a shade darker than the panel's own --panel)
+     so it reads as a distinct, still-on-theme surface floating over the
+     panel, the same relationship --bg/--panel already have elsewhere. */
+  .dcm-cp-pop {
+    position: fixed;
+    /* v50: raised above .mdo-backdrop (z-index 500) — the Setting panel's
+       Canvas tab now opens this same popover from swatches that live
+       inside that backdrop, so it must render on top of it, not behind
+       it (behind it, the popover was open in the DOM/JS sense but never
+       visible, and the very next pointerdown on the backdrop closed it
+       instantly, i.e. "doesn't open"). */
+    z-index: 600;
+    width: 200px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.55);
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 12px;
+  }
+  .dcm-cp-pop.open { display: flex; }
+  .dcm-cp-sv {
+    position: relative;
+    width: 100%;
+    height: 110px;
+    border-radius: 6px;
+    cursor: crosshair;
+    touch-action: none;
+    overflow: hidden;
+  }
+  .dcm-cp-sv-white, .dcm-cp-sv-black { position: absolute; inset: 0; }
+  .dcm-cp-sv-white { background: linear-gradient(to right, #fff, rgba(255,255,255,0)); }
+  .dcm-cp-sv-black { background: linear-gradient(to top, #000, rgba(0,0,0,0)); }
+  .dcm-cp-sv-thumb {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    margin: -5px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.6);
+    pointer-events: none;
+  }
+  .dcm-cp-hue, .dcm-cp-alpha {
+    position: relative;
+    width: 100%;
+    height: 10px;
+    border-radius: 5px;
+    touch-action: none;
+    cursor: pointer;
+  }
+  .dcm-cp-hue {
+    background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  }
+  .dcm-cp-alpha {
+    background-image: repeating-conic-gradient(#3a3f4a 0% 25%, #262b34 0% 50%);
+    background-size: 8px 8px;
+    overflow: hidden;
+  }
+  .dcm-cp-alpha-fill { position: absolute; inset: 0; }
+  .dcm-cp-thumb {
+    position: absolute;
+    top: 50%;
+    width: 10px;
+    height: 10px;
+    margin-left: -5px;
+    margin-top: -5px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.6);
+    pointer-events: none;
+  }
+  .dcm-cp-bottom { display: flex; align-items: center; gap: 6px; }
+  .dcm-cp-swatch {
+    flex: 0 0 22px;
+    width: 22px;
+    height: 22px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background-image:
+      linear-gradient(var(--sw-color, #c9a227), var(--sw-color, #c9a227)),
+      repeating-conic-gradient(#3a3f4a 0% 25%, #262b34 0% 50%);
+    background-size: auto, 8px 8px;
+  }
+  .dcm-cp-hex {
+    flex: 1 1 auto;
+    min-width: 0;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 12px;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    text-transform: uppercase;
+  }
+  .dcm-cp-hex:focus { outline: none; border-color: var(--gold); }
+  .dcm-cp-eyedrop {
+    flex: 0 0 22px;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .dcm-cp-eyedrop:hover { color: var(--text); border-color: var(--gold); }
+  .dcm-cp-eyedrop svg { width: 13px; height: 13px; display: block; }
+
+  .draw-context-menu select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 12px;
+    padding: 3px 4px;
+  }
+
+  .draw-context-menu input[type="range"] {
+    width: 100px;
+    accent-color: var(--gold);
+  }
+
+  /* v33.2 fix 2: object name field, same style as the panel's own inline
+     rename input so renaming looks/feels identical from either place. */
+  .draw-context-menu .dcm-name-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 12px;
+    font-family: inherit;
+    padding: 4px 6px;
+  }
+  .draw-context-menu .dcm-name-input:focus { outline: none; border-color: var(--gold); }
+  .draw-context-menu.locked-mode #dcm-name-row { display: none !important; }
+
+  /* v37 Fix 2: preset picker row (dropdown + save icon button). */
+  .draw-context-menu .dcm-preset-line {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .draw-context-menu .dcm-preset-dropdown { position: relative; flex: 1 1 auto; min-width: 0; }
+  .draw-context-menu .dcm-preset-dropdown-btn {
+    appearance: none;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: inherit;
+    padding: 4px 6px;
+    cursor: pointer;
+  }
+  .draw-context-menu .dcm-preset-dropdown-btn span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .draw-context-menu .dcm-preset-dropdown-btn .caret { color: var(--muted); font-size: 9px; transition: transform 0.15s ease; }
+  .draw-context-menu .dcm-preset-dropdown.open .dcm-preset-dropdown-btn .caret { transform: rotate(180deg); }
+  .draw-context-menu .dcm-preset-dropdown-btn:hover { border-color: var(--muted); }
+  .draw-context-menu .dcm-preset-dropdown.open .dcm-preset-dropdown-btn { border-color: var(--gold); }
+  .draw-context-menu .dcm-preset-dropdown-list {
+    position: absolute;
+    top: calc(100% + 5px);
+    left: 0;
+    right: 0;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 3px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+    display: none;
+    flex-direction: column;
+    gap: 1px;
+    z-index: 130;
+    max-height: 160px;
+    overflow-y: auto;
+  }
+  .draw-context-menu .dcm-preset-dropdown.open .dcm-preset-dropdown-list { display: flex; }
+  .draw-context-menu .dcm-preset-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 5px;
+    padding: 1px;
+  }
+  .draw-context-menu .dcm-preset-dropdown-item:hover { background: var(--ov6); }
+  .draw-context-menu .dcm-preset-dropdown-item-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-size: 12px;
+    font-family: inherit;
+    text-align: left;
+    padding: 6px 6px;
+    cursor: pointer;
+  }
+  .draw-context-menu .dcm-preset-dropdown-item-trash {
+    flex: 0 0 auto;
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+  }
+  .draw-context-menu .dcm-preset-dropdown-item-trash svg { width: 12px; height: 12px; display: block; }
+  .draw-context-menu .dcm-preset-dropdown-item-trash:hover { color: var(--down); background: rgba(229, 72, 77, 0.15); }
+  .draw-context-menu .dcm-preset-dropdown-empty {
+    color: var(--muted);
+    font-size: 11.5px;
+    padding: 6px 8px;
+  }
+  /* v37 Fix 2: inline "save preset" box — replaces the native
+     window.prompt() with a minimal themed row inside the panel itself. */
+  .draw-context-menu .dcm-preset-save-box {
+    display: none;
+    align-items: center;
+    gap: 5px;
+  }
+  .draw-context-menu .dcm-preset-save-box.open { display: flex; }
+  .draw-context-menu .dcm-preset-save-box .dcm-name-input { flex: 1 1 auto; }
+  .draw-context-menu .dcm-icon-btn {
+    appearance: none;
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+  }
+  .draw-context-menu .dcm-icon-btn:hover { border-color: var(--gold); color: var(--gold); }
+  .draw-context-menu .dcm-icon-btn-danger:hover { border-color: var(--down); color: var(--down); }
+  .draw-context-menu .dcm-icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .draw-context-menu .dcm-icon-btn:disabled:hover { border-color: var(--border); color: var(--text); }
+
+  /* v36 Fix 4: Middle Line checkbox row + its dependent sub-rows. */
+  .draw-context-menu input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--gold);
+    cursor: pointer;
+  }
+
+  /* v14: rectangle box start/end time editor — stacked (label above
+     input) since a datetime-local picker doesn't fit next to a label in
+     this popup's narrow width. */
+  .draw-context-menu .dcm-row.dcm-row-stacked {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+  /* v15: minimal custom 24h date/time fields (replaces native
+     datetime-local, which silently renders AM/PM on some locales/OSes
+     with no reliable way to force 24h format via CSS). Two plain text
+     inputs, validated/formatted in JS, styled to look like one control. */
+  .draw-context-menu .dcm-dt {
+    display: flex;
+    gap: 5px;
+  }
+  .draw-context-menu .dcm-dt input {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+    padding: 5px 7px;
+    box-sizing: border-box;
+    outline: none;
+    transition: border-color 0.12s ease, background 0.12s ease;
+  }
+  .draw-context-menu .dcm-dt input::placeholder { color: var(--muted); opacity: 0.6; }
+  .draw-context-menu .dcm-dt input:hover { border-color: var(--muted); }
+  .draw-context-menu .dcm-dt input:focus {
+    border-color: var(--gold);
+    background: rgba(255, 255, 255, 0.03);
+  }
+  .draw-context-menu .dcm-dt input.dcm-dt-invalid { border-color: var(--down); }
+  .draw-context-menu .dcm-dt-date { flex: 1.3; min-width: 0; }
+  .draw-context-menu .dcm-dt-time { flex: 1; min-width: 0; }
+
+  /* v47: Fib Retracement Level & Description table (Update 3 / Set.png).
+     Hidden by default; drawing-context-menu.js shows it only for a
+     selected fib object. The body scrolls internally at a fixed height so
+     adding levels never widens or grows the panel itself. */
+  #dcm-fib-levels-section { display: none; }
+  .dcm-fib-table {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .dcm-fib-table-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 6px;
+    background: var(--ov3);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .dcm-fib-table-head .dcm-fib-col-level { width: 44px; flex: 0 0 auto; }
+  .dcm-fib-table-head .dcm-fib-col-desc { flex: 1 1 auto; }
+  .dcm-fib-table-head .dcm-icon-btn { width: 18px; height: 18px; font-size: 12px; padding: 0; flex: 0 0 auto; }
+  .dcm-fib-table-body {
+    max-height: 132px;
+    overflow-y: auto;
+  }
+  /* v47.1 Update 2: match the Object Tree panel's own minimal scrollbar
+     instead of the browser default (which rendered white/bulky and out of
+     theme here). */
+  .dcm-fib-table-body {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) var(--panel);
+  }
+  .dcm-fib-table-body::-webkit-scrollbar {
+    width: 6px;
+  }
+  .dcm-fib-table-body::-webkit-scrollbar-track {
+    background: var(--panel);
+  }
+  .dcm-fib-table-body::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+  }
+  .dcm-fib-table-body::-webkit-scrollbar-thumb:hover {
+    background: var(--muted);
+  }
+  .dcm-fib-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  .dcm-fib-row:last-child { border-bottom: none; }
+  .dcm-fib-row:hover { background: var(--ov4); }
+  .dcm-fib-level-input {
+    width: 44px;
+    flex: 0 0 auto;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 12px;
+    border-radius: 4px;
+    padding: 3px 4px;
+    text-align: center;
+  }
+  .dcm-fib-level-input:disabled { color: var(--muted); background: transparent; border-color: transparent; }
+  /* v47.2 Update 1: the native up/down spinner arrows served no purpose
+     here (levels are typed, not stepped) and crowded this already-narrow
+     44px box. */
+  .dcm-fib-level-input::-webkit-outer-spin-button,
+  .dcm-fib-level-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  .dcm-fib-level-input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+  .dcm-fib-desc-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 12px;
+    border-radius: 4px;
+    padding: 3px 6px;
+  }
+  .dcm-fib-level-input:focus, .dcm-fib-desc-input:focus { outline: none; border-color: var(--gold); }
+  .dcm-fib-row-trash {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1;
+    font-family: monospace;
+  }
+  .dcm-fib-row-trash:hover { color: var(--down); background: rgba(229, 72, 77, 0.15); }
+  .dcm-fib-row-trash:disabled { visibility: hidden; cursor: default; }
+  #dcm-fib-desc-toggle-row { margin-top: 8px; }
+
+  /* v33: locked-object right-click menu — only the Unlock action shows;
+     everything else (style/time rows, Delete) is hidden while an object
+     is locked, so a locked object truly can't be edited/removed except
+     by explicitly unlocking it first (here, or from the Object Tree). */
+  .draw-context-menu .dcm-unlock {
+    display: none;
+    margin-top: 2px;
+    appearance: none;
+    border: 1px solid rgba(201, 162, 39, 0.4);
+    background: rgba(201, 162, 39, 0.12);
+    color: var(--gold);
+    font-size: 12px;
+    padding: 6px 8px;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .draw-context-menu .dcm-unlock:hover { background: rgba(201, 162, 39, 0.22); }
+  .draw-context-menu.locked-mode .dcm-row,
+  .draw-context-menu.locked-mode .dcm-section { display: none !important; }
+  .draw-context-menu.locked-mode #dcm-preset-row { display: none !important; }
+  .draw-context-menu.locked-mode .dcm-unlock { display: block; }
+
+  /* ---- v33: Object Tree panel — modeled after TradingView's own Object
+     Tree. v38 layout refresh: its toggle button moved out of the chart
+     surface's corner and into the header, as its own single-icon pill
+     (.objects-toggle-wrap) sitting right after the layout switcher, so it
+     reads as part of the same tool cluster rather than floating over the
+     candles. ------------------------------------------------------------ */
+  .objects-toggle-wrap { padding: 2px; }
+
+  #objects-panel-toggle {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    width: 26px;
+    height: 26px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+  }
+  #objects-panel-toggle svg { width: 15px; height: 15px; display: block; }
+  #objects-panel-toggle:hover { color: var(--text); background: var(--ov4); }
+  #objects-panel-toggle.active { background: var(--gold); color: #1a1500; }
+
+  /* ---- v40: Bar Replay toggle — sits in the header's tool cluster right
+     before the Object Tree toggle (see index.html header markup), sharing
+     the exact same box/hover/active styling (identical size, hover fade,
+     and gold-pill "active" look while replay mode is on) so it reads as
+     one family of icon buttons with Object Tree rather than a one-off. */
+  #replay-bar-toggle {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    width: 26px;
+    height: 26px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+  }
+  #replay-bar-toggle svg { width: 15px; height: 15px; display: block; }
+  #replay-bar-toggle:hover { color: var(--text); background: var(--ov4); }
+  #replay-bar-toggle.active { background: var(--gold); color: #1a1500; }
+
+  /* ---- v50: Setting toggle — identical box/hover/active styling to
+     #objects-panel-toggle / #replay-bar-toggle (same pill wrapper class,
+     same size, same hover fade, same gold "active" pill while the panel is
+     open), so it reads as one family of icon buttons with the rest of the
+     header cluster. Replaces the v38.1 Market-Data-Overview-only toggle —
+     see settings-panel.js. */
+  #settings-toggle {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    width: 26px;
+    height: 26px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+  }
+  #settings-toggle svg { width: 15px; height: 15px; display: block; }
+  #settings-toggle:hover { color: var(--text); background: var(--ov4); }
+  #settings-toggle.active { background: var(--gold); color: #1a1500; }
+
+  /* ---- v59: Log toggle — identical box/hover/active styling to
+     #settings-toggle (same pill wrapper class, same size, same hover fade,
+     same gold "active" pill while the Log panel is open), so it reads as
+     the same family of icon buttons, right after Setting. See
+     web/js/log-panel.js. */
+  #log-toggle {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    width: 26px;
+    height: 26px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+  }
+  #log-toggle svg { width: 15px; height: 15px; display: block; }
+  #log-toggle:hover { color: var(--text); background: var(--ov4); }
+  #log-toggle.active { background: var(--gold); color: #1a1500; }
+
+  /* ---- v38.1: Market Data Overview modal — a true centered dialog with a
+     dimming backdrop (no such pattern existed before this; the closest
+     prior art, .jump-time-panel, is an anchored floating panel, not a
+     backdrop-modal, so this introduces its own small set of classes
+     instead of stretching that one to fit). ---------------------------- */
+  .mdo-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 500;
+    align-items: center;
+    justify-content: center;
+  }
+  .mdo-backdrop.open { display: flex; }
+
+  .mdo-modal {
+    width: 620px;
+    max-width: calc(100vw - 48px);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 28px 32px 24px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    box-sizing: border-box;
+  }
+
+  .mdo-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 22px;
+  }
+
+  /* Title: exact spec — Bahnschrift Regular, 22.5px, #c8cacc. Bahnschrift
+     is a Windows-bundled font (this app only ever runs inside a pywebview
+     window on Windows), so no @font-face/web-font is needed — it falls
+     back to a generic sans-serif on any platform that lacks it. */
+  .mdo-title {
+    font-family: Bahnschrift, "Segoe UI", sans-serif;
+    font-weight: 400;
+    font-size: 22.5px;
+    color: var(--text);
+  }
+
+  .mdo-close {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1;
+    padding: 4px;
+  }
+  .mdo-close:hover { color: var(--text); }
+
+  /* Every other label/value in the modal — spec: Consolas Regular, 12px,
+     #606a79. */
+  .mdo-body {
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-weight: 400;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .mdo-stat-row { margin-bottom: 10px; }
+  .mdo-stat-row .mdo-value { color: var(--muted); }
+
+  .mdo-controls-row {
+    display: flex;
+    align-items: center;
+    gap: 26px;
+    margin: 18px 0 16px;
+    flex-wrap: wrap;
+  }
+  .mdo-control { display: flex; align-items: center; gap: 8px; }
+  .mdo-control select {
+    background: var(--bg);
+    color: var(--muted);
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 5px 6px;
+  }
+  .mdo-control select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* v44.1: minimal Refresh icon button, right next to the Tolerance
+     dropdown — manually re-runs the per-day candle count for the
+     currently displayed month (see market-data-overview.js), since
+     until now that only ever happened on open/Tolerance-change/after a
+     Backfill. Same 26px icon-button family as the header's toggles
+     (#objects-panel-toggle etc.), just sized down to fit inline next to
+     a <select> instead of standing alone in the header. */
+  .mdo-refresh-btn {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    flex: 0 0 auto;
+  }
+  .mdo-refresh-btn svg { width: 13px; height: 13px; display: block; }
+  .mdo-refresh-btn:hover { color: var(--text); background: var(--ov4); }
+  .mdo-refresh-btn.spinning svg { animation: mdo-refresh-spin 0.7s linear infinite; }
+  @keyframes mdo-refresh-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  /* v38.4: replaced the floating per-column tooltip (which always needed
+     re-tuning to stay on-screen/inside the box across bar heights and
+     edge columns) with a single, fixed-position info line ABOVE the
+     chart box. Its position never changes — hovering any column just
+     updates this line's text via JS — so there's nothing left to clip
+     or push off-screen. */
+  .mdo-hover-info {
+    /* v38.7 fix: a single nowrap+ellipsis line silently cut off the
+       trailing "+N more" — exactly the part telling the user how much
+       was hidden — the instant the text ran long (e.g. many gaps in one
+       day). Allowing up to 2 lines, clamped, means far more of the
+       detail fits before anything is cut, and if it still overflows the
+       ellipsis now sits at the true end of the content instead of after
+       an arbitrary single line. Height is fixed at 2 lines' worth either
+       way, so the layout never shifts based on hover content. */
+    height: 30px;
+    margin-bottom: 6px;
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 11px;
+    line-height: 15px;
+    color: var(--text);
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  /* ---- v63: Chart / Log view switch (Market Data Overview tab) ----------
+     Two 26px icon buttons at the right end of the row above the box, per
+     Design.png. Same family as the header icon buttons (26px, 15px glyph,
+     4-6px radius, colour/background fade on hover) with one deliberate
+     difference: the SELECTED button is always the neutral grey (var(--muted)
+     with a dark glyph) instead of the user-chosen gold selector colour. */
+  .mdo-view-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+  .mdo-view-row .mdo-hover-info {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-bottom: 0;
+  }
+  .mdo-view-switch {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+  }
+  .mdo-view-btn {
+    appearance: none;
+    box-sizing: border-box;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--muted);
+    background-color: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+  }
+  .mdo-view-btn svg { width: 15px; height: 15px; display: block; }
+  .mdo-view-btn:hover { color: var(--text); border-color: var(--muted); }
+  .mdo-view-btn:active { transform: scale(0.94); }
+  .mdo-view-btn.active,
+  .mdo-view-btn.active:hover {
+    color: var(--bg);
+    background-color: var(--muted);
+    border-color: var(--muted);
+    cursor: default;
+  }
+  .mdo-view-btn.active:active { transform: none; }
+
+  /* v63: Log view box. Same height as the histogram box + its checkbox row
+     (190 + 8 + 14 = 212px) so switching views never moves BackFill/Extend.
+     Same theme as the header Log panel (panel background, --text colour,
+     monospace) but "zoomed out": 9px / 12px lines, no wrapping, so a whole
+     log line normally sits on one row; a very long line scrolls sideways.
+     The vertical slider is always shown (overflow-y: scroll) and uses the
+     app-wide thin scrollbar. */
+  .mdo-log-box {
+    display: none;
+    height: 212px;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel);
+    overflow-y: scroll;
+    overflow-x: auto;
+    white-space: pre;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 9px;
+    line-height: 12px;
+    color: var(--text);
+    tab-size: 4;
+  }
+  .mdo-log-box::-webkit-scrollbar-track { background: var(--panel); }
+  #settings-pane-market-data-overview.mdo-log-mode .mdo-log-box { display: block; }
+  #settings-pane-market-data-overview.mdo-log-mode .mdo-chart-box,
+  #settings-pane-market-data-overview.mdo-log-mode .mdo-checkbox-row-wrap { display: none; }
+  #settings-pane-market-data-overview.mdo-log-mode .mdo-hover-info { visibility: hidden; }
+
+  /* Histogram box: fixed height, auto-scaled bars inside it — spec calls
+     for this box to never grow into the controls row above it, so its
+     height is fixed here rather than driven by content. */
+  .mdo-chart-box {
+    height: 190px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 10px 0;
+    box-sizing: border-box;
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    overflow: hidden; /* v38.4: safe to clip normally again now that the
+                          old floating tooltip (the reason this was ever
+                          loosened to overflow-y:visible) is gone — hover
+                          info now lives in the fixed .mdo-hover-info
+                          line above the box instead. */
+    position: relative;
+  }
+  /* v65.1: brief dim while a Year/Month/Tolerance change's histogram
+     request is in flight — the request itself now settles in one backend
+     round-trip (see get_month_histogram in chart_bridge.py) so this is a
+     short flash rather than a real wait, but it still gives instant
+     feedback that the click registered instead of the box just sitting
+     there unchanged for however long the round-trip takes. */
+  .mdo-chart-box.mdo-loading,
+  .mdo-checkbox-row.mdo-loading {
+    opacity: 0.45;
+    transition: opacity 0.1s linear;
+  }
+
+  .mdo-day-col {
+    /* v38.1 fix: fixed width based on the 31-slot reservation (see JS),
+       NOT flex:1 — flex:1 was letting fewer visible columns stretch to
+       fill the box, instead of always reserving the same per-column
+       width for a full month. Width is expressed as a fraction of the
+       box via JS-set --mdo-col-count on the box, not a hardcoded 1/31,
+       so the CSS itself has no magic number. */
+    flex: 0 0 calc((100% - (var(--mdo-col-count, 31) - 1) * 3px) / var(--mdo-col-count, 31));
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    height: 100%;
+    cursor: pointer;
+    position: relative; /* v38.1 fix: anchors .mdo-tooltip to THIS column,
+                            not the whole .mdo-chart-box (which was the
+                            actual cause of the tooltip never appearing —
+                            it was being positioned/clipped against the
+                            box instead of the hovered column). */
+  }
+  .mdo-day-col.mdo-day-col-empty {
+    /* v38.1: an unrendered reserved slot — takes up exactly one column's
+       width so the 31-slot layout is stable, but shows no bar/checkbox
+       and never responds to hover. */
+    cursor: default;
+    pointer-events: none;
+  }
+
+  .mdo-bar {
+    width: 60%;
+    background: transparent;
+    border: 1px solid var(--muted);
+    border-radius: 1px 1px 0 0;
+    min-height: 1px;
+  }
+  .mdo-day-col:hover .mdo-bar { border-color: var(--text); }
+  /* v38.2: hovering/checking the checkbox below also highlights this
+     column's bar, and vice versa (see .mdo-day-col-hover class toggled
+     from JS on the paired checkbox column's mouse events). */
+  .mdo-day-col.mdo-checkbox-hover .mdo-bar { border-color: var(--text); }
+
+  /* v38.6: a "filled" day — its 1-minute candle count equals the month's
+     1-minute max-seen, i.e. the fullest day at 1-minute granularity —
+     is drawn solid instead of hollow, regardless of which tolerance the
+     user currently has selected. */
+  .mdo-day-col.filled .mdo-bar {
+    background: var(--muted);
+    border-color: var(--muted);
+  }
+  .mdo-day-col.filled:hover .mdo-bar,
+  .mdo-day-col.filled.mdo-checkbox-hover .mdo-bar {
+    background: var(--text);
+    border-color: var(--text);
+  }
+
+  .mdo-checkbox {
+    width: 14px;
+    height: 14px;
+    border: 1px solid var(--muted);
+    border-radius: 2px;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+  }
+  .mdo-day-col.checked .mdo-checkbox { background: var(--muted); }
+  .mdo-day-col:hover .mdo-checkbox { border-color: var(--text); }
+
+  /* v38.2: checkbox row lives BELOW .mdo-chart-box now, outside the
+     plotting area, instead of stacked inside each bar column. Uses the
+     same --mdo-col-count width formula (set on this row too, by JS) so
+     each checkbox still lines up under its bar column exactly. */
+  .mdo-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin-top: 8px;
+    padding: 0 10px; /* v38.3 fix: must match .mdo-chart-box's left/right
+                        10px padding, or the checkbox columns drift out
+                        of alignment with their bar columns above. */
+    box-sizing: border-box;
+  }
+  .mdo-checkbox-col {
+    flex: 0 0 calc((100% - (var(--mdo-col-count, 31) - 1) * 3px) / var(--mdo-col-count, 31));
+    min-width: 0;
+    display: flex;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .mdo-checkbox-col.mdo-checkbox-col-empty {
+    cursor: default;
+    pointer-events: none;
+  }
+  .mdo-checkbox-col:hover .mdo-checkbox { border-color: var(--text); }
+  .mdo-checkbox-col.checked .mdo-checkbox { background: var(--muted); }
+
+  /* v44.1: "Select All / Deselect All" master checkbox, sitting just to
+     the left of the first day-checkbox square. Positioned absolutely
+     against its wrapper (rather than as a flex sibling of the 31-column
+     .mdo-checkbox-row) specifically so it never disturbs that row's
+     per-column width formula — which has to stay pixel-identical to
+     .mdo-chart-box above it for the bars/checkboxes to line up. The
+     wrapper's own left inset (inside .mdo-modal's 32px padding) leaves
+     enough room for it to sit outside the row without clipping. */
+  .mdo-checkbox-row-wrap {
+    position: relative;
+    margin-top: 8px;
+  }
+  .mdo-checkbox-row { margin-top: 0; }
+  .mdo-select-all-btn {
+    position: absolute;
+    left: -20px;
+    top: 0;
+    width: 14px;
+    height: 14px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .mdo-select-all-checkbox {
+    display: block;
+    width: 14px;
+    height: 14px;
+    border: 1px solid var(--muted);
+    border-radius: 2px;
+    box-sizing: border-box;
+  }
+  .mdo-select-all-btn:hover .mdo-select-all-checkbox { border-color: var(--text); }
+  .mdo-select-all-btn.all-checked .mdo-select-all-checkbox { background: var(--muted); }
+  .mdo-select-all-btn.all-checked:hover .mdo-select-all-checkbox {
+    background: var(--text);
+    border-color: var(--text);
+  }
+
+  /* v46: the footer used to center its single BackFill button; it now
+     holds BackFill + Extend side by side, and per spec both buttons start
+     flush with the chart box's own left edge (not centered) and never
+     sit further left than that edge — .mdo-footer is a direct child of
+     .mdo-modal, same as .mdo-chart-box above it, so a plain flex-start
+     with no extra left margin/padding already lines the two up exactly. */
+  .mdo-footer {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 12px;
+    margin-top: 22px;
+    flex-wrap: wrap;
+  }
+
+  .mdo-backfill-btn {
+    appearance: none;
+    background: transparent;
+    color: var(--muted);
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 13px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 9px 34px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+  .mdo-backfill-btn:hover:not(:disabled) { border-color: var(--gold); color: var(--text); }
+  .mdo-backfill-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* v46: Extend reuses the exact .mdo-backfill-btn look/hover/transition
+     (per spec, "identical in design and animation") but is never given a
+     `disabled` attribute — unlike BackFill it doesn't depend on any day
+     being checked, so it stays clickable at all times. */
+  .mdo-extend-btn.active {
+    border-color: var(--gold);
+    color: var(--text);
+  }
+
+  /* v46: the dark date box that appears next to Extend once clicked.
+     Hidden by default and faded/slid in via JS toggling .open, so it
+     never causes a page reflow before the user asks for it. */
+  .mdo-extend-date-box {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    opacity: 0;
+    transform: translateX(-6px);
+    max-width: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transition: opacity 0.15s ease, transform 0.15s ease, max-width 0.2s ease;
+  }
+  .mdo-extend-date-box.open {
+    opacity: 1;
+    transform: translateX(0);
+    max-width: 260px;
+    pointer-events: auto;
+  }
+
+  .mdo-extend-date-input {
+    appearance: none;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 13px;
+    color-scheme: dark; /* keeps the native calendar-picker glyph visible on the dark box */
+    white-space: nowrap;
+  }
+
+  .mdo-extend-icon {
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    color: var(--muted);
+    flex: 0 0 auto;
+    transition: color 0.15s ease;
+  }
+  .mdo-extend-icon:hover { color: var(--text); }
+  .mdo-extend-confirm {
+    color: var(--gold);
+    display: none; /* v46: only shown once the chosen date is strictly
+                       older than Oldest Data Available (see JS) */
+  }
+  .mdo-extend-confirm.visible { display: inline; }
+  .mdo-extend-confirm:hover { color: var(--text); }
+
+  /* v44: one-line general status message under the BackFill button —
+     "Backfill Processing..." while the sync process works in the
+     background, then a final "Backfill Done, N Seconds Recovered" (or
+     "No Data Recovered") summary. Never per-day/per-range detail, just
+     the overall outcome, per spec. */
+  .mdo-backfill-status {
+    display: block;
+    text-align: left; /* v57 Update 4: was center - status/progress text
+      (Backfill and Extend share this one line) reads more naturally
+      left-aligned, especially as it grows longer with per-chunk Extend
+      progress ("Extend Processing... (49/71 days checked, 42 added)"). */
+    margin-top: 10px;
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 12px;
+    color: var(--muted);
+    min-height: 14px;
+  }
+  .mdo-backfill-status.mdo-backfill-status-done { color: var(--gold); }
+
+  /* ==========================================================================
+     v50: Setting panel — a tabbed replacement for the old single-purpose
+     Market Data Overview modal. Reuses .mdo-backdrop for the dimmed
+     full-screen backdrop (unchanged), but swaps .mdo-modal's single-pane
+     box for a two-column .settings-modal (sidebar of tabs + content area).
+     Market Data Overview keeps every one of its own classes/behaviour
+     (.mdo-*) unchanged — it's simply mounted inside one .settings-pane
+     instead of owning the whole modal. ========================================= */
+  .settings-modal {
+    width: 1000px;
+    max-width: calc(100vw - 48px);
+    height: 640px;
+    max-height: calc(100vh - 48px);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    box-sizing: border-box;
+    display: flex;
+    overflow: hidden;
+  }
+
+  .settings-sidebar {
+    flex: 0 0 240px;
+    padding: 28px 0 24px 32px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+  }
+  .settings-sidebar-title {
+    font-family: Bahnschrift, "Segoe UI", sans-serif;
+    font-weight: 400;
+    font-size: 22.5px;
+    color: var(--text);
+    margin-bottom: 26px;
+  }
+
+  /* Sidebar tabs — per spec only the LABEL is clickable/interactive; the
+     icon next to it is purely decorative and static (no hover/active
+     state of its own, no pointer-events), so both just ride along with
+     whatever color the row's own selected state sets on currentColor. */
+  .settings-tab {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 18px;
+    color: var(--muted);
+  }
+  .settings-tab-icon {
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+  .settings-tab-icon svg { width: 100%; height: 100%; display: block; }
+  .settings-tab-label {
+    appearance: none;
+    border: none;
+    background: transparent;
+    padding: 0;
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 13.5px;
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
+    transition: color 0.15s ease;
+  }
+  /* Selected: dark (--muted) text -> light (--text) text, on both the
+     label and (via currentColor) its static icon — no background pill,
+     matching the reference design's plain text-color swap. */
+  .settings-tab.active { color: var(--text); }
+
+  .settings-divider { flex: 0 0 1px; background: var(--border); margin: 24px 0; }
+
+  .settings-content {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 28px 32px 24px;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .settings-content-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 22px;
+    flex: 0 0 auto;
+  }
+  .settings-content-title {
+    font-family: Bahnschrift, "Segoe UI", sans-serif;
+    font-weight: 400;
+    font-size: 22.5px;
+    color: var(--text);
+  }
+  .settings-close {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1;
+    padding: 4px;
+  }
+  .settings-close:hover { color: var(--text); }
+
+  .settings-panes { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .settings-pane { display: none; }
+  .settings-pane.active { display: block; }
+
+  /* v51 Update 1: the Setting panel's own scrollbar (visible whenever a
+     tab's content is taller than the panel, e.g. Keyboard Shortcuts) was
+     still the browser's bulky default. Matches the Object Tree panel's
+     own minimal scrollbar exactly (`.objects-panel-list` above) instead
+     of a one-off style, so every scrollable panel in the app reads the
+     same. */
+  .settings-panes {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) var(--panel);
+  }
+  .settings-panes::-webkit-scrollbar {
+    width: 6px;
+  }
+  .settings-panes::-webkit-scrollbar-track {
+    background: var(--panel);
+  }
+  .settings-panes::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+  }
+  .settings-panes::-webkit-scrollbar-thumb:hover {
+    background: var(--muted);
+  }
+
+  /* The Market Data Overview pane reuses every .mdo-* class as-is; it
+     just needs its old modal padding (previously supplied by .mdo-modal)
+     dropped since .settings-content now supplies it, and its old
+     title/close row removed (the shared .settings-content-header covers
+     both now). */
+  #settings-pane-market-data-overview .mdo-footer { margin-top: 22px; }
+
+  /* Placeholder tabs — Keyboard Shortcuts / Configuration / About are
+     created per spec as empty shells to be filled in later; this note is
+     the only content they show for now. */
+  .settings-placeholder {
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 12px;
+    color: var(--muted);
+    padding-top: 4px;
+  }
+
+  /* ---- v51: Keyboard Shortcuts tab --------------------------------------
+     A themed table (same font/color conventions as the Canvas tab above)
+     listing every shortcut action with its current binding and an inline
+     assign/change control. See keyboard-shortcuts.js. */
+  .kbd-shortcuts-intro {
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-bottom: 16px;
+    max-width: 520px;
+    line-height: 1.5;
+  }
+  .kbd-shortcuts-table {
+    width: 100%;
+    max-width: 560px;
+    border-collapse: collapse;
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 12.5px;
+    color: var(--text);
+  }
+  .kbd-shortcuts-table thead th {
+    text-align: left;
+    color: var(--muted);
+    font-weight: normal;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0 8px 8px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .kbd-shortcuts-table .kbd-col-controls { width: 76px; }
+  .kbd-shortcuts-table .kbd-col-shortcut { width: 190px; }
+  .kbd-shortcuts-table tbody tr {
+    border-bottom: 1px solid var(--border);
+  }
+  .kbd-shortcuts-table tbody tr:last-child { border-bottom: none; }
+  .kbd-shortcuts-table td { padding: 9px 8px; vertical-align: middle; }
+  .kbd-action-label { color: var(--text); }
+  .kbd-shortcut-badge {
+    display: inline-block;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 12px;
+    color: var(--text);
+    letter-spacing: 0.02em;
+  }
+  .kbd-shortcut-badge.kbd-unassigned { color: var(--muted); font-style: italic; }
+  .kbd-shortcut-badge.kbd-listening { color: var(--gold); border-color: var(--gold); }
+  .kbd-row-controls { display: flex; align-items: center; gap: 4px; justify-content: flex-end; }
+  .kbd-icon-btn {
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--muted);
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+  }
+  .kbd-icon-btn:hover { border-color: var(--gold); color: var(--text); }
+  .kbd-icon-btn.kbd-confirm-btn:hover { border-color: var(--up); color: var(--up); }
+  .kbd-icon-btn.kbd-cancel-btn:hover { border-color: var(--down); color: var(--down); }
+  .kbd-icon-btn.kbd-clear-btn:hover { border-color: var(--down); color: var(--down); }
+  .kbd-icon-btn:disabled { opacity: 0.35; cursor: default; border-color: var(--border); color: var(--muted); }
+  .kbd-reset-all-btn {
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 11.5px;
+    padding: 7px 12px;
+    margin-top: 18px;
+    cursor: pointer;
+  }
+  .kbd-reset-all-btn:hover { border-color: var(--gold); color: var(--text); }
+
+  /* ---- v52: Software & Data tab -------------------------------------------
+     One row per config.py variable, grouped into the same sections as the
+     comments in config.py itself. Same font/color/input conventions as
+     the Canvas and Keyboard Shortcuts tabs above, so the tab reads as
+     part of the same app rather than a bolted-on settings page.
+
+     v52 Update 2: replaced the per-title hover "i" icon + floating
+     popover (cramped, and could overlap other text — see bug report)
+     with a single FIXED description box docked to the right of the
+     field list. Hovering ANYWHERE across a row (title, input, unit —
+     the row's full width) swaps that box's text; it never moves and
+     never overlaps anything else. Freed width is taken from the input
+     fields, which didn't need to be as wide as they were. */
+  .appcfg-intro {
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-bottom: 20px;
+    max-width: 820px;
+    line-height: 1.5;
+  }
+  .appcfg-intro code {
+    font-family: inherit;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 4px;
+  }
+  /* Two-column layout: scrollable field list on the left, fixed
+     description panel docked on the right.
+     v52 Update 3: the field list now owns its OWN scrollbar
+     (.appcfg-fields is the scroll container, not the whole pane), and the
+     description panel sits fully outside that scroll region — so it can
+     never move or get scrolled out of view; only the variable rows
+     scroll, right of the intro text and the panel scrolls independent of
+     the Restore-to-Default footer too. The pane itself becomes a fixed-
+     height flex column (intro / layout / footer) so the browser's own
+     scrollbar renders right at the edge of the field list, directly to
+     the left of the description box, matching the reference design. */
+  #settings-pane-configuration.active {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+  .appcfg-intro { flex: 0 0 auto; }
+  .appcfg-layout {
+    display: flex;
+    align-items: stretch;
+    gap: 20px;
+    max-width: 820px;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .appcfg-fields {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-y: auto;
+    padding-right: 6px;
+  }
+  .appcfg-desc-panel {
+    flex: 0 0 240px;
+    align-self: stretch;
+    height: 100%;
+    box-sizing: border-box;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--muted);
+    overflow-y: auto;
+  }
+  .appcfg-desc-title {
+    color: var(--muted);
+    font-size: 11.5px;
+    margin-bottom: 8px;
+    display: none;
+  }
+  .appcfg-desc-panel.has-selection .appcfg-desc-title { display: block; }
+  .appcfg-section { margin-bottom: 24px; }
+  .appcfg-section-title {
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .appcfg-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 11px;
+    padding: 3px 6px;
+    margin-left: -6px;
+    margin-right: -6px;
+    border-radius: 4px;
+    cursor: default;
+  }
+  /* The whole row highlights + drives the description panel on hover —
+     no separate icon to hover, per spec (minimal). */
+  .appcfg-row:hover { background: var(--bg); }
+  .appcfg-label-wrap { flex: 0 0 190px; min-width: 0; }
+  .appcfg-label {
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 12.5px;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+  }
+  .appcfg-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 170px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 12px;
+    padding: 6px 8px;
+  }
+  .appcfg-input:focus { outline: none; border-color: var(--gold); }
+  .appcfg-input.appcfg-input-invalid { border-color: var(--down); }
+
+  /* v67.4: Configuration checkbox text matches the Canvas tab exactly.
+     Canvas rows use Consolas/ui-monospace at 13px with the normal text token;
+     keep the existing appcfg row geometry intact while matching only the
+     checkbox label typography. */
+  #settings-pane-configuration .appcfg-row > .canvas-grid-checkbox-label {
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 13px;
+    color: var(--text);
+  }
+
+  /* v67.3: Configuration boolean rows reuse the Canvas checkbox class/styles. */
+  /* v56.6 Update 2: minimal folder-browse icon button next to a path
+     field (currently only MT5 Terminal Path). Same sizing/border language
+     as the rest of the tab's inputs, colored with the app's own muted/
+     gold theme tokens (not a hardcoded color) and a short transition so
+     the hover state animates in, matching every other icon button in the
+     app (e.g. .dcm-icon-btn, .pill-btn). */
+  .appcfg-browse-btn {
+    appearance: none;
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--muted);
+    cursor: pointer;
+    padding: 6px;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  }
+  .appcfg-browse-btn svg { width: 100%; height: 100%; display: block; }
+  .appcfg-browse-btn:hover { color: var(--gold); border-color: var(--gold); background: var(--ov4); }
+  .appcfg-update-btn {
+    appearance: none;
+    flex: 0 0 auto;
+    min-width: 170px;
+    height: 32px;
+    padding: 0 14px;
+    white-space: nowrap;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 12px;
+    cursor: not-allowed;
+  }
+
+  /* v66.4: About tab — a Markdown-rendered text box (fed from web/About.md,
+     see about-panel.js) plus a redesigned Version card below it. Replaces
+     the old single static "Version" appcfg-row. */
+  .about-text-box {
+    max-height: 336px;
+    padding: 18px 20px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow-y: auto;
+    overflow-x: hidden;   /* long words/urls wrap instead of ever scrolling sideways */
+  }
+  /* Same thin, theme-colored scrollbar as every other scroll area in the
+     app (.settings-panes, .objects-panel-list) — sits on the box's right
+     edge and, being a native scrollbar, is only ever drawn once content
+     actually overflows the box; it stays fully hidden otherwise. */
+  .about-text-box {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) var(--panel);
+  }
+  .about-text-box::-webkit-scrollbar { width: 6px; }
+  .about-text-box::-webkit-scrollbar-track { background: var(--panel); }
+  .about-text-box::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .about-text-box::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  .about-text-content {
+    font-family: "Segoe UI", sans-serif;
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--text);
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+  .about-text-content > *:first-child { margin-top: 0; }
+  .about-text-content > *:last-child { margin-bottom: 0; }
+  .about-text-content h1,
+  .about-text-content h2,
+  .about-text-content h3,
+  .about-text-content h4,
+  .about-text-content h5,
+  .about-text-content h6 {
+    font-family: Bahnschrift, "Segoe UI", sans-serif;
+    font-weight: 400;
+    color: var(--gold);
+    margin: 18px 0 8px;
+    line-height: 1.35;
+  }
+  .about-text-content h1 { font-size: 19px; }
+  .about-text-content h2 { font-size: 16px; }
+  .about-text-content h3 { font-size: 14px; }
+  .about-text-content h4,
+  .about-text-content h5,
+  .about-text-content h6 { font-size: 13px; color: var(--muted); }
+  .about-text-content p { margin: 0 0 10px; }
+  .about-text-content ul,
+  .about-text-content ol { margin: 0 0 10px; padding-left: 22px; }
+  .about-text-content li { margin-bottom: 4px; }
+  .about-text-content code {
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 12px;
+    background: var(--ov6);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
+  }
+  .about-text-content a { color: var(--gold); text-decoration: none; }
+  .about-text-content a:hover { text-decoration: underline; }
+  .about-text-content blockquote {
+    margin: 0 0 10px;
+    padding: 4px 12px;
+    border-left: 2px solid var(--gold);
+    color: var(--muted);
+  }
+  .about-text-content hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+
+  /* Version card — icon + label/value pair on the left, the (still
+     disabled/future) update action on the right, on its own subtly
+     raised panel instead of blending into a plain settings row. */
+  .about-version-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 18px;
+    padding: 14px 18px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .about-version-icon {
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gold);
+    background: var(--ov5);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+  }
+  .about-version-icon svg { width: 16px; height: 16px; display: block; }
+  .about-version-info {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .about-version-label {
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 10.5px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .about-version-value {
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--gold);
+    letter-spacing: 0.02em;
+  }
+  .about-update-btn {
+    appearance: none;
+    flex: 0 0 auto;
+    min-width: 170px;
+    height: 34px;
+    padding: 0 16px;
+    white-space: nowrap;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--muted);
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .about-update-btn:hover:not(:disabled) { border-color: var(--gold); color: var(--text); }
+  .about-update-btn:disabled { cursor: not-allowed; opacity: 0.6; }
+  .about-update-status {
+    margin-top: 10px;
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .about-update-status a { color: var(--gold); text-decoration: none; }
+  .about-update-status a:hover { text-decoration: underline; }
+  .about-update-status.is-available { color: var(--gold); }
+  .about-update-status.is-error { color: #c0664a; }
+  .about-update-progress {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .about-update-progress-track {
+    flex: 1 1 auto;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .about-update-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--gold);
+    transition: width 0.15s ease;
+  }
+  .about-update-progress-label {
+    flex: 0 0 auto;
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .appcfg-unit {
+    flex: 0 0 auto;
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .appcfg-footer {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 8px;
+    flex: 0 0 auto;
+  }
+  .appcfg-reset-btn {
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 11.5px;
+    padding: 7px 12px;
+    cursor: pointer;
+  }
+  .appcfg-reset-btn:hover { border-color: var(--gold); color: var(--text); }
+  .appcfg-saved-note {
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 11px;
+    color: var(--muted);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+  .appcfg-saved-note.visible { opacity: 1; }
+
+  /* ---- Canvas tab ------------------------------------------------------ */
+  .canvas-settings-columns {
+    display: flex;
+    gap: 64px;
+    flex-wrap: wrap;
+  }
+  .canvas-settings-col { flex: 0 0 auto; min-width: 220px; }
+  .canvas-settings-col-title {
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+  .canvas-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 13px;
+    color: var(--text);
+  }
+  .canvas-row-label { min-width: 78px; }
+  /* v50.3 Update 2: minimal thickness picker for Crosshair/Price Line —
+     narrower than the style dropdowns since it only ever shows "Npx". */
+  .canvas-thickness-select { width: 52px; flex: 0 0 auto; }
+  .canvas-row select {
+    background: var(--bg);
+    color: var(--muted);
+    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-size: 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 5px 6px;
+  }
+
+  /* Reuses color-picker.js's swatch (App.ColorField.attach adds the
+     .dcm-color-swatch / .dcm-color-swatch-fill classes it already styles
+     under .draw-context-menu) — same swatch, same popover, just scoped to
+     the settings pane instead of the drawing context menu. */
+  .settings-pane .dcm-color-swatch {
+    -webkit-appearance: none;
+    appearance: none;
+    position: relative;
+    width: 24px;
+    height: 22px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+  }
+  .settings-pane .dcm-color-swatch:hover { border-color: var(--gold); }
+  .settings-pane .dcm-color-swatch-fill {
+    position: absolute;
+    inset: 2px;
+    border-radius: 3px;
+    background-image:
+      linear-gradient(var(--sw-color, #c9a227), var(--sw-color, #c9a227)),
+      repeating-conic-gradient(#3a3f4a 0% 25%, #262b34 0% 50%);
+    background-size: auto, 8px 8px;
+  }
+
+  /* v50.1 Update 1: Horizontal/Vertical grid-line rows — checkbox label on
+     the left, its swatch (hidden while unchecked) on the right. */
+  .canvas-grid-row { justify-content: space-between; }
+  .canvas-grid-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+  .canvas-grid-checkbox-label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--gold);
+    cursor: pointer;
+  }
+  .canvas-grid-swatch.hidden { visibility: hidden; }
+  /* V64.1 Update 2: the Ask Price row is wider than the rest of the Chart
+     column. width:0 + min-width:100% keeps it from widening the column (so the
+     grid swatches above stay where they were); its controls simply overflow to
+     the right, where the Candles column has no rows at that height. */
+  .canvas-ask-row { width: 0; min-width: 100%; white-space: nowrap; }
+  .canvas-ask-row > * { flex: 0 0 auto; }
+  /* V64.2: the Ask Price and Daily Break rows share one label width, so their
+     color swatches / line-type / thickness controls line up in one column. */
+  .canvas-ask-row .canvas-grid-checkbox-label { min-width: 178px; }
+
+  /* v50.1 Update 3: Canvas Preset picker — same dropdown-list-plus-inline-
+     save-box pattern as the drawing tool's own style-preset picker
+     (.dcm-preset-*), just restyled under its own class names so it isn't
+     tied to `.draw-context-menu` scoping. */
+  .canvas-preset-block { margin-top: 24px; max-width: 360px; }
+  .canvas-preset-line { display: flex; align-items: center; gap: 5px; }
+  .canvas-preset-dropdown { position: relative; flex: 1 1 auto; min-width: 0; }
+  .canvas-preset-dropdown-btn {
+    appearance: none;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: inherit;
+    padding: 6px 8px;
+    cursor: pointer;
+  }
+  .canvas-preset-dropdown-btn span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .canvas-preset-dropdown-btn .caret { color: var(--muted); font-size: 9px; transition: transform 0.15s ease; }
+  .canvas-preset-dropdown.open .canvas-preset-dropdown-btn .caret { transform: rotate(180deg); }
+  .canvas-preset-dropdown-btn:hover { border-color: var(--muted); }
+  .canvas-preset-dropdown.open .canvas-preset-dropdown-btn { border-color: var(--gold); }
+  .canvas-preset-dropdown-list {
+    position: absolute;
+    top: calc(100% + 5px);
+    left: 0;
+    right: 0;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 3px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+    display: none;
+    flex-direction: column;
+    gap: 1px;
+    z-index: 130;
+    max-height: 160px;
+    overflow-y: auto;
+  }
+  .canvas-preset-dropdown.open .canvas-preset-dropdown-list { display: flex; }
+  .canvas-preset-dropdown-item { display: flex; align-items: center; gap: 4px; border-radius: 5px; padding: 1px; }
+  .canvas-preset-dropdown-item:hover { background: var(--ov6); }
+  .canvas-preset-dropdown-item-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-size: 12px;
+    font-family: inherit;
+    text-align: left;
+    padding: 6px 6px;
+    cursor: pointer;
+  }
+  .canvas-preset-dropdown-item-trash {
+    flex: 0 0 auto;
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+  }
+  .canvas-preset-dropdown-item-trash svg { width: 12px; height: 12px; display: block; }
+  .canvas-preset-dropdown-item-trash:hover { color: var(--down); background: rgba(229, 72, 77, 0.15); }
+  .canvas-preset-dropdown-empty { color: var(--muted); font-size: 11.5px; padding: 6px 8px; }
+  .canvas-preset-save-box { display: none; align-items: center; gap: 5px; margin-top: 8px; }
+  .canvas-preset-save-box.open { display: flex; }
+  .canvas-preset-name-input {
+    flex: 1 1 auto;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: inherit;
+    padding: 6px 8px;
+  }
+  .canvas-preset-name-input:focus { outline: none; border-color: var(--gold); }
+  .canvas-icon-btn {
+    appearance: none;
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+  }
+  .canvas-icon-btn:hover { border-color: var(--gold); color: var(--gold); }
+  .canvas-icon-btn-danger:hover { border-color: var(--down); color: var(--down); }
+
+  /* v33.1 Fix 1: the panel is now a normal-flow flex sibling of
+     #chart-surface (not position:absolute over it), sized via `width` /
+     `flex-basis` rather than translateX, so opening/closing it changes
+     #chart-surface's actual content box — which the ResizeObserver on
+     #chart-container reacts to, shifting the price axis and chart left
+     by exactly the panel's width instead of the panel covering them. */
+  .objects-panel {
+    position: relative;
+    flex: 0 0 auto;
+    width: 0;
+    overflow: hidden;
+    background: var(--panel);
+    border-left: 0 solid var(--border);
+    box-shadow: none;
+    display: flex;
+    flex-direction: column;
+    transition: width 0.18s ease;
+  }
+  .objects-panel.open {
+    width: 250px;
+    border-left: 1px solid var(--border);
+    box-shadow: -8px 0 24px rgba(0,0,0,0.35);
+  }
+  /* Fixed-width inner wrapper: while `.objects-panel` itself animates from
+     0 -> 250px (so the chart smoothly shifts), its content must not reflow
+     / wrap during that animation, so it's laid out at the panel's final
+     width regardless of the parent's current (possibly mid-transition)
+     width. */
+  .objects-panel-inner {
+    width: 250px;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .objects-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    flex: 0 0 auto;
+  }
+  .objects-panel-header .dcm-close { cursor: pointer; color: var(--muted); font-family: monospace; font-size: 14px; }
+  .objects-panel-header .dcm-close:hover { color: var(--text); }
+  .objects-panel-header-actions { display: flex; align-items: center; gap: 10px; }
+  .obj-panel-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: 4px;
+  }
+  .obj-panel-icon-btn:hover { color: var(--text); background: var(--ov8); }
+  .obj-panel-icon-btn svg { width: 14px; height: 14px; display: block; }
+
+  /* v35 fix 2: Sort By dropdown, opened from a small caret button that
+     sits to the LEFT of the existing "new folder" icon (see the header
+     actions' DOM order in index.html) — a minimal menu matching the
+     tf-dropdown-list pattern already used for the timeframe picker. */
+  .obj-panel-sort-wrap { position: relative; }
+  .obj-panel-sort-list {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 150px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+    z-index: 40;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+  .obj-panel-sort-wrap.open .obj-panel-sort-list { display: flex; }
+  .obj-panel-sort-wrap.open .obj-panel-icon-btn { color: var(--text); background: var(--ov8); }
+  .obj-panel-sort-list button {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 400;
+    text-align: left;
+    padding: 6px 8px;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .obj-panel-sort-list button:hover { background: var(--ov6); }
+  .obj-panel-sort-list button.active {
+    background: var(--gold);
+    color: #1a1500;
+    font-weight: 600;
+  }
+
+  .objects-panel-list {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 6px;
+  }
+  /* v35 fix 1: a minimal scrollbar that matches the Object Tree panel's own
+     theme instead of the browser's default (which renders as a bulky,
+     mismatched-color bar that visually sits OUTSIDE the panel's rounded
+     box). Firefox: `scrollbar-*` shrinks it and colors both the thumb and
+     the track to `var(--panel)` — the panel's own background — so the
+     track is invisible against the panel and only the thin muted thumb
+     reads. Chromium/WebKit: the `::-webkit-scrollbar-*` rules below do the
+     same, plus keep the thumb narrow enough (6px) to stay clearly inside
+     the list's own padding rather than overlapping the panel's edge/
+     border, while still wide enough to grab and drag. */
+  .objects-panel-list {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) var(--panel);
+  }
+  .objects-panel-list::-webkit-scrollbar {
+    width: 6px;
+  }
+  .objects-panel-list::-webkit-scrollbar-track {
+    background: var(--panel);
+  }
+  .objects-panel-list::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+  }
+  .objects-panel-list::-webkit-scrollbar-thumb:hover {
+    background: var(--muted);
+  }
+
+  .obj-panel-empty {
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+    padding: 24px 8px;
+  }
+
+  .obj-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text);
+    font-size: 12.5px;
+  }
+  .obj-row:hover { background: var(--ov5); }
+  .obj-row.active,
+  /* v33.2 fix 4: every row multi-selected via Ctrl/Shift is just as
+     "selected" as the single active row, so it gets the exact same
+     yellow highlight — no dimmer/separate look anymore. */
+  .obj-row.panel-selected { background: rgba(201, 162, 39, 0.16); }
+  /* v33.1 Fix 6: an object whose anchor time sits before the first
+     available historical candle on the current timeframe. v33.2 fix 3:
+     these rows can still be selected, just never jumped to — the cursor
+     stays a pointer (selection still works), only the Jump action itself
+     is suppressed in JS. */
+  /* v33.3 fix 1: on top of the existing grey color, an out-of-range row's
+     label is also struck through, so it reads unambiguously as
+     unreachable rather than just dimmed. */
+  .obj-row.obj-out-of-range .obj-row-label { color: var(--muted); text-decoration: line-through; }
+  .obj-row.obj-folder-row { font-weight: 600; }
+  .obj-row.obj-folder-dragover { background: rgba(201, 162, 39, 0.22); outline: 1px dashed var(--gold); }
+  /* v33.3 fix 3: a more pronounced offset than v33.2's 16px — a nested
+     row now reads clearly as "inside" its folder rather than looking
+     like a slightly-misaligned top-level row. */
+  .obj-row.obj-in-folder { margin-left: 26px; }
+  /* v33.3 fix 3: was a 9px text glyph (barely legible at this size); now
+     a proper SVG chevron, drawn pointing right ("closed") and rotated
+     90deg via .obj-folder-chevron-open when the folder is expanded, with
+     a short transition instead of a hard glyph swap. */
+  .obj-folder-chevron {
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    transition: transform 0.15s ease;
+  }
+  .obj-folder-chevron svg { width: 12px; height: 12px; display: block; }
+  .obj-folder-chevron.obj-folder-chevron-open { transform: rotate(90deg); }
+
+  .obj-row-icon {
+    flex: 0 0 auto;
+    width: 15px;
+    height: 15px;
+    display: flex;
+    color: var(--muted);
+  }
+  .obj-row-icon svg { width: 15px; height: 15px; display: block; }
+  .obj-row.active .obj-row-icon,
+  .obj-row.panel-selected .obj-row-icon { color: var(--gold); }
+
+  .obj-row-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .obj-row.obj-hidden .obj-row-label { color: var(--muted); font-style: italic; }
+
+  /* v33.1 Fix 3: inline rename input replaces .obj-row-label in place,
+     matching its layout so the row doesn't jump around while editing. */
+  .obj-row-rename-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    background: var(--bg);
+    border: 1px solid var(--gold);
+    border-radius: 3px;
+    color: var(--text);
+    font-size: 12.5px;
+    font-family: inherit;
+    padding: 1px 4px;
+  }
+  .obj-row-rename-input:focus { outline: none; }
+
+  .obj-row-actions {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+  .obj-row:hover .obj-row-actions { opacity: 1; }
+
+  .obj-row {
+    position: relative;
+  }
+
+  .obj-row-btn {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+  }
+  .obj-row-btn svg { width: 13px; height: 13px; display: block; }
+  .obj-row-btn:hover { color: var(--text); background: var(--ov8); }
+  .obj-row-btn.active { color: var(--gold); }
+  .obj-row-btn-danger:hover { color: var(--down); background: rgba(229, 72, 77, 0.15); }
+
+  /* =========================================================================
+     v40 — Bar Replay
+     - .replay-bar: the horizontal control strip that appears under the time
+       axis once Replay mode is entered. It's a normal flex-column sibling
+       of #chart-container inside #app (see index.html body markup below),
+       not an overlay — so showing/hiding it changes #chart-container's own
+       content-box height, which the existing ResizeObserver already
+       watching #chart-container (see chart-core.js) picks up automatically
+       and resizes the chart into the remaining space. That's also why the
+       Object Tree panel (a flex child of #chart-container) never overlaps
+       this bar: it only ever occupies the space #chart-container has, and
+       #chart-container has already shrunk by this bar's height.
+     ========================================================================= */
+  .replay-bar {
+    display: none;
+    position: relative;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    height: 40px;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+  }
+  .replay-bar.open { display: flex; }
+
+  .replay-icon-btn {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    width: 28px;
+    height: 28px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    font-size: 13px;
+  }
+  .replay-icon-btn svg { width: 15px; height: 15px; display: block; }
+  .replay-icon-btn:hover { color: var(--text); background: var(--ov6); }
+  .replay-icon-btn.active { background: var(--gold); color: #1a1500; }
+
+  .replay-close-btn {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    font-family: monospace;
+  }
+  .replay-close-btn:hover { color: var(--down); background: rgba(229, 72, 77, 0.12); }
+
+  /* =========================================================================
+     v59 — Log panel
+     - .log-panel: flex sibling of #chart-container, same pattern as
+       .replay-bar above (not an overlay) - opening it shrinks
+       #chart-container's own content box, which the ResizeObserver already
+       watching #chart-container (chart-core.js) picks up automatically.
+     - Its height is user-resizable by dragging .log-panel-handle along its
+       top edge (see web/js/log-panel.js); min/max are clamped in JS.
+     ========================================================================= */
+  .log-panel {
+    display: none;
+    flex-direction: column;
+    flex: 0 0 auto;
+    height: 220px;
+    min-height: 80px;
+    max-height: 70vh;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+  }
+  .log-panel.open { display: flex; }
+
+  .log-panel-handle {
+    flex: 0 0 auto;
+    height: 5px;
+    margin-top: -1px;
+    cursor: ns-resize;
+    background: transparent;
+  }
+  .log-panel-handle:hover { background: var(--ov8); }
+  .log-panel-handle.dragging { background: var(--muted); }
+
+  .log-panel-header {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 30px;
+    padding: 0 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .log-panel-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .log-panel-close {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0;
+  }
+  .log-panel-close:hover { color: var(--down); background: rgba(229, 72, 77, 0.12); }
+
+  /* v62.6 - topical filter chips (All/Info/Database/Warning/Error/Debug),
+     see web/js/log-panel.js. Filtering happens client-side against lines
+     already fetched, so switching chips is instant and costs no extra
+     backend/pywebview round trip. */
+  .log-panel-filters {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+  .log-filter-btn {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 3px 9px;
+    border-radius: 100px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
+  .log-filter-btn:hover { color: var(--text); border-color: var(--muted); }
+  .log-filter-btn.active { color: var(--bg); background: var(--text); border-color: var(--text); }
+
+  .log-panel-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0;
+    padding: 8px 12px;
+    overflow-y: auto;
+    overflow-x: auto;
+    white-space: pre;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: var(--text);
+  }
+  .log-panel-body::-webkit-scrollbar-track { background: var(--panel); }
+
+  /* Replay Speed — a themed dropdown opening UPWARD (the bar sits at the
+     very bottom of the window, so there is no room to open it downward). */
+  .replay-speed-wrap { position: relative; display: flex; align-items: center; }
+  .replay-speed-btn { width: auto; padding: 0 8px; gap: 5px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .replay-speed-list {
+    display: none;
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 8px);
+    transform: translateX(-50%);
+    flex-direction: column;
+    gap: 2px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px;
+    min-width: 64px;
+    box-shadow: 0 -8px 24px rgba(0,0,0,0.45);
+    z-index: 40;
+  }
+  .replay-speed-wrap.open .replay-speed-list { display: flex; }
+  .replay-speed-list button {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    text-align: center;
+    padding: 6px 8px;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .replay-speed-list button:hover { background: var(--ov6); }
+  .replay-speed-list button.active { background: var(--gold); color: #1a1500; font-weight: 600; }
+
+  /* Select Date modal — a centered backdrop dialog, following the exact
+     same pattern as .mdo-backdrop/.mdo-modal, but with its own class
+     prefix (rbd = Replay Bar Date) since its content (calendar grid,
+     date+time fields) is entirely different. */
+  .rbd-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 500;
+    align-items: center;
+    justify-content: center;
+  }
+  .rbd-backdrop.open { display: flex; }
+
+  .rbd-modal {
+    width: 340px;
+    max-width: calc(100vw - 48px);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 22px 18px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    box-sizing: border-box;
+    color: var(--text);
+  }
+
+  .rbd-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    font-size: 17px;
+    font-weight: 600;
+  }
+  .rbd-close { cursor: pointer; color: var(--muted); font-size: 15px; line-height: 1; padding: 4px; }
+  .rbd-close:hover { color: var(--text); }
+
+  .rbd-fields { display: flex; gap: 8px; margin-bottom: 16px; }
+  .rbd-field { position: relative; flex: 1; min-width: 0; }
+  .rbd-field input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    padding: 8px 26px 8px 9px;
+    box-sizing: border-box;
+    outline: none;
+    cursor: pointer;
+  }
+  .rbd-field input:hover { border-color: var(--muted); }
+  .rbd-field input:focus { border-color: var(--gold); background: var(--ov3); }
+  .rbd-field input.rbd-invalid { border-color: var(--down); }
+  .rbd-field svg { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 13px; height: 13px; color: var(--muted); pointer-events: none; }
+
+  .rbd-cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .rbd-cal-nav-btn {
+    appearance: none; border: none; background: transparent; color: var(--muted);
+    width: 24px; height: 24px; border-radius: 4px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .rbd-cal-nav-btn:hover { color: var(--text); background: var(--ov6); }
+  .rbd-cal-nav-btn svg { width: 11px; height: 11px; }
+  .rbd-cal-nav-btn.rbd-cal-prev svg { transform: rotate(180deg); }
+  .rbd-cal-title { font-size: 13px; font-weight: 600; color: var(--text); }
+
+  .rbd-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 16px; }
+  .rbd-cal-dow { text-align: center; font-size: 11px; color: var(--muted); padding: 4px 0 6px; }
+  .rbd-cal-day {
+    appearance: none; border: none; background: transparent; color: var(--text);
+    font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    padding: 6px 0; border-radius: 5px; cursor: pointer; text-align: center;
+  }
+  .rbd-cal-day:hover { background: var(--ov6); }
+  .rbd-cal-day.rbd-cal-day-out { color: var(--muted); opacity: 0.35; cursor: default; }
+  .rbd-cal-day.rbd-cal-day-out:hover { background: transparent; }
+  .rbd-cal-day.rbd-cal-day-selected { background: var(--text); color: var(--panel); font-weight: 700; }
+  .rbd-cal-day.rbd-cal-day-disabled { opacity: 0.25; cursor: not-allowed; pointer-events: none; }
+
+  .rbd-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .rbd-actions button {
+    appearance: none; border: 1px solid var(--border); background: var(--bg); color: var(--text);
+    border-radius: 6px; font-size: 12px; padding: 7px 16px; cursor: pointer;
+  }
+  .rbd-actions button:hover { border-color: var(--muted); }
+  .rbd-actions #rbd-select-btn { background: var(--text); color: var(--panel); border-color: var(--text); font-weight: 600; }
+  .rbd-actions #rbd-select-btn:hover { opacity: 0.9; }
+
+  .hint-toast {
+    position: absolute;
+    left: 50%;
+    bottom: 14px;
+    transform: translateX(-50%);
+    background: rgba(17, 22, 31, 0.92);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    pointer-events: none;
+    z-index: 20;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+  .hint-toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+  <!-- v53: resize grips for the frameless window - see chart_bridge.py's
+       window_resize() and the .resize-grip CSS above. Siblings of #app so
+       they sit flush against the real OS window edges regardless of what
+       #app's own layout is doing. -->
+  <div class="resize-grip resize-grip-n"  data-edge="n"></div>
+  <div class="resize-grip resize-grip-s"  data-edge="s"></div>
+  <div class="resize-grip resize-grip-e"  data-edge="e"></div>
+  <div class="resize-grip resize-grip-w"  data-edge="w"></div>
+  <div class="resize-grip resize-grip-ne" data-edge="ne"></div>
+  <div class="resize-grip resize-grip-nw" data-edge="nw"></div>
+  <div class="resize-grip resize-grip-se" data-edge="se"></div>
+  <div class="resize-grip resize-grip-sw" data-edge="sw"></div>
+  <div id="app">
+    <!-- v55.4: custom title bar replacing the native OS frame (see
+         webview.create_window(frameless=True) in app.py). The titlebar-drag
+         strip is moved explicitly by window-controls.js using screen deltas,
+         while double-clicking it toggles maximize. -->
+    <div id="custom-titlebar">
+      <div class="titlebar-drag" id="titlebar-drag">
+        <img class="titlebar-icon" src="assets/icon.svg" alt="" />
+        <span class="titlebar-title" id="titlebar-title">MetaTrader Tick Explorer</span>
+      </div>
+      <div class="titlebar-controls">
+        <button type="button" class="titlebar-btn" id="titlebar-minimize" title="Minimize">
+          <svg viewBox="0 0 10 10"><path d="M0.5 5 H9.5"/></svg>
+        </button>
+        <button type="button" class="titlebar-btn" id="titlebar-maximize" title="Maximize">
+          <svg viewBox="0 0 10 10" id="titlebar-maximize-icon"><rect x="0.75" y="0.75" width="8.5" height="8.5"/></svg>
+        </button>
+        <button type="button" class="titlebar-btn close-btn" id="titlebar-close" title="Close">
+          <svg viewBox="0 0 10 10"><path d="M0.5 0.5 L9.5 9.5 M9.5 0.5 L0.5 9.5"/></svg>
+        </button>
+      </div>
+    </div>
+    <header>
+      <div class="title-block">
+        <div id="symbol-dropdown" class="tf-dropdown symbol-dropdown">
+          <button id="symbol-dropdown-btn" class="tf-dropdown-btn" type="button" title="Trading symbol">
+            <span id="symbol-dropdown-label" class="tf-dropdown-label"><span class="symbol"><span id="live-dot" class="dot"></span><span id="symbol-name">—</span></span></span>
+            <span class="caret">▼</span>
+          </button>
+          <div id="symbol-dropdown-list" class="tf-dropdown-list"></div>
+        </div>
+        <!-- v38 layout refresh: the primary chart's own timeframe picker now
+             lives next to the symbol name instead of the far right, so the
+             header reads "what am I looking at" (left) vs. "tools" (right). -->
+        <div id="tf-dropdown" class="tf-dropdown">
+          <button id="tf-dropdown-btn" class="tf-dropdown-btn" type="button">
+            <span id="tf-dropdown-label">—</span>
+            <span class="caret">▼</span>
+          </button>
+          <div id="tf-dropdown-list" class="tf-dropdown-list"></div>
+        </div>
+      </div>
+      <div class="header-right">
+        <div id="draw-toolbar" class="pill-group"></div>
+        <!-- v37: chart-layout switcher (1 / 2 / 3 side-by-side panels).
+             Populated by multi-panel.js; see that file for the sync design
+             notes. -->
+        <div id="layout-switcher" class="pill-group layout-switcher" title="Chart layout"></div>
+        <!-- v40: Bar Replay toggle — sits between the layout switcher and
+             the Object Tree toggle, per the Bar Replay spec image. Clicking
+             it enters/exits Replay mode (see js/replay-bar.js); while
+             active it gets the same gold "active" look as Object Tree. -->
+        <div class="pill-group objects-toggle-wrap">
+          <button id="replay-bar-toggle" type="button" title="Bar Replay"></button>
+        </div>
+        <!-- v38 layout refresh: Object Tree toggle moved out of the chart
+             surface's top-right corner and into the header's tool cluster,
+             as its own single-icon pill matching the layout switcher's box
+             style, right after it. -->
+        <div class="pill-group objects-toggle-wrap">
+          <button id="objects-panel-toggle" type="button" title="Object Tree"></button>
+        </div>
+        <!-- v50: Setting trigger — sits right after the Object Tree toggle,
+             same single-icon pill styling/sizing, so it reads as the next
+             tool in the same cluster. Replaces the old v38.1 direct
+             Market-Data-Overview icon/modal: this now opens the tabbed
+             Setting panel (see settings-panel.js), of which Market Data
+             Overview is just one tab. -->
+        <div class="pill-group objects-toggle-wrap">
+          <button id="settings-toggle" type="button" title="Setting"></button>
+        </div>
+        <!-- v59: Log toggle — sits right after Setting, same single-icon
+             pill styling/sizing, so it reads as the next tool in the same
+             cluster. Opens/closes the Log panel (see web/js/log-panel.js),
+             which now shows the run_chart.cmd console's output in-app
+             since that console window is hidden in the background. -->
+        <div class="pill-group objects-toggle-wrap">
+          <button id="log-toggle" type="button" title="Log"></button>
+        </div>
+      </div>
+    </header>
+    <div id="chart-container">
+      <!-- v37: #chart-surface (the primary chart: full drawing-tool /
+           Sliding-Window / live-tick feature set, unchanged from v36) is
+           now panel 1 of a row that can hold up to 3 side-by-side panels.
+           Panels 2 and 3 are companion charts — same symbol, independently
+           chosen timeframe each, no drawing tools — created lazily by
+           multi-panel.js the first time the layout switcher asks for them.
+           #chart-panels-row itself replaces #chart-surface as the flex-
+           growing element the Object Tree panel sits beside. -->
+      <div id="chart-panels-row" class="chart-panels-row chart-panels-row-1">
+        <div id="chart-panel-1" class="chart-panel chart-panel-primary">
+          <!-- v33.1 Fix 1: everything that used to sit directly in
+               #chart-container (and therefore got covered by the panel) now
+               lives in this flex-growing wrapper instead; see the CSS comment
+               on #chart-surface above. -->
+          <div id="chart-surface">
+            <div id="status-banner">Loading candles…</div>
+            <canvas id="draw-canvas"></canvas>
+            <div id="hint-toast" class="hint-toast"></div>
+            <button id="autofit-btn" class="active" type="button" title="Auto Fit">A</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- v33: Object Tree — collapsible panel listing every drawn object,
+           with per-object lock/hide/delete and click-to-jump. v33.1: also
+           folders (Fix 4), multi-select (Fix 2), and inline rename (Fix 3). -->
+      <div id="objects-panel" class="objects-panel">
+        <div class="objects-panel-inner">
+          <div class="objects-panel-header">
+            <span>Object Tree</span>
+            <span class="objects-panel-header-actions">
+              <span class="obj-panel-sort-wrap" id="objects-panel-sort-wrap">
+                <button type="button" id="objects-panel-sort-btn" class="obj-panel-icon-btn" title="Sort by"></button>
+                <div class="obj-panel-sort-list" id="objects-panel-sort-list">
+                  <button type="button" id="objects-panel-sort-creation" data-sort="creation">Sort By Creation</button>
+                  <button type="button" id="objects-panel-sort-time" data-sort="time">Sort By Date</button>
+                </div>
+              </span>
+              <button type="button" id="objects-panel-new-folder" class="obj-panel-icon-btn" title="New folder"></button>
+              <span class="dcm-close" id="objects-panel-close">✕</span>
+            </span>
+          </div>
+          <div id="objects-panel-list" class="objects-panel-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- v40: Bar Replay control strip — a flex sibling of #chart-container
+         (not an overlay), so entering Replay mode shrinks the chart/Object
+         Tree area above it instead of covering it. Hidden by default. -->
+    <div id="replay-bar" class="replay-bar">
+      <button id="replay-select-date-btn" class="replay-icon-btn" type="button" title="Select Date"></button>
+      <button id="replay-playpause-btn" class="replay-icon-btn" type="button" title="Play"></button>
+      <div class="replay-speed-wrap" id="replay-speed-wrap">
+        <button id="replay-speed-btn" class="replay-icon-btn replay-speed-btn" type="button" title="Replay Speed">
+          <span id="replay-speed-label">1x</span>
+        </button>
+        <div class="replay-speed-list" id="replay-speed-list">
+          <button type="button" data-speed="1" class="active">1x</button>
+          <button type="button" data-speed="5">5x</button>
+          <button type="button" data-speed="10">10x</button>
+          <button type="button" data-speed="30">30x</button>
+          <button type="button" data-speed="60">60x</button>
+        </div>
+      </div>
+      <button id="replay-close-btn" class="replay-icon-btn replay-close-btn" type="button" title="Close Replay">✕</button>
+    </div>
+
+    <!-- v59: Log panel — a flex sibling of #chart-container, same pattern
+         as .replay-bar above (not an overlay, so opening it shrinks the
+         chart area instead of covering it - the existing ResizeObserver on
+         #chart-container in chart-core.js picks up the change on its own).
+         Toggled from the header's new Log button next to Setting. Shows the
+         current run's log file - the output that used to be visible in a
+         separate CMD console window before that window was hidden (see
+         run_chart.cmd) - via the in-memory current-session LogFeed exposed by
+        ChartBridge.read_log_tail() (web/js/log-panel.js).
+         Hidden by default. Its top edge (#log-panel-handle) is a drag handle
+         that resizes the panel's height; the X button or clicking the header
+         Log toggle again both close it. -->
+    <div id="log-panel" class="log-panel">
+      <div id="log-panel-handle" class="log-panel-handle" title="Drag to resize"></div>
+      <div class="log-panel-header">
+        <span class="log-panel-title">Log</span>
+        <button id="log-panel-close" class="log-panel-close" type="button" title="Close">✕</button>
+      </div>
+      <div id="log-panel-filters" class="log-panel-filters">
+        <button type="button" class="log-filter-btn active" data-category="ALL">All</button>
+        <button type="button" class="log-filter-btn" data-category="GENERAL">Info</button>
+        <button type="button" class="log-filter-btn" data-category="DATABASE">Database</button>
+        <button type="button" class="log-filter-btn" data-category="WARNING">Warning</button>
+        <button type="button" class="log-filter-btn" data-category="ERROR">Error</button>
+        <button type="button" class="log-filter-btn" data-category="DEBUG">Debug</button>
+      </div>
+      <pre id="log-panel-body" class="log-panel-body"></pre>
+    </div>
+  </div>
+
+  <!-- v40: Bar Replay — Select Date modal. Centered backdrop dialog styled
+       to match the app's dark theme; a calendar (with weekday headers) plus
+       second-accurate date/time fields, per the Bar Replay spec image. -->
+  <div id="rbd-backdrop" class="rbd-backdrop">
+    <div class="rbd-modal" role="dialog" aria-modal="true" aria-label="Select date">
+      <div class="rbd-header">
+        <span>Select date</span>
+        <span class="rbd-close" id="rbd-close">✕</span>
+      </div>
+      <div class="rbd-fields">
+        <div class="rbd-field">
+          <input type="text" id="rbd-date-input" placeholder="YYYY-MM-DD" inputmode="numeric" autocomplete="off" />
+        </div>
+        <div class="rbd-field">
+          <input type="text" id="rbd-time-input" placeholder="HH:MM:SS" inputmode="numeric" autocomplete="off" />
+        </div>
+      </div>
+      <div class="rbd-cal-nav">
+        <button type="button" class="rbd-cal-nav-btn rbd-cal-prev" id="rbd-cal-prev"></button>
+        <span class="rbd-cal-title" id="rbd-cal-title">—</span>
+        <button type="button" class="rbd-cal-nav-btn rbd-cal-next" id="rbd-cal-next"></button>
+      </div>
+      <div class="rbd-cal-grid" id="rbd-cal-grid"></div>
+      <div class="rbd-actions">
+        <button type="button" id="rbd-cancel-btn">Cancel</button>
+        <button type="button" id="rbd-select-btn">Select</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- v47.2 Update 2: now shares the exact same calendar UI as Bar Replay's
+       Select Date modal (reusing its .rbd-fields/.rbd-cal-* classes) —
+       date/time text fields plus a real month calendar grid, instead of
+       just the two bare text fields it had before. -->
+  <div id="jump-time-panel" class="draw-context-menu jump-time-panel" role="dialog" aria-modal="true" aria-label="Jump Time">
+    <div class="dcm-title"><span id="jump-time-title">Jump Time</span><span class="dcm-close" id="jump-time-close">✕</span></div>
+    <div class="rbd-fields">
+      <div class="rbd-field">
+        <input type="text" id="jump-time-date" placeholder="YYYY-MM-DD" inputmode="numeric" autocomplete="off" />
+      </div>
+      <div class="rbd-field">
+        <input type="text" id="jump-time-time" placeholder="HH:MM:SS" inputmode="numeric" autocomplete="off" />
+      </div>
+    </div>
+    <div class="rbd-cal-nav">
+      <button type="button" class="rbd-cal-nav-btn rbd-cal-prev" id="jump-time-cal-prev"></button>
+      <span class="rbd-cal-title" id="jump-time-cal-title">—</span>
+      <button type="button" class="rbd-cal-nav-btn rbd-cal-next" id="jump-time-cal-next"></button>
+    </div>
+    <div class="rbd-cal-grid" id="jump-time-cal-grid"></div>
+    <div id="jump-time-status" class="jump-time-status"></div>
+    <div class="jump-time-actions">
+      <button type="button" id="jump-time-cancel">Cancel</button>
+      <button type="button" id="jump-time-go">GO</button>
+    </div>
+  </div>
+
+  <!-- v50: Setting panel — sidebar of tabs (Market Data Overview, Canvas,
+       Keyboard Shortcuts, Configuration, About) + one content area showing
+       whichever tab is selected (see settings-panel.js). Replaces the old
+       v38.1 single-purpose Market Data Overview modal; that content now
+       lives unchanged inside #settings-pane-market-data-overview. -->
+  <div id="settings-backdrop" class="mdo-backdrop">
+    <div class="settings-modal" role="dialog" aria-modal="true" aria-label="Setting">
+      <div class="settings-sidebar">
+        <div class="settings-sidebar-title">Setting</div>
+        <div id="settings-tabs">
+          <div class="settings-tab" data-tab="market-data-overview">
+            <span class="settings-tab-icon" id="settings-tab-icon-market-data-overview"></span>
+            <button type="button" class="settings-tab-label" data-tab="market-data-overview">Market Data Overview</button>
+          </div>
+          <div class="settings-tab" data-tab="canvas">
+            <span class="settings-tab-icon" id="settings-tab-icon-canvas"></span>
+            <button type="button" class="settings-tab-label" data-tab="canvas">Canvas</button>
+          </div>
+          <div class="settings-tab" data-tab="keyboard-shortcuts">
+            <span class="settings-tab-icon" id="settings-tab-icon-keyboard-shortcuts"></span>
+            <button type="button" class="settings-tab-label" data-tab="keyboard-shortcuts">Keyboard Shortcuts</button>
+          </div>
+          <div class="settings-tab" data-tab="configuration">
+            <span class="settings-tab-icon" id="settings-tab-icon-configuration"></span>
+            <button type="button" class="settings-tab-label" data-tab="configuration">Configuration</button>
+          </div>
+          <div class="settings-tab" data-tab="about">
+            <span class="settings-tab-icon" id="settings-tab-icon-about"></span>
+            <button type="button" class="settings-tab-label" data-tab="about">About</button>
+          </div>
+        </div>
+      </div>
+      <div class="settings-divider"></div>
+      <div class="settings-content">
+        <div class="settings-content-header">
+          <span class="settings-content-title" id="settings-content-title">Market Data Overview</span>
+          <span class="settings-close" id="settings-close">✕</span>
+        </div>
+        <div class="settings-panes">
+          <!-- Market Data Overview — oldest data (with its day count), and a
+               per-day candle-count histogram used to pick a range for a
+               Backfill/Extend action (see market-data-overview.js). Markup
+               unchanged from v38.1 other than losing its own modal
+               header/padding, both now supplied by .settings-content. -->
+          <div class="settings-pane" id="settings-pane-market-data-overview">
+            <div class="mdo-body">
+              <div class="mdo-stat-row">Oldest Data Available : <span class="mdo-value" id="mdo-oldest-data">—</span> <span class="mdo-value" id="mdo-oldest-days"></span></div>
+              <div class="mdo-controls-row">
+                <div class="mdo-control">
+                  <label for="mdo-year-select">Year :</label>
+                  <select id="mdo-year-select"></select>
+                </div>
+                <div class="mdo-control">
+                  <label for="mdo-month-select">Month:</label>
+                  <select id="mdo-month-select"></select>
+                </div>
+                <div class="mdo-control">
+                  <label for="mdo-tolerance-select">tolerance:</label>
+                  <select id="mdo-tolerance-select"></select>
+                  <button type="button" class="mdo-refresh-btn" id="mdo-refresh-btn" title="Re-count candles for this month"></button>
+                </div>
+              </div>
+              <!-- v63: view row — the hover line (Chart view only) on the left,
+                   the Chart / Log switch on the right (see market-data-
+                   overview.js). Both views live in the same pane; only one is
+                   shown at a time. -->
+              <div class="mdo-view-row">
+                <div class="mdo-hover-info" id="mdo-hover-info">&nbsp;</div>
+                <div class="mdo-view-switch" role="group" aria-label="View">
+                  <button type="button" class="mdo-view-btn active" id="mdo-view-chart-btn" title="Chart" aria-pressed="true"></button>
+                  <button type="button" class="mdo-view-btn" id="mdo-view-log-btn" title="Log" aria-pressed="false"></button>
+                </div>
+              </div>
+              <div class="mdo-chart-box" id="mdo-chart-box"></div>
+              <!-- v63: Log view — the DATABASE-category lines of the header Log
+                   panel, fed by the same shared poller (App.LogFeed in
+                   web/js/log-panel.js). Hidden until the Log button is chosen. -->
+              <pre class="mdo-log-box" id="mdo-log-box"></pre>
+              <div class="mdo-checkbox-row-wrap" id="mdo-checkbox-row-wrap">
+                <button type="button" class="mdo-select-all-btn" id="mdo-select-all-btn" title="Select All / Deselect All">
+                  <span class="mdo-checkbox mdo-select-all-checkbox"></span>
+                </button>
+                <div class="mdo-checkbox-row" id="mdo-checkbox-row"></div>
+              </div>
+            </div>
+            <div class="mdo-footer">
+              <button type="button" class="mdo-backfill-btn" id="mdo-backfill-btn" disabled>BackFill</button>
+              <button type="button" class="mdo-backfill-btn mdo-extend-btn" id="mdo-extend-btn">Extend</button>
+              <div class="mdo-extend-date-box" id="mdo-extend-date-box">
+                <input type="date" class="mdo-extend-date-input" id="mdo-extend-date-input" />
+                <span class="mdo-extend-icon mdo-extend-cancel" id="mdo-extend-cancel" title="Cancel">&#10005;</span>
+                <span class="mdo-extend-icon mdo-extend-confirm" id="mdo-extend-confirm" title="Start Extend">&#10003;</span>
+              </div>
+            </div>
+            <span class="mdo-backfill-status" id="mdo-backfill-status">&nbsp;</span>
+          </div>
+
+          <!-- v50: Canvas — chart theme (background/crosshair/text/candle
+               colors) — see canvas-settings.js. -->
+          <div class="settings-pane" id="settings-pane-canvas">
+            <div class="canvas-settings-columns">
+              <div class="canvas-settings-col">
+                <div class="canvas-settings-col-title">Chart</div>
+                <div class="canvas-row">
+                  <span class="canvas-row-label">Background:</span>
+                  <button type="button" id="canvas-bg-swatch"></button>
+                </div>
+                <div class="canvas-row">
+                  <span class="canvas-row-label">Crosshair:</span>
+                  <button type="button" id="canvas-crosshair-swatch"></button>
+                  <select id="canvas-crosshair-style">
+                    <option value="dotted">Dotted</option>
+                    <option value="solid">Solid</option>
+                    <option value="dashed">Dashed</option>
+                  </select>
+                  <!-- v50.3 Update 2: minimal thickness picker, shared style
+                       with Price Line's own thickness picker below. -->
+                  <select id="canvas-crosshair-width" class="canvas-thickness-select" title="Thickness"></select>
+                </div>
+                <!-- v50.3 Update 2: Price Line — the dashed live-price line
+                     + its price box on the axis. Same color/style/width
+                     controls as Crosshair; the price box's own text color
+                     always equals Background (see canvas-settings.js) so
+                     there's no separate text-color swatch here. -->
+                <div class="canvas-row">
+                  <span class="canvas-row-label">Price Line:</span>
+                  <button type="button" id="canvas-price-line-swatch"></button>
+                  <select id="canvas-price-line-style">
+                    <option value="dashed">Dashed</option>
+                    <option value="dotted">Dotted</option>
+                    <option value="solid">Solid</option>
+                  </select>
+                  <select id="canvas-price-line-width" class="canvas-thickness-select" title="Thickness"></select>
+                </div>
+                <div class="canvas-row">
+                  <span class="canvas-row-label">Text:</span>
+                  <button type="button" id="canvas-text-swatch"></button>
+                  <select id="canvas-text-size"></select>
+                </div>
+                <!-- v50.3 Update 4: Selector — the app-wide "selected"
+                     accent color (var(--gold), default #C9A227). -->
+                <div class="canvas-row">
+                  <span class="canvas-row-label">Selector:</span>
+                  <button type="button" id="canvas-selector-swatch"></button>
+                </div>
+                <!-- v50.1: Update 1 — Horizontal/Vertical grid line toggles,
+                     each checked by default with its own color swatch
+                     (default color = the chart's existing grid-line color)
+                     that only appears while its checkbox is checked. -->
+                <div class="canvas-row canvas-grid-row">
+                  <label class="canvas-grid-checkbox-label">
+                    <input type="checkbox" id="canvas-grid-horz-checkbox" />
+                    <span>Enable Horizontal Grid Line</span>
+                  </label>
+                  <button type="button" id="canvas-grid-horz-swatch" class="canvas-grid-swatch"></button>
+                </div>
+                <div class="canvas-row canvas-grid-row">
+                  <label class="canvas-grid-checkbox-label">
+                    <input type="checkbox" id="canvas-grid-vert-checkbox" />
+                    <span>Enable Vertical Grid Line</span>
+                  </label>
+                  <button type="button" id="canvas-grid-vert-swatch" class="canvas-grid-swatch"></button>
+                </div>
+                <!-- V64.1 Update 1: Enable Dark Theme sits directly under the
+                     Vertical Grid Line row, inside the Chart column, with the
+                     same row spacing as the rows above it (it used to be a
+                     separate block below both columns). -->
+                <div class="canvas-row">
+                  <label class="canvas-grid-checkbox-label">
+                    <input type="checkbox" id="canvas-dark-theme-checkbox" checked />
+                    <span>Enable Dark Theme</span>
+                  </label>
+                </div>
+                <!-- V64.1 Update 2: Enable Ask Price — unchecked by default;
+                     while unchecked no ASK line is drawn on any chart. Color /
+                     line type / width are the same controls (and the same
+                     defaults) as Price Line's, applied to the ASK line only.
+                     The row may be wider than the column; it is allowed to
+                     overflow to the right so the column (and the grid-swatch
+                     alignment above) keeps its width. -->
+                <div class="canvas-row canvas-ask-row">
+                  <label class="canvas-grid-checkbox-label">
+                    <input type="checkbox" id="canvas-ask-checkbox" />
+                    <span>Enable Ask Price</span>
+                  </label>
+                  <button type="button" id="canvas-ask-swatch"></button>
+                  <select id="canvas-ask-style">
+                    <option value="dashed">Dashed</option>
+                    <option value="dotted">Dotted</option>
+                    <option value="solid">Solid</option>
+                  </select>
+                  <select id="canvas-ask-width" class="canvas-thickness-select" title="Thickness"></select>
+                </div>
+                <!-- V64.2: Daily Break — unchecked by default. While checked, a
+                     vertical line is painted at the first candle of every
+                     trading day (broker 00:00:00), on the primary chart and on
+                     every companion panel. Always a solid line: only Color and
+                     Width can be set (defaults: the Crosshair's color, 1px). Same row layout as Enable Ask Price. -->
+                <div class="canvas-row canvas-ask-row">
+                  <label class="canvas-grid-checkbox-label">
+                    <input type="checkbox" id="canvas-daily-break-checkbox" />
+                    <span>Daily Break</span>
+                  </label>
+                  <button type="button" id="canvas-daily-break-swatch"></button>
+                  <select id="canvas-daily-break-width" class="canvas-thickness-select" title="Thickness"></select>
+                </div>
+              </div>
+              <div class="canvas-settings-col">
+                <div class="canvas-settings-col-title">Candles</div>
+                <div class="canvas-row">
+                  <span class="canvas-row-label">Body:</span>
+                  <button type="button" id="canvas-body-up-swatch"></button>
+                  <button type="button" id="canvas-body-down-swatch"></button>
+                </div>
+                <div class="canvas-row">
+                  <span class="canvas-row-label">Borders:</span>
+                  <button type="button" id="canvas-border-up-swatch"></button>
+                  <button type="button" id="canvas-border-down-swatch"></button>
+                </div>
+                <div class="canvas-row">
+                  <span class="canvas-row-label">wick:</span>
+                  <button type="button" id="canvas-wick-up-swatch"></button>
+                  <button type="button" id="canvas-wick-down-swatch"></button>
+                </div>
+              </div>
+            </div>
+
+            <!-- v50.1: Update 3 — Canvas Presets. Save/recall the whole
+                 Canvas tab's current settings as a named preset; "Default"
+                 is always present and resets to the factory Canvas theme. -->
+            <div class="canvas-preset-block">
+              <div class="canvas-settings-col-title">Preset</div>
+              <div class="canvas-preset-line">
+                <div class="canvas-preset-dropdown" id="canvas-preset-dropdown">
+                  <button type="button" class="canvas-preset-dropdown-btn" id="canvas-preset-dropdown-btn">
+                    <span id="canvas-preset-dropdown-label">Default</span>
+                    <span class="caret">▾</span>
+                  </button>
+                  <div class="canvas-preset-dropdown-list" id="canvas-preset-dropdown-list"></div>
+                </div>
+                <button type="button" class="canvas-icon-btn" id="canvas-preset-save" title="Save current Canvas settings as a new preset">+</button>
+              </div>
+              <div class="canvas-preset-save-box" id="canvas-preset-save-box">
+                <input type="text" id="canvas-preset-save-input" class="canvas-preset-name-input" placeholder="Preset name" autocomplete="off" />
+                <button type="button" class="canvas-icon-btn" id="canvas-preset-save-confirm" title="Save">✓</button>
+                <button type="button" class="canvas-icon-btn canvas-icon-btn-danger" id="canvas-preset-save-cancel" title="Cancel">✕</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- v51: Keyboard Shortcuts — table of every app shortcut with an
+               inline assign/change control (see keyboard-shortcuts.js). -->
+          <div class="settings-pane" id="settings-pane-keyboard-shortcuts">
+            <div class="kbd-shortcuts-intro">
+              Shortcuts are Global — they use the physical key position and
+              work the same regardless of Persian or English keyboard
+              layout.
+            </div>
+            <table class="kbd-shortcuts-table">
+              <thead>
+                <tr>
+                  <th class="kbd-col-action">Action</th>
+                  <th class="kbd-col-shortcut">Shortcut</th>
+                  <th class="kbd-col-controls"></th>
+                </tr>
+              </thead>
+              <tbody id="kbd-shortcuts-tbody"></tbody>
+            </table>
+            <button type="button" class="kbd-reset-all-btn" id="kbd-reset-all-btn">Reset to Default</button>
+          </div>
+          <!-- v52: Configuration — every config.py variable, editable here
+               with a hover-info "i" icon next to each title and a
+               "Restore to Default" button. See app-config.js. -->
+          <div class="settings-pane" id="settings-pane-configuration">
+            <div class="appcfg-intro">
+              Only user-facing settings belong here. Advanced runtime parameters remain internal in Config.py
+            </div>
+            <div class="appcfg-layout">
+              <div class="appcfg-fields" id="appcfg-body"></div>
+              <div class="appcfg-desc-panel" id="appcfg-desc-panel">
+                <div class="appcfg-desc-title" id="appcfg-desc-title"></div>
+                <div id="appcfg-desc-text"></div>
+              </div>
+            </div>
+            <div class="appcfg-footer">
+              <button type="button" class="appcfg-reset-btn" id="appcfg-reset-btn">Reset to Default</button>
+              <span class="appcfg-saved-note" id="appcfg-saved-note"></span>
+            </div>
+          </div>
+          <!-- v66.4: the tab's whole body is Markdown, read from web/About.md
+               at runtime (ChartBridge.get_about_text(), see about-panel.js) —
+               nothing here is static text any more. The box only ever grows
+               a VERTICAL scrollbar, and only once its content overflows;
+               long lines wrap instead of ever producing a horizontal one. -->
+          <div class="settings-pane" id="settings-pane-about">
+            <div class="about-text-box" id="about-text-box">
+              <div class="about-text-content" id="about-text-content"></div>
+            </div>
+            <div class="about-version-card">
+              <span class="about-version-icon" id="about-version-icon"></span>
+              <div class="about-version-info">
+                <span class="about-version-label">Version</span>
+                <span class="about-version-value" id="about-version-value">—</span>
+              </div>
+              <button type="button" class="about-update-btn" id="about-update-btn">Check for Updates</button>
+            </div>
+            <div class="about-update-status" id="about-update-status"></div>
+            <!-- v69: shown only while a download is in flight (see
+                 about-panel.js). Downloaded/total + percent, like any
+                 normal download manager. -->
+            <div class="about-update-progress" id="about-update-progress" hidden>
+              <div class="about-update-progress-track">
+                <div class="about-update-progress-fill" id="about-update-progress-fill"></div>
+              </div>
+              <div class="about-update-progress-label" id="about-update-progress-label"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v40: multi-select group menu (Hide/Lock/Delete), shown instead of the
+       full editor above when the right-clicked object is part of a
+       multi-selection. -->
+  <div id="draw-group-context-menu" class="draw-context-menu draw-group-context-menu">
+    <div class="dcm-group-item" id="dcmg-hide">Hide</div>
+    <div class="dcm-group-item" id="dcmg-lock">Lock</div>
+    <div class="dcm-group-item dcm-group-item-danger" id="dcmg-delete">Delete</div>
+  </div>
+
+  <div id="draw-context-menu" class="draw-context-menu">
+    <div class="dcm-title">
+      <span id="dcm-title-text">Object</span>
+      <span class="dcm-header-actions">
+        <button type="button" class="dcm-header-btn" id="dcm-header-lock" title="Lock"></button>
+        <button type="button" class="dcm-header-btn" id="dcm-header-hide" title="Hide"></button>
+        <button type="button" class="dcm-header-btn dcm-header-btn-danger" id="dcm-header-delete" title="Delete"></button>
+        <span class="dcm-close" id="dcm-close">✕</span>
+      </span>
+    </div>
+    <div class="dcm-row" id="dcm-name-row">
+      <label>Name</label>
+      <input type="text" id="dcm-name" class="dcm-name-input" autocomplete="off" />
+    </div>
+    <!-- v37 Fix 2: style presets — a minimal themed dropdown (each row has
+         its own trash icon) instead of a native <select>, and an inline
+         "save as" box instead of a native window.prompt(). -->
+    <div class="dcm-row dcm-row-stacked" id="dcm-preset-row">
+      <label>Preset</label>
+      <div class="dcm-preset-line">
+        <div class="dcm-preset-dropdown" id="dcm-preset-dropdown">
+          <button type="button" class="dcm-preset-dropdown-btn" id="dcm-preset-dropdown-btn">
+            <span id="dcm-preset-dropdown-label">Default</span>
+            <span class="caret">▼</span>
+          </button>
+          <div class="dcm-preset-dropdown-list" id="dcm-preset-dropdown-list"></div>
+        </div>
+        <button type="button" class="dcm-icon-btn" id="dcm-preset-save" title="Save current style as a new preset">+</button>
+      </div>
+      <div class="dcm-preset-save-box" id="dcm-preset-save-box">
+        <input type="text" id="dcm-preset-save-input" class="dcm-name-input" placeholder="Preset name" autocomplete="off" />
+        <button type="button" class="dcm-icon-btn" id="dcm-preset-save-confirm" title="Save">✓</button>
+        <button type="button" class="dcm-icon-btn dcm-icon-btn-danger" id="dcm-preset-save-cancel" title="Cancel">✕</button>
+      </div>
+    </div>
+    <!-- v38 Fix 1: Border and Fill now share a single row — Fill's color
+         swatch opens the same themed color+opacity popover as Border's
+         (see color-picker.js), so the big separate opacity slider that
+         used to sit under Fill is gone; its color swatch just joins
+         Border's row instead. Fill's swatch is hidden by JS for any
+         non-rect object type. -->
+    <div class="dcm-section">
+      <div class="dcm-section-title">Border &amp; Fill</div>
+      <div class="dcm-row dcm-row-compact">
+        <button type="button" id="dcm-border-color" title="Line color"></button>
+        <select id="dcm-border-width" title="Line width">
+          <option value="1">1 px</option>
+          <option value="2">2 px</option>
+          <option value="3">3 px</option>
+          <option value="4">4 px</option>
+          <option value="5">5 px</option>
+        </select>
+        <select id="dcm-border-style" title="Line type">
+          <option value="solid">Solid</option>
+          <option value="dashed">Dashed</option>
+          <option value="dotted">Dotted</option>
+        </select>
+        <button type="button" id="dcm-fill-color" title="Fill color"></button>
+      </div>
+    </div>
+    <!-- v47: Fib Retracement-only Level & Description table (Update 3 /
+         Set.png). The line color/width/type controls it needs are the
+         same dcm-border-* fields the Border & Fill section above already
+         has — only the level table and the Enable Description toggle are
+         new here. The body is a fixed-height scroll box (see CSS) so an
+         arbitrarily long level list never widens or grows the panel. -->
+    <div class="dcm-section" id="dcm-fib-levels-section">
+      <div class="dcm-fib-table">
+        <div class="dcm-fib-table-head">
+          <span class="dcm-fib-col-level">Level</span>
+          <span class="dcm-fib-col-desc">Description</span>
+          <button type="button" class="dcm-icon-btn" id="dcm-fib-add-level" title="Add level">+</button>
+        </div>
+        <div class="dcm-fib-table-body" id="dcm-fib-table-body"></div>
+      </div>
+      <label class="dcm-checkbox-label" id="dcm-fib-desc-toggle-row">
+        <input type="checkbox" id="dcm-fib-enable-description" />
+        Enable Description
+      </label>
+    </div>
+    <!-- v36 Fix 4 / v37 Fix 3: rectangle-only Middle Line section — its
+         color/width/type now share one compact row, shown only once the
+         checkbox is enabled. -->
+    <div class="dcm-section" id="dcm-middle-line-row">
+      <div class="dcm-row dcm-row-compact">
+        <label class="dcm-checkbox-label">
+          <input type="checkbox" id="dcm-middle-line-enabled" />
+          Middle Line
+        </label>
+      </div>
+      <div class="dcm-row dcm-row-compact" id="dcm-middle-line-fields-row">
+        <button type="button" id="dcm-middle-line-color" title="Middle line color"></button>
+        <select id="dcm-middle-line-width" title="Middle line width">
+          <option value="1">1 px</option>
+          <option value="2">2 px</option>
+          <option value="3">3 px</option>
+          <option value="4">4 px</option>
+          <option value="5">5 px</option>
+        </select>
+        <select id="dcm-middle-line-style" title="Middle line type">
+          <option value="solid">Solid</option>
+          <option value="dashed">Dashed</option>
+          <option value="dotted">Dotted</option>
+        </select>
+      </div>
+    </div>
+    <div class="dcm-row dcm-row-stacked" id="dcm-vline-time-row">
+      <label>Time</label>
+      <div class="dcm-dt">
+        <input type="text" id="dcm-vline-time-date" class="dcm-dt-date" placeholder="YYYY-MM-DD" inputmode="numeric" />
+        <input type="text" id="dcm-vline-time-time" class="dcm-dt-time" placeholder="HH:MM:SS" inputmode="numeric" />
+      </div>
+    </div>
+    <div class="dcm-row dcm-row-stacked" id="dcm-time-from-row">
+      <label>Start Time</label>
+      <div class="dcm-dt">
+        <input type="text" id="dcm-time-from-date" class="dcm-dt-date" placeholder="YYYY-MM-DD" inputmode="numeric" />
+        <input type="text" id="dcm-time-from-time" class="dcm-dt-time" placeholder="HH:MM:SS" inputmode="numeric" />
+      </div>
+    </div>
+    <div class="dcm-row dcm-row-stacked" id="dcm-time-to-row">
+      <label>End Time</label>
+      <div class="dcm-dt">
+        <input type="text" id="dcm-time-to-date" class="dcm-dt-date" placeholder="YYYY-MM-DD" inputmode="numeric" />
+        <input type="text" id="dcm-time-to-time" class="dcm-dt-time" placeholder="HH:MM:SS" inputmode="numeric" />
+      </div>
+    </div>
+    <button class="dcm-unlock" id="dcm-unlock">Unlock object</button>
+  </div>
+
+
+<script src="js/window-controls.js"></script>
+<script src="js/state.js"></script>
+<script src="js/app-version.js"></script>
+<script src="js/icons.js"></script>
+<script src="js/coords.js"></script>
+<script src="js/sliding-window.js"></script>
+<script src="js/style-defaults.js"></script>
+<script src="js/color-picker.js"></script>
+<script src="js/drawing-context-menu.js"></script>
+<script src="js/drawing-engine.js"></script>
+<script src="js/drawing-persistence.js"></script>
+<script src="js/object-panel.js"></script>
+<script src="js/chart-core.js"></script>
+<script src="js/multi-panel.js"></script>
+<script src="js/keyboard-shortcuts.js"></script>
+<script src="js/jump-time.js"></script>
+<script src="js/replay-bar.js"></script>
+<script src="js/market-data-overview.js"></script>
+<script src="js/canvas-settings.js"></script>
+<script src="js/app-config.js"></script>
+<script src="js/about-panel.js"></script>
+<script src="js/settings-panel.js"></script>
+<script src="js/log-panel.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
