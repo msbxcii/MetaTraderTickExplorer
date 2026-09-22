@@ -1,18 +1,32 @@
-<p align="center">
-  <img src="assets/MetaTrader_Tick_Explorer_Title_light.svg" alt="Title image" width=65% >
-</p>
-
 # MetaTrader Tick Explorer
 English | [Farsi](README-fa.md)
 
 MetaTrader Tick Explorer is a Windows application that extracts tick data from a local MetaTrader terminal on your machine and uses it to build second-level (and higher) candles. The data is stored directly on disk, allowing users to work with second-resolution charts on the live market as well as for any date in the past. The resulting data is rendered using the official open-source [TradingView Lightweight Charts](https://www.tradingview.com/lightweight-charts/) project.
 
-### Features
+## Features
 
-1) View charts in **Replay Mode** at real live-market speed (1 tick per second), giving users a realistic simulation environment for practice.
-2) Use **Multi-Chart mode** to view the chart across several different timeframes at once, in both Live and Replay modes.
-3) Fully **offline** operation based on the stored database, for practicing on historical data.
-4) (Planned) Execute trades directly inside the application.
+### 1) View charts in **Replay Mode** at real live-market speed (1 tick per second), giving users a realistic simulation environment for practice.
+
+<p align="left">
+  <img src="assets/replay.gif" alt="Replay Mode" width="65%">
+</p>
+
+### 2) Use **Multi-Chart mode** to view the chart across several different timeframes at once, in both Live and Replay modes.
+
+<p align="left">
+  <img src="assets/multichart.gif" alt="MultiChart" width="75%">
+</p>
+
+### 3) Fully **offline** operation based on the stored database, for practicing on historical data.
+
+<p align="left">
+  <img src="assets/history.gif" alt="history" width="85%">
+</p>
+
+### 4) (Planned) Execute trades directly inside the application.
+
+
+
 
 ### Security and How the Application Communicates
 
