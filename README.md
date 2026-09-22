@@ -1,4 +1,9 @@
+<p align="center">
+  <img src="assets/MetaTrader_Tick_Explorer_Title_light.svg" alt="Title image" width=65% >
+</p>
+
 # MetaTrader Tick Explorer
+English | [Farsi](README-fa.md)
 
 MetaTrader Tick Explorer is a Windows application that extracts tick data from a local MetaTrader terminal on your machine and uses it to build second-level (and higher) candles. The data is stored directly on disk, allowing users to work with second-resolution charts on the live market as well as for any date in the past. The resulting data is rendered using the official open-source [TradingView Lightweight Charts](https://www.tradingview.com/lightweight-charts/) project.
 
