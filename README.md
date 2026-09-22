@@ -7,19 +7,19 @@ MetaTrader Tick Explorer is a Windows application that extracts tick data from a
 
 ### 1) View charts in **Replay Mode** at real live-market speed (1 tick per second), giving users a realistic simulation environment for practice.
 
-<p align="left">
-  <img src="assets/replay.gif" alt="Replay Mode" width="65%">
+<p align="center">
+  <img src="assets/replay.gif" alt="Replay Mode" width="85%">
 </p>
 
 ### 2) Use **Multi-Chart mode** to view the chart across several different timeframes at once, in both Live and Replay modes.
 
-<p align="left">
-  <img src="assets/multichart.gif" alt="MultiChart" width="75%">
+<p align="center">
+  <img src="assets/multichart.gif" alt="MultiChart" width="85%">
 </p>
 
 ### 3) Fully **offline** operation based on the stored database, for practicing on historical data.
 
-<p align="left">
+<p align="center">
   <img src="assets/history.gif" alt="history" width="85%">
 </p>
 
