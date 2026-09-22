@@ -28,13 +28,30 @@ MetaTrader Tick Explorer is a Windows application that extracts tick data from a
 
 
 
-### Security and How the Application Communicates
+### 🔒 Security & Privacy
 
-To receive tick data, this application **does not connect to any external server or third-party service**. It communicates exclusively with the **MetaTrader terminal**. Data is retrieved and processed through the **official MetaTrader API for Python**.
+- **No external server:** the app talks only to the **local MetaTrader terminal** (via the official MetaTrader API for Python) — nothing is sent to any third-party service.
+- **No access to account credentials:** no username, password, or other login info is ever needed; that stays with the MetaTrader terminal itself.
+- **Data stays local:** all tick/candle data and settings are stored only on your own machine (see storage locations below).
 
-The application **does not need to receive, store, or transmit your trading account username and password**. Login credentials remain solely with the MetaTrader terminal.
+### 💾 Where Data and Logs Are Stored
 
-Therefore, tick data is received directly from the MetaTrader terminal, and **no external server or intermediary is required** to obtain or process it.
+Where the `output` (tick/candle database, settings, etc.) and `logs` folders live depends on how the app is run:
+
+- **Running from source (`run_chart.cmd` / developers):**
+  Everything is stored inside the repository itself:
+  ```text
+  <repository-folder>\output\
+  <repository-folder>\logs\
+  ```
+
+- **Running from the `.exe`:**
+  To keep the EXE fully portable (Desktop, USB stick, any folder), data and logs are **not** written next to the EXE. Instead they go into a dedicated app folder under the Windows user's AppData:
+  ```text
+  %LOCALAPPDATA%\MT-TickExplorer\output\
+  %LOCALAPPDATA%\MT-TickExplorer\logs\
+  ```
+  (This is normally equivalent to `C:\Users\<username>\AppData\Local\MT-TickExplorer\`.)
 
 ## General Prerequisites
 
