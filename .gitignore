@@ -1,14 +1,10 @@
-output/data/*
-output/drawings/*
-output/settings/*
-logs/
+
+/logs/
 /build/
 /dist/
-!build/.gitkeep
-!dist/.gitkeep
+/output/
 src/__pycache__/
 REPOMAP.md
-run_repomap.cmd
 run.cmd
 
 # Python bytecode / caches
@@ -28,16 +24,6 @@ ENV/
 .ruff_cache/
 .coverage
 htmlcov/
-
-# PyInstaller generated build artifacts
-!build/.gitkeep
-!dist/.gitkeep
-
-
-# Local runtime data
-!output/data/.gitkeep
-!output/drawings/.gitkeep
-!output/settings/.gitkeep
 
 # OS/editor files
 .DS_Store
