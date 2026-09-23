@@ -59,6 +59,11 @@ Where the `output` (tick/candle database, settings, etc.) and `logs` folders liv
 - **MetaTrader 5** installed, with the following conditions:
   - **Python Integration enabled** — enable it in the terminal under
     `Tools › Options › Community`.
+
+     <p align="center">
+     <img src="assets/prepare.png" alt="Replay Mode" width="65%">
+     </p>
+
   - **Logged in to an account** (demo or real) — without this, the broker
     provides no data to the application.
 
