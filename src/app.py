@@ -591,18 +591,6 @@ if __name__ == "__main__":
         from runtime_paths import PROJECT_ROOT as _frozen_project_root
         os.chdir(_frozen_project_root)
 
-        # v69: if a newer version finished downloading in a previous
-        # session but the user closed the app instead of clicking
-        # "Update" then, apply it now - before webview, the logger, or
-        # anything else starts up. This call returns False (and does
-        # nothing further) in the ordinary case where no update is
-        # pending, so it adds no real startup cost. When it does find one,
-        # it hands off to the swap-and-restart helper and calls
-        # os._exit(0) itself - main() below is never reached for this
-        # (old) process in that case.
-        from update_installer import check_and_apply_pending_update_at_startup
-        check_and_apply_pending_update_at_startup()
-
     try:
         main()
     except Exception:

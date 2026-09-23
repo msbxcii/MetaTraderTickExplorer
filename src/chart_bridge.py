@@ -227,8 +227,8 @@ class ChartBridge:
         self._window = None
         self._maximized = False
         self._restore_geometry = None
-        # v69: About-tab update download/apply state - see
-        # check_for_updates/start_update_download/apply_update_now below.
+        # v69/v71: About-tab update download state - see
+        # check_for_updates/start_update_download/open_update_folder below.
         self._update_download_thread = None
         self._update_cancel_event = None
         self._pending_update_info = None
@@ -901,6 +901,20 @@ class ChartBridge:
         import update_checker
         return update_checker.check_for_update(app_version.VERSION)
 
+    def get_pending_update_info(self):
+        """Local filesystem check only (no network) for an update already
+        downloaded in a previous session - see update_installer.
+        get_pending_update_info(). Called once when the About tab opens
+        (about-panel.js's activate()) so the "close the app and switch to
+        the new EXE" reminder survives the user closing the app without
+        acting on it, without that requiring another "Check for Updates"
+        network call."""
+        import update_installer
+        info = update_installer.get_pending_update_info()
+        if info:
+            self._pending_update_info = info
+        return info
+
     def start_update_download(self, download_url, download_size, latest_version):
         """Called once the About tab shows "update available" and the user
         clicks the download control. Runs the actual download on a
@@ -928,7 +942,11 @@ class ChartBridge:
                     progress_callback=_progress, cancel_event=self._update_cancel_event,
                 )
                 self._pending_update_info = {"version": latest_version, "exe_path": exe_path}
-                self._push_update_event("done", {"version": latest_version})
+                self._push_update_event("done", {
+                    "version": latest_version,
+                    "folder": os.path.dirname(exe_path),
+                    "exe_name": os.path.basename(exe_path),
+                })
             except update_installer.DownloadCancelled:
                 self._push_update_event("cancelled", {})
             except Exception as e:
@@ -946,25 +964,27 @@ class ChartBridge:
         if self._update_cancel_event is not None:
             self._update_cancel_event.set()
 
-    def apply_update_now(self):
-        """Called from the "Update" button that appears once a download
-        has finished. Hands off to the detached helper script (see
-        update_installer.apply_pending_update_and_restart) and then closes
-        this window - app.py's normal shutdown path takes it from there,
-        and the helper script relaunches the (by then updated) EXE once
-        this process has actually exited. If nothing has finished
-        downloading yet (stale click, or the info was lost to an app
-        restart), returns an error status instead of closing anything."""
+    def open_update_folder(self):
+        """Called from the "Open Update Folder" control that appears once
+        a download has finished (or, on later visits to the About tab,
+        whenever a previously-downloaded update is still sitting there -
+        see get_pending_update_info() below). Just opens update\\ in
+        Explorer.
+
+        v71: this app no longer swaps its own EXE - see update_installer.py's
+        module docstring for why (PowerShell execution policy, then AV/EDR,
+        both silently blocking the handoff with no way to report why). The
+        user closes the app, deletes the old EXE, and runs the one from
+        update\\ themselves - a few extra clicks, but one that actually
+        works every time instead of failing invisibly some of the time."""
+        import update_installer
         if not self._pending_update_info:
-            import update_installer
             self._pending_update_info = update_installer.get_pending_update_info()
         if not self._pending_update_info:
             return {"status": "no_pending_update"}
 
-        import update_installer
-        update_installer.apply_pending_update_and_restart(self._pending_update_info, wait_pid=os.getpid())
-        self.window_close()
-        return {"status": "applying"}
+        update_installer.open_update_folder()
+        return {"status": "ok", "folder": update_installer._UPDATE_DIR}
 
     def _push_update_event(self, event, payload):
         """Pushes one {event, ...payload} object to

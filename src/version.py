@@ -22,8 +22,8 @@ be tagged with the exact same string set here (``git tag V68``, or
 tag and the version it reports always match.
 """
 
-APP_NAME = "MetaTrader Tick Explorer"
-VERSION = "V1.0.0-beta2"
+APP_NAME = "mt-tick.explorer"
+VERSION = "v1.0.0"
 
 
 def app_title(suffix=None):

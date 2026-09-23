@@ -164,28 +164,33 @@
     if (App.AppVersion && App.AppVersion.load) App.AppVersion.load().then(paintVersion);
   }
 
-  // ---- v68/v69: the whole "Check for Updates" -> download -> apply flow -
+  // ---- v68/v71: the "Check for Updates" -> download -> open folder flow -
   // Talks to ChartBridge.check_for_updates() / start_update_download() /
-  // apply_update_now() (see chart_bridge.py + update_checker.py +
-  // update_installer.py). Nothing here ever runs unless the user clicks
-  // the button - no background polling, no network call the user didn't
-  // ask for.
+  // open_update_folder() / get_pending_update_info() (see chart_bridge.py +
+  // update_checker.py + update_installer.py). Nothing here ever hits the
+  // network unless the user clicks "Check for Updates" - checking for a
+  // previously-downloaded update on tab-open (below) is a local disk read.
   //
-  // The single button cycles through five states as one flow:
-  //   idle -> "Check for Updates"      (checkForUpdates)
-  //   checking -> "Checking…"          (disabled)
-  //   available -> "Download Update"   (startDownload)
-  //   downloading -> "Downloading…"    (disabled; progress bar shown)
-  //   downloaded -> "Update Now"       (applyUpdate)
+  // v71: the app no longer swaps its own EXE (see update_installer.py's
+  // module docstring for why - it kept getting silently blocked by
+  // PowerShell's execution policy, then by antivirus/EDR). The flow now
+  // ends with the update sitting in a folder and a plain-language
+  // instruction to close the app, delete the old EXE, and run the new one:
+  //   idle -> "Check for Updates"       (checkForUpdates)
+  //   checking -> "Checking…"           (disabled)
+  //   available -> "Download Update"    (startDownload)
+  //   downloading -> "Downloading…"     (disabled; progress bar shown)
+  //   ready -> "Open Update Folder"     (openUpdateFolder)
   var updateBtnEl = document.getElementById("about-update-btn");
   var updateStatusEl = document.getElementById("about-update-status");
   var updateProgressEl = document.getElementById("about-update-progress");
   var updateProgressFillEl = document.getElementById("about-update-progress-fill");
   var updateProgressLabelEl = document.getElementById("about-update-progress-label");
 
-  // "idle" | "checking" | "available" | "downloading" | "downloaded"
+  // "idle" | "checking" | "available" | "downloading" | "ready"
   var updateState = "idle";
   var pendingUpdateInfo = null; // {latest_version, download_url, download_size, url}
+  var readyUpdateInfo = null;   // {version, folder, exe_name} - set once a download is ready
 
   function setUpdateStatus(html, kind) {
     if (!updateStatusEl) return;
@@ -209,13 +214,18 @@
         updateBtnEl.disabled = false; updateBtnEl.textContent = "Download Update"; break;
       case "downloading":
         updateBtnEl.disabled = true; updateBtnEl.textContent = "Downloading…"; break;
-      case "downloaded":
-        updateBtnEl.disabled = false; updateBtnEl.textContent = "Update Now"; break;
+      case "ready":
+        updateBtnEl.disabled = false; updateBtnEl.textContent = "Open Update Folder"; break;
       default:
         updateBtnEl.disabled = false; updateBtnEl.textContent = "Check for Updates"; break;
     }
   }
 
+  // v71: progress only ever appears while a download is actually in
+  // flight - it's created hidden and hidden() is called both on entry
+  // (defensive) and the moment a download finishes/errors/cancels, so it
+  // never lingers at 100% and never shows for anything the user didn't
+  // just start.
   function setProgress(downloaded, total) {
     if (!updateProgressEl) return;
     updateProgressEl.hidden = false;
@@ -229,6 +239,33 @@
 
   function hideProgress() {
     if (updateProgressEl) updateProgressEl.hidden = true;
+  }
+
+  function readyMessage(info) {
+    return "Version <strong>" + escapeHtml(info.version || "") + "</strong> is downloaded and ready.<br>" +
+      "Close this app, delete the old EXE, and run <strong>" + escapeHtml(info.exe_name || "") +
+      "</strong> from the Update folder instead.<br>" +
+      "Your cached charts, drawings and settings are stored separately and won't be affected.";
+  }
+
+  // ---- Step 0: silent, local-only check for an update already
+  // downloaded in an earlier session (no network - see chart_bridge.py's
+  // ChartBridge.get_pending_update_info) -----------------------------------
+  function checkPendingLocally() {
+    if (!hasBridge() || !window.pywebview.api.get_pending_update_info) return;
+    window.pywebview.api.get_pending_update_info().then(function (info) {
+      if (!info || updateState !== "idle") return;
+      readyUpdateInfo = { version: info.version, folder: info.folder, exe_name: EXE_NAME_FROM(info.exe_path) };
+      updateState = "ready";
+      renderUpdateButton();
+      setUpdateStatus(readyMessage(readyUpdateInfo), "available");
+    }).catch(function () {});
+  }
+
+  function EXE_NAME_FROM(exePath) {
+    if (!exePath) return "";
+    var parts = String(exePath).split(/[\\/]/);
+    return parts[parts.length - 1];
   }
 
   // ---- Step 1: check --------------------------------------------------
@@ -298,20 +335,17 @@
     });
   }
 
-  // ---- Step 3: apply (closes + restarts the app - see chart_bridge.py) --
-  function applyUpdate() {
-    if (!hasBridge() || !window.pywebview.api.apply_update_now) return;
-    updateBtnEl.disabled = true;
-    updateBtnEl.textContent = "Restarting…";
-    window.pywebview.api.apply_update_now().then(function (result) {
+  // ---- Step 3: open the folder holding the downloaded EXE ---------------
+  function openUpdateFolder() {
+    if (!hasBridge() || !window.pywebview.api.open_update_folder) return;
+    window.pywebview.api.open_update_folder().then(function (result) {
       if (result && result.status === "no_pending_update") {
         updateState = "idle";
         renderUpdateButton();
         setUpdateStatus("The downloaded update couldn't be found — try again.", "error");
       }
-      // "applying": the window is closing right about now; nothing else to do.
     }).catch(function (err) {
-      console.warn("apply_update_now failed:", err);
+      console.warn("open_update_folder failed:", err);
     });
   }
 
@@ -322,14 +356,11 @@
     if (data.event === "progress") {
       setProgress(data.downloaded || 0, data.total || (pendingUpdateInfo && pendingUpdateInfo.download_size) || 0);
     } else if (data.event === "done") {
-      updateState = "downloaded";
+      updateState = "ready";
+      readyUpdateInfo = { version: data.version, folder: data.folder, exe_name: data.exe_name };
       renderUpdateButton();
-      setProgress(pendingUpdateInfo ? pendingUpdateInfo.download_size : 1, pendingUpdateInfo ? pendingUpdateInfo.download_size : 1);
-      setUpdateStatus(
-        "Version <strong>" + escapeHtml(data.version || "") + "</strong> is ready. " +
-        "Click Update Now to install and restart — or just keep working; it installs automatically next time you open the app.",
-        "available"
-      );
+      hideProgress(); // v71: done means done - the bar disappears instead of sitting at 100%.
+      setUpdateStatus(readyMessage(readyUpdateInfo), "available");
     } else if (data.event === "cancelled") {
       updateState = "available";
       renderUpdateButton();
@@ -346,13 +377,16 @@
   function onUpdateButtonClick() {
     if (updateState === "idle") checkForUpdates();
     else if (updateState === "available") startDownload();
-    else if (updateState === "downloaded") applyUpdate();
+    else if (updateState === "ready") openUpdateFolder();
     // "checking"/"downloading": button is disabled, nothing to do.
   }
 
   if (updateBtnEl) updateBtnEl.addEventListener("click", onUpdateButtonClick);
 
   App.AboutPanel = {
-    activate: activate,
+    activate: function () {
+      activate();
+      checkPendingLocally();
+    },
   };
 })();

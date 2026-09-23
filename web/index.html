@@ -2700,20 +2700,35 @@
   .about-update-btn:disabled { cursor: not-allowed; opacity: 0.6; }
   .about-update-status {
     margin-top: 10px;
+    min-height: 32px;      /* reserves space for 1-2 wrapped lines so the
+                               progress bar below never jumps around based
+                               on how long the status text happens to be */
     font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
     font-size: 12px;
+    line-height: 1.5;
     color: var(--muted);
   }
   .about-update-status a { color: var(--gold); text-decoration: none; }
   .about-update-status a:hover { text-decoration: underline; }
   .about-update-status.is-available { color: var(--gold); }
   .about-update-status.is-error { color: #c0664a; }
-  .about-update-progress {
+  /* v71: the [hidden] attribute is how JS shows/hides this - the previous
+     unconditional "display: flex" here silently overrode the browser's
+     own [hidden] { display: none } rule (author CSS always beats the UA
+     stylesheet, regardless of selector specificity), so an empty 0%
+     progress bar sat visible on the About tab at all times, even before
+     "Check for Updates" was ever clicked. Scoping the layout rule to
+     :not([hidden]) - and being explicit about [hidden] - closes that gap. */
+  .about-update-progress[hidden] { display: none; }
+  .about-update-progress:not([hidden]) {
     margin-top: 10px;
     display: flex;
     align-items: center;
     gap: 10px;
+    opacity: 0;
+    animation: about-update-progress-in 0.15s ease forwards;
   }
+  @keyframes about-update-progress-in { to { opacity: 1; } }
   .about-update-progress-track {
     flex: 1 1 auto;
     height: 6px;
@@ -2725,11 +2740,15 @@
   .about-update-progress-fill {
     height: 100%;
     width: 0%;
-    background: var(--gold);
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--gold), color-mix(in srgb, var(--gold) 70%, white));
     transition: width 0.15s ease;
   }
   .about-update-progress-label {
     flex: 0 0 auto;
+    min-width: 128px;      /* fits "999.9 MB / 999.9 MB (100%)" without
+                               the row's width jittering as digits change */
+    text-align: right;
     font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
     font-size: 11px;
     color: var(--muted);
