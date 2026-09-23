@@ -23,7 +23,7 @@ tag and the version it reports always match.
 """
 
 APP_NAME = "MetaTrader Tick Explorer"
-VERSION = "V1.0.0-beta1"
+VERSION = "V1.0.0-beta2"
 
 
 def app_title(suffix=None):
