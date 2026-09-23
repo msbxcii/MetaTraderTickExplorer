@@ -2,8 +2,10 @@ output/data/*
 output/drawings/*
 output/settings/*
 logs/
-build/*
-dist/*
+/build/
+/dist/
+!build/.gitkeep
+!dist/.gitkeep
 src/__pycache__/
 REPOMAP.md
 run_repomap.cmd
@@ -30,6 +32,7 @@ htmlcov/
 # PyInstaller generated build artifacts
 !build/.gitkeep
 !dist/.gitkeep
+
 
 # Local runtime data
 !output/data/.gitkeep

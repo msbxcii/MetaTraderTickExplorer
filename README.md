@@ -61,7 +61,7 @@ Where the `output` (tick/candle database, settings, etc.) and `logs` folders liv
     `Tools › Options › Community`.
 
      <p align="center">
-     <img src="assets/prepare.png" alt="Replay Mode" width="65%">
+     <img src="assets/prepare.png" alt="Python integration" width="65%">
      </p>
 
   - **Logged in to an account** (demo or real) — without this, the broker
@@ -96,4 +96,11 @@ The release executable is created at:
 ```text
 dist\MetaTrader Tick Explorer.exe
 ```
+
+## 📊 How to Use
+
+- **First load:** for every new symbol, the app starts by pulling only the **last 3 days** of tick data from the MetaTrader terminal, so the chart is ready quickly.
+- **Getting more history:** open the **Market Data Overview** panel and use **Extend** to backfill older data for that symbol — pick a target date and the app fetches history in the background until it reaches it (or use **Backfill** for the default range).
+- **Jumping to any point in time:** press **SPACE** to open the **Jump Time** dialog and jump the chart straight to any date/time you want, in Live or Replay mode.
+- Other handy shortcuts (all customizable from **Settings → Keyboard Shortcuts**): jump to the latest/oldest available candle, undo/clear drawn objects, and quick keys for drawing tools (trend line, horizontal/vertical line, rectangle, Fib retracement/expansion).
 

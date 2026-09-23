@@ -17,7 +17,7 @@ import urllib.request
 # v68: set this once you create the GitHub repo - e.g. "yourname/MetaTraderTickExplorer".
 # Until this is filled in, check_for_update() returns an "unconfigured" status
 # instead of guessing a URL.
-GITHUB_REPO = "USERNAME/REPO-NAME"
+GITHUB_REPO = "msbxcii/MetaTraderTickExplorer"
 
 _API_URL = "https://api.github.com/repos/{repo}/releases/latest"
 _TIMEOUT_SECONDS = 6
