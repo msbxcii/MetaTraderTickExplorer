@@ -44,6 +44,15 @@ LOG_FILE_PREFIX = "tick_explorer"
 # handler entirely; console output and the in-app session log remain active.
 LOG_TO_DISK = True
 
+# v70.4 Update 2: shows/hides the small guide text that appears at the
+# bottom of the chart when a drawing tool is selected (e.g. "Click on any
+# chart panel to place the Trend Line"). Purely a frontend preference —
+# unlike every other field in this file it takes effect immediately, not
+# on the next launch (see app-config.js's isToolHintEnabled()) — kept
+# here anyway so it's saved/restored the same way as everything else in
+# the Configuration tab.
+SHOW_TOOL_HINTS = True
+
 # v67.3: Log panel initial in-memory window and browser poll cadence.
 # These values are retained in config.py because chart_bridge imports them
 # directly; keeping them here also preserves compatibility with earlier builds.
@@ -138,7 +147,14 @@ EXTEND_CONSECUTIVE_EMPTY_LIMIT = 2
 # refresh() pass and each persisted to its own dedicated table
 # (candles_1m/candles_5m/candles_15m/candles_1h), exactly like
 # candles_5s/candles_15s already were. See candle_cache._TF_TABLES.
-CHART_TIMEFRAMES_SECONDS = [1, 5, 15, 60, 300, 900, 3600]
+#
+# v70.6: 4h/1D added the exact same way (14400/86400 as two more merge_candles
+# factors on top of candles_1s, each with its own dedicated table -
+# candles_4h/candles_1d). Daily Break (a vertical line per broker day) is
+# skipped at these two timeframes - see drawing-engine.js's
+# DAILY_BREAK_MAX_TF_SECONDS - since a broker day is one candle or less at
+# that scale, which would otherwise paint a solid wall instead of a marker.
+CHART_TIMEFRAMES_SECONDS = [1, 5, 15, 60, 300, 900, 3600, 14400, 86400]
 
 # v28: matches TradingView's own website behavior, where the maximum
 # number of candles ever shown at Maximum Zoom Out is a fixed 5000 - both

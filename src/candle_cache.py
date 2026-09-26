@@ -18,6 +18,8 @@ from candle_aggregator import Candle, iter_candles, ticks_to_candles, merge_cand
 # same merge_candles() call, same _refresh_derived_table() tail-rebuild,
 # just a bigger `factor` (60/300/900/3600 seconds instead of 5/15). No
 # aggregation logic changed at all, only this map grew four more entries.
+#
+# v70.6: 4h/1D added the same way again (14400/86400 seconds).
 _TF_TABLES = {
     1: "candles_1s",
     5: "candles_5s",
@@ -26,6 +28,8 @@ _TF_TABLES = {
     300: "candles_5m",
     900: "candles_15m",
     3600: "candles_1h",
+    14400: "candles_4h",
+    86400: "candles_1d",
 }
 
 _TABLE_COLUMNS = "bucket_start_ms, open, high, low, close, tick_count"

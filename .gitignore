@@ -6,6 +6,7 @@
 src/__pycache__/
 REPOMAP.md
 run.cmd
+root-location.json
 
 # Python bytecode / caches
 *.py[cod]

@@ -11,7 +11,9 @@ import webview
 
 from logger_setup import setup_logger, register_sensitive_values, current_log_path, append_session_log
 import candle_cache
+import config
 import get_started
+import runtime_paths
 import sync_process
 import tick_store
 import symbol_manager
@@ -271,6 +273,12 @@ def _session_log_queue_consumer(log_queue, stop_event, logger):
 
 
 def main():
+    # v72: _PROJECT_ROOT (module-level, from runtime_paths) may be reassigned
+    # below if Get Started changed the Root Project Folder while it ran -
+    # declared global so that reassignment updates the same name every other
+    # function in this module already reads, instead of silently shadowing
+    # it as a local for the rest of main() only.
+    global _PROJECT_ROOT
     log_lock = mp.Lock()
     session_log_queue = mp.Queue(maxsize=20_000)
     session_log_stop = threading.Event()
@@ -296,6 +304,28 @@ def main():
     # offline-first start below then finds real data instead of nothing.
     if not get_started.ensure_setup(logger, log_lock):
         return
+
+    # v72: the Get Started wizard (ensure_setup above) runs in its own
+    # short-lived child process, and its Root Project Folder picker only
+    # changed the CWD/override *inside that child*. This (already-running)
+    # main process is still sitting wherever it started, so re-resolve the
+    # root now and hop over to it right here - no restart required for a
+    # freshly chosen root to take effect.
+    _resolved_root = runtime_paths.read_root_override() or runtime_paths.DEFAULT_PROJECT_ROOT
+    if os.path.abspath(_resolved_root) != os.path.abspath(_PROJECT_ROOT):
+        try:
+            os.makedirs(_resolved_root, exist_ok=True)
+            os.chdir(_resolved_root)
+            _PROJECT_ROOT = _resolved_root
+            runtime_paths.PROJECT_ROOT = _resolved_root
+            # Any per-variable overrides saved under the *new* root's own
+            # output/settings/app_config (if that folder was ever used as a
+            # root before) should apply from here on, instead of whatever
+            # was loaded from the old root at import time.
+            config._apply_config_overrides()
+            logger.info(f"Root Project Folder changed in Get Started; continuing from '{_PROJECT_ROOT}'.")
+        except OSError as e:
+            logger.warning(f"Could not switch to the new Root Project Folder '{_resolved_root}': {e}")
 
     # v62: TRUE offline start. The window process never calls MT5 - not even
     # on a background thread: the MetaTrader5 extension holds the GIL while
@@ -581,15 +611,20 @@ if __name__ == "__main__":
     # In a PyInstaller one-file build, the process working directory may be
     # inherited from the launcher rather than the EXE location. The app's
     # existing relative output/log paths (config.py's OUTPUT_DIR/LOG_DIR) are
-    # intentionally kept as relative strings, so normalize the working
-    # directory once for the frozen release - to runtime_paths.PROJECT_ROOT
-    # (v69: %LOCALAPPDATA%\MT-TickExplorer, not the EXE's own folder - see
-    # runtime_paths.py), which is what actually keeps a portable copy of the
-    # EXE from spilling output/logs folders next to itself. Source launches
-    # are unchanged.
-    if getattr(sys, "frozen", False):
-        from runtime_paths import PROJECT_ROOT as _frozen_project_root
-        os.chdir(_frozen_project_root)
+    # intentionally kept as relative strings, so the working directory is
+    # normalized once here to runtime_paths.PROJECT_ROOT (v69:
+    # %LOCALAPPDATA%\MT-TickExplorer by default, not the EXE's own folder -
+    # see runtime_paths.py), which is what actually keeps a portable copy of
+    # the EXE from spilling output/logs folders next to itself.
+    #
+    # v72: this used to run only for frozen builds, since a source launch via
+    # run_chart.cmd already starts with its CWD at the source root (which
+    # used to always equal PROJECT_ROOT). That is no longer guaranteed - the
+    # Get Started wizard's Root Project Folder option can now point
+    # PROJECT_ROOT somewhere else entirely for a source launch too - so this
+    # chdir always runs. It is a harmless no-op whenever no custom root is
+    # set, source or frozen.
+    os.chdir(_PROJECT_ROOT)
 
     try:
         main()

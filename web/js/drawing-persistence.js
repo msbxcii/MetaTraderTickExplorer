@@ -29,6 +29,19 @@
 
   var SAVE_DEBOUNCE_MS = 400;
   var VALID_TYPES = ["hline", "vline", "trend", "rect", "fib", "fibext"];
+  // v70.7 Update 1/2: the app's 9 fixed timeframe checkboxes, in seconds —
+  // kept in lockstep with drawing-engine.js's own TF_SECONDS list.
+  var TF_SECONDS_LIST = [1, 5, 15, 60, 300, 900, 3600, 14400, 86400];
+
+  function sanitizeTimeframesMap(raw) {
+    if (!raw || typeof raw !== "object") return undefined;
+    var map = {};
+    var any = false;
+    TF_SECONDS_LIST.forEach(function (tf) {
+      if (raw[tf] !== undefined) { map[tf] = !!raw[tf]; any = true; }
+    });
+    return any ? map : undefined;
+  }
 
   var saveTimer = null;
   var saveInFlight = false;
@@ -87,6 +100,15 @@
         // v33.1 Fix 3/4
         name: typeof obj.name === "string" ? obj.name : "",
         folderId: (obj.folderId === null || obj.folderId === undefined) ? null : Number(obj.folderId),
+        // v70.7 Update 1/2: Timeframe Based Hidden/Show. Omitted entirely
+        // when never touched (see ensureTimeframesMap()'s lazy creation in
+        // drawing-engine.js) so an untouched object round-trips with no
+        // extra bytes and still reads back as "visible everywhere".
+        timeframes: obj.timeframes ? obj.timeframes : undefined,
+        // v71 Update 1: Auto toggle state. Omitted when off (the common
+        // case) for the same "no extra bytes for the default" reason as
+        // timeframes above.
+        autoTf: obj.autoTf ? true : undefined,
       };
     });
   }
@@ -165,6 +187,14 @@
         hidden: !!(raw && raw.hidden),
         name: (raw && typeof raw.name === "string" && raw.name) || TYPE_LABELS[type] || type,
         folderId: folderId,
+        // v70.7 Update 1/2: sanitize into a plain {tf:bool} map, or leave
+        // undefined (== "visible everywhere") if the saved value is
+        // missing/malformed rather than guessing at a partial one.
+        timeframes: sanitizeTimeframesMap(raw && raw.timeframes),
+        // v71 Update 1: Auto toggle state — missing/malformed reads back
+        // as off, same "fail to the pre-feature behavior" policy as
+        // timeframes above.
+        autoTf: !!(raw && raw.autoTf),
       };
     }).filter(Boolean);
 

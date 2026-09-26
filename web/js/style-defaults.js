@@ -35,6 +35,7 @@
 
   var LOCAL_DEFAULTS_KEY = "mt5te.styleDefaults.v1";
   var LOCAL_PRESETS_KEY = "mt5te.stylePresets.v1";
+  var LOCAL_AUTOTF_KEY = "mt5te.autoTfDefaults.v1";
   var VALID_TYPES = ["hline", "vline", "trend", "rect", "fib", "fibext"];
   var VALID_BORDER_STYLES = ["solid", "dashed", "dotted"];
   var VALID_LINE_STYLES = ["solid", "dashed", "dotted"];
@@ -74,6 +75,13 @@
   // and saving are both async pywebview calls.
   var defaultsCache = {};       // { type: rawStyle }
   var presetsCache = null;      // { hline: [...], vline: [...], trend: [...], rect: [...] }
+  // v71 Update 1: per-object-type memory for the Timeframes panel's Auto
+  // toggle — independent of style/presets above. Only the on/off state is
+  // remembered per type (never the resulting timeframe selection itself,
+  // which is always recomputed fresh per object — see drawing-engine.js's
+  // applyAutoTimeframes()). Persisted in the same style_settings.json file
+  // as a third top-level key so no new store/bridge round-trip is needed.
+  var autoTfCache = {};         // { type: boolean }
 
   var saveTimer = null;
   var saveInFlight = false;
@@ -218,17 +226,20 @@
       // a browser) — fall back to localStorage so the editor still works.
       defaultsCache = readLocalJson(LOCAL_DEFAULTS_KEY) || {};
       presetsCache = readLocalJson(LOCAL_PRESETS_KEY) || emptyPresetsAll();
+      autoTfCache = readLocalJson(LOCAL_AUTOTF_KEY) || {};
       normalizePresetsCache();
       return Promise.resolve();
     }
     return window.pywebview.api.get_style_settings().then(function (data) {
       defaultsCache = (data && typeof data.defaults === "object" && data.defaults) || {};
       presetsCache = (data && typeof data.presets === "object" && data.presets) || emptyPresetsAll();
+      autoTfCache = (data && typeof data.autoTf === "object" && data.autoTf) || {};
       normalizePresetsCache();
     }).catch(function (err) {
       console.error("Loading saved style settings failed:", err);
       defaultsCache = {};
       presetsCache = emptyPresetsAll();
+      autoTfCache = {};
     });
   }
 
@@ -237,10 +248,11 @@
     if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.save_style_settings) {
       writeLocalJson(LOCAL_DEFAULTS_KEY, defaultsCache);
       writeLocalJson(LOCAL_PRESETS_KEY, presetsCache);
+      writeLocalJson(LOCAL_AUTOTF_KEY, autoTfCache);
       return;
     }
     saveInFlight = true;
-    window.pywebview.api.save_style_settings({ defaults: defaultsCache, presets: presetsCache })
+    window.pywebview.api.save_style_settings({ defaults: defaultsCache, presets: presetsCache, autoTf: autoTfCache })
       .catch(function (err) {
         console.error("Saving style settings failed:", err);
       }).then(function () {
@@ -313,20 +325,59 @@
     return found ? deepCopyStyle(found.style) : null;
   }
 
-  function savePreset(type, name, style) {
+  // V70.1 Update 3: savePreset() now also handles "modify" — pass
+  // targetId (a preset's own id) to edit that specific preset in place
+  // (name AND style) rather than always creating a new one. Whether or
+  // not a targetId was given, if `name` exactly matches an ALREADY
+  // EXISTING different preset of this type, that's treated as
+  // overwriting that preset (per spec: two presets can never share a
+  // name) — the row being edited (if any) is folded into it rather than
+  // left behind as a stale duplicate.
+  function savePreset(type, name, style, targetId) {
     if (VALID_TYPES.indexOf(type) === -1) return null;
     var cleanName = (name || "").trim();
     if (!cleanName) return null;
     normalizePresetsCache();
-    var id = nextPresetIdFor(presetsCache);
-    presetsCache[type].push({ id: id, name: cleanName, style: sanitizeStyle(type, style) });
+    var list = presetsCache[type];
+    var byName = list.filter(function (p) { return p.name === cleanName; })[0];
+    var byId = targetId != null ? list.filter(function (p) { return p.id === targetId; })[0] : null;
+    var cleanStyle = sanitizeStyle(type, style);
+    var resultId;
+    if (byName) {
+      byName.style = cleanStyle;
+      if (byId && byId !== byName) {
+        presetsCache[type] = list.filter(function (p) { return p !== byId; });
+      }
+      resultId = byName.id;
+    } else if (byId) {
+      byId.name = cleanName;
+      byId.style = cleanStyle;
+      resultId = byId.id;
+    } else {
+      resultId = nextPresetIdFor(presetsCache);
+      presetsCache[type].push({ id: resultId, name: cleanName, style: cleanStyle });
+    }
     scheduleSave();
-    return id;
+    return resultId;
   }
 
   function deletePreset(type, id) {
     if (VALID_TYPES.indexOf(type) === -1 || !presetsCache) return;
     presetsCache[type] = (presetsCache[type] || []).filter(function (p) { return p.id !== id; });
+    scheduleSave();
+  }
+
+  // ---- v71 Update 1: per-type "Auto" toggle memory -----------------------
+  // Off by default for every type until the user turns it on once for that
+  // type (per spec's "نکته دوم"). hline/vline never call this (the Auto
+  // button is always disabled/off for them — see drawing-context-menu.js).
+  function getAutoDefault(type) {
+    return !!(autoTfCache && autoTfCache[type]);
+  }
+  function setAutoDefault(type, on) {
+    if (VALID_TYPES.indexOf(type) === -1) return;
+    if (!autoTfCache) autoTfCache = {};
+    autoTfCache[type] = !!on;
     scheduleSave();
   }
 
@@ -341,5 +392,7 @@
     getPreset: getPreset,
     savePreset: savePreset,
     deletePreset: deletePreset,
+    getAutoDefault: getAutoDefault,
+    setAutoDefault: setAutoDefault,
   };
 })();

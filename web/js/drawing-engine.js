@@ -78,6 +78,167 @@
   var App = window.App;
   var dom = App.dom;
 
+  // v70.7 Update 2: "Timeframe Based Hidden or Show" — every object may
+  // carry a `timeframes` map (key = timeframe in seconds, value = boolean)
+  // saying which of the app's 9 fixed timeframes it's allowed to appear
+  // on. `undefined`/missing means "not configured yet" and is always
+  // treated as fully visible (every existing saved chart, and every newly
+  // drawn object, keeps behaving exactly as before this feature existed —
+  // the map is only ever materialized once the user actually opens the
+  // Timeframes editor for that object). A timeframe the app doesn't offer
+  // a checkbox for (any custom/future tf not in this list) also fails
+  // open (visible) rather than silently hiding objects a user never got a
+  // control for. This applies identically to every chart panel — single
+  // or Multi-Chart — because visibility is decided per-surface from that
+  // surface's OWN timeframe (surface.getTf()), not the primary chart's.
+  var TF_SECONDS = [1, 5, 15, 60, 300, 900, 3600, 14400, 86400];
+  function defaultTimeframesMap() {
+    var map = {};
+    TF_SECONDS.forEach(function (tf) { map[tf] = true; });
+    return map;
+  }
+  // Lazily attaches the default (all-on) map the first time it's needed —
+  // called by the Timeframes editor UI right before it starts reading/
+  // writing checkboxes, so an object is never persisted with this field
+  // until a user actually touches that editor.
+  function ensureTimeframesMap(obj) {
+    if (!obj.timeframes) obj.timeframes = defaultTimeframesMap();
+    return obj.timeframes;
+  }
+  function isObjectVisibleAtTf(obj, tf) {
+    if (!obj.timeframes || tf === null || tf === undefined) return true;
+    var v = obj.timeframes[tf];
+    return v === undefined ? true : !!v;
+  }
+  function surfaceTf(surface) {
+    return (surface && surface.getTf) ? surface.getTf() : App.currentTf;
+  }
+
+  // v71 Update 1/2: "Auto" — when an object's `autoTf` flag is on, its
+  // Timeframes map (above) is derived from its own time span instead of
+  // being hand-edited. hline/vline are excluded everywhere (no time span,
+  // no Auto concept for them at all — see drawing-context-menu.js).
+  // Thresholds are strictly "more than" (per spec), so a duration exactly
+  // on a boundary stays in the lower bucket.
+  var AUTO_THRESHOLDS = [60, 300, 900, 3600, 14400, 86400];
+  function computeAutoMap(durationSeconds) {
+    var enabledCount = 3; // Seconds row (1s/5s/15s) is always included
+    AUTO_THRESHOLDS.forEach(function (t) { if (durationSeconds > t) enabledCount++; });
+    var map = {};
+    TF_SECONDS.forEach(function (tf, i) { map[tf] = i < enabledCount; });
+    return map;
+  }
+  // The object's own time span — start/end don't need to be labeled;
+  // min/max across whatever real-time points it has (2 for trend/rect/fib,
+  // 3 for fibext) is enough and works identically for all of them.
+  function objectDuration(obj) {
+    if (!obj || obj.type === "hline" || obj.type === "vline" || !obj.points) return null;
+    var lo = null, hi = null;
+    obj.points.forEach(function (p) {
+      if (p && typeof p.time === "number") {
+        if (lo === null || p.time < lo) lo = p.time;
+        if (hi === null || p.time > hi) hi = p.time;
+      }
+    });
+    if (lo === null || hi === null) return null;
+    return Math.abs(hi - lo);
+  }
+  // Called only at the moments spec allows: a placement's final click, or
+  // an existing point's drag ending (resize) — NEVER on a live in-progress
+  // placement/drag position or on a whole-object move, which must stay
+  // completely free of this calculation (see onCanvasMouseUp/
+  // handleCursorMouseUp below).
+  function applyAutoTimeframes(obj) {
+    if (!obj || !obj.autoTf) return;
+    var dur = objectDuration(obj);
+    if (dur === null) return;
+    obj.timeframes = computeAutoMap(dur);
+  }
+
+  // v70.2 Update 1/2/3: holding Shift snaps an in-progress trend-line
+  // point (placement OR dragging an existing endpoint) to whichever axis
+  // (horizontal/vertical) the cursor is currently closer to, relative to
+  // the line's OTHER (anchor) point — recomputed continuously, so it can
+  // flip axis mid-drag and always reflects live cursor position. For
+  // rectangle/Fib Retracement/Fib Expansion corner points, Shift instead
+  // locks the point to a single frozen price (horizontal-only) captured
+  // the moment Shift goes down, leaving time free — released the instant
+  // Shift comes back up. `shiftDown` is tracked globally (not per-surface)
+  // since only one placement/interaction is ever active at a time (see
+  // the v38 note above about App.interaction/App.pendingObject staying
+  // single global values).
+  var shiftDown = false;
+
+  function captureShiftLock() {
+    // Rectangle / Fib Retracement / Fib Expansion: freeze the point's
+    // CURRENT price as the horizontal lock level. Trend line uses a
+    // dynamic anchor-relative axis choice instead (see trendLockedPoint),
+    // so it needs no captured state here.
+    if (App.pendingObject) {
+      var pts = App.pendingObject.points;
+      var tool = App.pendingObject.type;
+      if ((tool === "rect" || tool === "fib") && pts.length === 2) {
+        App.pendingObject._shiftLockPrice = pts[pts.length - 1].price;
+      } else if (tool === "fibext" && pts.length === 3) {
+        App.pendingObject._shiftLockPrice = pts[pts.length - 1].price;
+      }
+    }
+    if (App.interaction && App.interaction.kind === "resize") {
+      var obj = App.interaction.obj;
+      var role = App.interaction.role;
+      if (obj.type === "rect" && role === "corner") {
+        App.interaction._shiftLockPrice = obj.points[0].price;
+      } else if ((obj.type === "fib" || obj.type === "fibext") && role && role.indexOf("pt") === 0) {
+        var idx = parseInt(role.slice(2), 10);
+        if (!isNaN(idx) && obj.points[idx]) App.interaction._shiftLockPrice = obj.points[idx].price;
+      }
+      // trend (role "pt0"/"pt1") and rect edge-midpoints ("mid-*") are
+      // deliberately excluded — trend is dynamic (no freeze needed), and
+      // per spec Shift must have zero effect on rect midpoint handles
+      // since they already move along a single axis.
+    }
+  }
+
+  function releaseShiftLock() {
+    if (App.pendingObject) delete App.pendingObject._shiftLockPrice;
+    if (App.interaction) delete App.interaction._shiftLockPrice;
+  }
+
+  document.addEventListener("keydown", function (evt) {
+    if (evt.key !== "Shift" || shiftDown) return;
+    shiftDown = true;
+    captureShiftLock();
+  });
+  document.addEventListener("keyup", function (evt) {
+    if (evt.key !== "Shift") return;
+    shiftDown = false;
+    releaseShiftLock();
+  });
+  // Safety net: a Shift release that happens while the window/tab isn't
+  // focused (e.g. Alt-Tab away mid-drag) never reaches keyup — without
+  // this the lock could stay stuck on indefinitely.
+  window.addEventListener("blur", function () {
+    if (shiftDown) { shiftDown = false; releaseShiftLock(); }
+  });
+
+  // Trend line's Shift behavior: pick whichever axis (horizontal/
+  // vertical) the raw cursor position is currently closer to, relative to
+  // the line's fixed anchor point, in PIXEL space (an angle only really
+  // means anything visually in pixels, not in mixed time/price units).
+  // Ties (exactly diagonal) fall to horizontal.
+  function trendLockedPoint(surface, anchor, pos, fallbackTime, fallbackPrice) {
+    var C = surface.C;
+    var aLogical = C.timeToLogical(anchor.time);
+    var ax = aLogical !== null && aLogical !== undefined ? C.logicalToX(aLogical) : null;
+    var ay = C.priceToY(anchor.price);
+    if (ax === null || ax === undefined || ay === null || ay === undefined) {
+      return { time: fallbackTime, price: fallbackPrice };
+    }
+    var dx = Math.abs(pos.x - ax), dy = Math.abs(pos.y - ay);
+    if (dx >= dy) return { time: fallbackTime, price: anchor.price }; // horizontal
+    return { time: anchor.time, price: fallbackPrice }; // vertical
+  }
+
   var TOOL_DEFS = [
     { id: "cursor", label: "Cursor", icon: App.Icons.cursor() },
     { id: "trend",  label: "Trend Line", icon: App.Icons.trend() },
@@ -247,6 +408,17 @@
       // key would silently collide after a companion panel is closed and
       // the remaining surfaces shift down.
       _renderKey: nextRenderKey++,
+      // v70.3 Update 1: obj.id -> {obj, line, price, color} for this
+      // surface's own native price-line axis labels (selected hlines
+      // only — see syncHlineAxisLabels()).
+      _hlineAxisLines: {},
+      // v70.7: exposed directly on the surface (not just buried inside its
+      // C coords context) so per-panel Timeframe-Based Hidden/Show
+      // filtering (see isObjectVisibleAtTf() below) can ask "what
+      // timeframe is THIS panel on" without reaching into App.currentTf —
+      // which is only ever the primary panel's timeframe, wrong for every
+      // Multi-Chart companion panel.
+      getTf: opts.getTf,
       C: App.Coords.createSurfaceCoords({
         getChart: function () { return surface.chart; },
         getSeries: function () { return surface.series; },
@@ -265,6 +437,15 @@
     delete dirtyConsumedBy[surfaceKey(surface)];
     if (App.interaction && App.interaction.surface === surface) App.interaction = null;
     if (App.selectionBox && App.selectionBox.surface === surface) App.selectionBox = null;
+    // v70.3 Update 1: drop any native price lines this surface still owns
+    // for a selected hline — best-effort, since a closed companion
+    // panel's series may already be gone by the time this runs.
+    if (surface._hlineAxisLines) {
+      Object.keys(surface._hlineAxisLines).forEach(function (id) {
+        try { surface.series.removePriceLine(surface._hlineAxisLines[id].line); } catch (e) { /* already gone */ }
+      });
+      surface._hlineAxisLines = {};
+    }
   }
 
   function resizeSurfaceCanvas(surface, cssWidth, cssHeight) {
@@ -363,7 +544,12 @@
       s.canvas.style.pointerEvents = "";
       s.canvas.style.cursor = "";
     });
-    if (toolId !== "cursor") {
+    // v70.4 Update 2: the tool-selection guide text (only this hint — the
+    // Delete/Undo toasts elsewhere are unaffected) can be turned off from
+    // Setting → Configuration. See app-config.js's SHOW_TOOL_HINTS field;
+    // App.AppConfig.isToolHintEnabled() reads its live in-memory value, so
+    // toggling the checkbox takes effect immediately, with no restart.
+    if (toolId !== "cursor" && (!App.AppConfig || App.AppConfig.isToolHintEnabled())) {
       var def = TOOL_DEFS.filter(function (d) { return d.id === toolId; })[0];
       showHint(
         toolId === "fibext"
@@ -415,6 +601,15 @@
     return false;
   }
 
+  // v70.5 Update 2: selection is now always border-only, regardless of
+  // fill — a filled rectangle used to be selectable by clicking anywhere
+  // inside it, which made it impossible to click "through" a filled
+  // rectangle to whatever was underneath/behind it. The border itself
+  // stays hit-testable at zero opacity too (an invisible border is still
+  // a real border for selection purposes; only the fill's own opacity
+  // ever hid a hit-target before, and that "hidden but real" idea now
+  // applies to the border as well). fillOpacity is no longer read here
+  // at all — kept as a parameter for now so callers don't need updating.
   function hitTestRectRegion(px, x, y, fillOpacity) {
     var minX = Math.min(px.x1, px.x2), maxX = Math.max(px.x1, px.x2);
     var minY = Math.min(px.y1, px.y2), maxY = Math.max(px.y1, px.y2);
@@ -422,9 +617,7 @@
     var nearRight = Math.abs(x - maxX) <= App.HIT_TOLERANCE && y >= minY - App.HIT_TOLERANCE && y <= maxY + App.HIT_TOLERANCE;
     var nearTop = Math.abs(y - minY) <= App.HIT_TOLERANCE && x >= minX - App.HIT_TOLERANCE && x <= maxX + App.HIT_TOLERANCE;
     var nearBottom = Math.abs(y - maxY) <= App.HIT_TOLERANCE && x >= minX - App.HIT_TOLERANCE && x <= maxX + App.HIT_TOLERANCE;
-    if (nearLeft || nearRight || nearTop || nearBottom) return true;
-    var inside = x >= minX && x <= maxX && y >= minY && y <= maxY;
-    return inside && fillOpacity > 0;
+    return nearLeft || nearRight || nearTop || nearBottom;
   }
 
   // v33: `opts.includeLocked` lets a caller (the right-click context menu)
@@ -457,6 +650,7 @@
       var obj = App.drawObjects[i];
       if (obj.hidden) continue;
       if (obj.locked && !includeLocked) continue;
+      if (!isObjectVisibleAtTf(obj, surfaceTf(surface))) continue;
       var px = objectPixels(surface, obj);
       if (!px) continue;
 
@@ -695,6 +889,11 @@
       // "the same kind of thing", just a second copy of it.
       name: obj.name,
       folderId: obj.folderId !== undefined ? obj.folderId : null,
+      // v70.7: a clone keeps the source's per-timeframe visibility too.
+      timeframes: obj.timeframes ? Object.assign({}, obj.timeframes) : undefined,
+      // v71 Update 1: a clone also keeps the source's Auto on/off state —
+      // it's still a copy of "this exact object's settings".
+      autoTf: !!obj.autoTf,
     };
   }
 
@@ -723,7 +922,11 @@
     // happened, even though it silently was arming for a move. Every other
     // object type already fell through to "move" for a body hover; trend
     // should too — "crosshair" is reserved for an actual resize handle.
-    return "move";
+    // v70.5 Update 1: a plain body hover now shows "pointer" (the link-
+    // select hand) instead of "move" — the move-style cursor implied a
+    // free-drag anywhere, while a hover-armed object is actually selected
+    // via a click, like a link.
+    return "pointer";
   }
 
   function updateHoverArming(surface, pos) {
@@ -757,6 +960,7 @@
   // an ordinary left-click gesture, and a rubber-band select is one).
   function objectIntersectsBox(surface, obj, box) {
     if (obj.hidden || obj.locked) return false;
+    if (!isObjectVisibleAtTf(obj, surfaceTf(surface))) return false;
     var px = objectPixels(surface, obj);
     if (!px) return false;
     var minX = Math.min(box.startX, box.curX), maxX = Math.max(box.startX, box.curX);
@@ -895,6 +1099,9 @@
 
     if (hit.kind === "resize") {
       App.interaction = { kind: "resize", obj: workObj, role: hit.role, fixed: hit.fixed, axis: hit.axis, midPointIndex: hit.midPointIndex, surface: surface };
+      // v70.2: Shift may already be held down before the handle is picked
+      // up (same "before or during" allowance as a fresh placement).
+      if (shiftDown) captureShiftLock();
       return;
     }
 
@@ -1003,14 +1210,31 @@
       // stored real time untouched.
       var curTimeR = C.logicalToTime(curLogical);
       if (curTimeR === null) return;
-      if (obj.type === "trend" || obj.type === "fib" || obj.type === "fibext") {
+      if (obj.type === "trend") {
+        // v70.2 Update 1: same dynamic horizontal/vertical snap as
+        // placement, relative to the OTHER (still-fixed) endpoint.
+        var idxT = parseInt(String(App.interaction.role).slice(2), 10);
+        if (!isNaN(idxT) && obj.points[idxT]) {
+          var anchorT = obj.points[1 - idxT];
+          obj.points[idxT] = shiftDown
+            ? trendLockedPoint(surface, anchorT, pos, curTimeR, curPrice)
+            : { time: curTimeR, price: curPrice };
+        }
+      } else if (obj.type === "fib" || obj.type === "fibext") {
         // v53: role is "pt0"/"pt1"/(fibext only) "pt2" — see hitTestHandles().
+        // v70.2 Update 2: Shift freezes this point's price (horizontal-only
+        // lock) at whatever it was when Shift went down.
         var idx = parseInt(String(App.interaction.role).slice(2), 10);
-        if (!isNaN(idx) && obj.points[idx]) obj.points[idx] = { time: curTimeR, price: curPrice };
+        if (!isNaN(idx) && obj.points[idx]) {
+          obj.points[idx] = (shiftDown && App.interaction._shiftLockPrice !== undefined)
+            ? { time: curTimeR, price: App.interaction._shiftLockPrice }
+            : { time: curTimeR, price: curPrice };
+        }
       } else if (obj.type === "rect" && App.interaction.role && App.interaction.role.indexOf("mid-") === 0) {
         // v36.9 Fix 2: directional edge-midpoint drag — only the single
         // stored point on the dragged edge moves, and only along that
-        // edge's own axis.
+        // edge's own axis. v70.2 Update 2: Shift is explicitly a no-op
+        // here — these handles already move along a single axis.
         var mi = App.interaction.midPointIndex;
         if (App.interaction.axis === "x") {
           obj.points[mi].time = curTimeR;
@@ -1020,7 +1244,12 @@
       } else if (obj.type === "rect") {
         // The dragged corner becomes point 0; the diagonally-opposite
         // corner (fixed at drag-start) becomes point 1.
-        obj.points[0] = { time: curTimeR, price: curPrice };
+        // v70.2 Update 2: Shift freezes the dragged corner's price
+        // (horizontal-only lock) at whatever it was when Shift went down.
+        var cornerPrice = (shiftDown && App.interaction._shiftLockPrice !== undefined)
+          ? App.interaction._shiftLockPrice
+          : curPrice;
+        obj.points[0] = { time: curTimeR, price: cornerPrice };
         obj.points[1] = { time: App.interaction.fixed.time, price: App.interaction.fixed.price };
       }
     }
@@ -1046,7 +1275,15 @@
     // interaction on the new clone) just ended — persist the result. A
     // plain click that never hit anything leaves App.interaction null, so
     // this doesn't fire on every idle click, only on an actual change.
-    if (App.interaction && App.interaction.surface === surface) persistChange();
+    if (App.interaction && App.interaction.surface === surface) {
+      // v71 Update 1/2 (نکته چهارم): recompute Auto's timeframe map only
+      // when a single anchor POINT was just dragged ("resize") — a
+      // whole-object MOVE changes both endpoints' coordinates together
+      // while leaving the span essentially unchanged, and per spec must
+      // never trigger this calculation at all.
+      if (App.interaction.kind === "resize") applyAutoTimeframes(App.interaction.obj);
+      persistChange();
+    }
     App.interaction = null;
     updateHoverArming(surface, pos);
   }
@@ -1244,11 +1481,10 @@
     } else if (obj.type === "rect") {
       var minX = Math.min(px.x1, px.x2), maxX = Math.max(px.x1, px.x2);
       var minY = Math.min(px.y1, px.y2), maxY = Math.max(px.y1, px.y2);
-      ctx.strokeStyle = "rgba(255,255,255,0.6)";
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 3]);
-      ctx.strokeRect(minX - 2, minY - 2, (maxX - minX) + 4, (maxY - minY) + 4);
-      ctx.setLineDash([]);
+      // v70.8 Update 4: the dashed outline traced around the whole
+      // rectangle on select is gone - selection is shown the same way as
+      // before, by just the corner/edge-midpoint handles below, with no
+      // extra dashed border drawn around the shape.
       ctx.fillStyle = "#ffffff";
       ctx.strokeStyle = "#c9a227";
       ctx.lineWidth = 1.5;
@@ -1266,21 +1502,11 @@
         ctx.fill();
         ctx.stroke();
       });
-    } else if (obj.type === "hline") {
-      ctx.strokeStyle = "rgba(255,255,255,0.45)";
-      ctx.lineWidth = (obj.style.borderWidth || 2) + 4;
-      ctx.beginPath();
-      ctx.moveTo(0, px.y + 0.5);
-      ctx.lineTo(w, px.y + 0.5);
-      ctx.stroke();
-    } else if (obj.type === "vline") {
-      ctx.strokeStyle = "rgba(255,255,255,0.45)";
-      ctx.lineWidth = (obj.style.borderWidth || 2) + 4;
-      ctx.beginPath();
-      ctx.moveTo(px.x + 0.5, 0);
-      ctx.lineTo(px.x + 0.5, h);
-      ctx.stroke();
     }
+    // v70.3 Update 3: hline/vline no longer get the soft highlight band —
+    // their selected look is now just the axis-border anchor dot (see
+    // drawAxisDecorations() below), matching the handle styling the other
+    // tools already use instead of a glow around the whole line.
     ctx.restore();
   }
 
@@ -1330,9 +1556,17 @@
     return a;
   }
 
+  // v70.6: at 4h/1D+ a broker "day" is one candle or less, so the old
+  // one-line-per-day logic would draw a line at (almost) every bar - a
+  // solid wall, not a useful break marker, and needlessly expensive to
+  // boot. Daily Break is simply disabled at those timeframes rather than
+  // trying to draw something meaningful there.
+  var DAILY_BREAK_MAX_TF_SECONDS = 3 * 3600; // above this (4h, 1D), skip entirely
+
   function drawDailyBreaks(surface, ctx, plotW, plotH) {
     var db = App.dailyBreak;
     if (!db || !db.enabled || !surface.getCandles) return;
+    if (surface.getTf && surface.getTf() > DAILY_BREAK_MAX_TF_SECONDS) return;
     var arr = surface.getCandles();
     if (!arr || arr.length < 2) return;
     var range = null;
@@ -1414,16 +1648,20 @@
     ctx.clip();
     // V64.2: Daily Break lines sit underneath every drawn object.
     drawDailyBreaks(surface, ctx, plot.w, plot.h);
-    App.drawObjects.forEach(function (obj) { if (!obj.hidden) drawOneObject(surface, ctx, obj, cssW, cssH); });
+    var panelTf = surfaceTf(surface);
+    App.drawObjects.forEach(function (obj) {
+      if (!obj.hidden && isObjectVisibleAtTf(obj, panelTf)) drawOneObject(surface, ctx, obj, cssW, cssH);
+    });
     // v33.2 fix 4: a Ctrl/Shift multi-selection in the Object Tree panel
     // highlights EVERY selected object on the chart, not just the single
     // App.selectedObject — matching the panel's own uniform yellow
     // highlight for the whole selection. Falls back to the single
     // App.selectedObject when there's no active panel multi-selection
     // (the normal single-click case).
-    var selectedForChart = (App.panelSelectedObjects && App.panelSelectedObjects.length)
+    var selectedForChart = ((App.panelSelectedObjects && App.panelSelectedObjects.length)
       ? App.panelSelectedObjects
-      : (App.selectedObject ? [App.selectedObject] : []);
+      : (App.selectedObject ? [App.selectedObject] : [])
+    ).filter(function (obj) { return obj && isObjectVisibleAtTf(obj, panelTf); });
     selectedForChart.forEach(function (obj) {
       if (!obj || obj.hidden || App.drawObjects.indexOf(obj) === -1) return;
       // The highlight band for hline/vline goes underneath the line itself
@@ -1444,12 +1682,152 @@
     // the surface it's actually being dragged on.
     if (App.selectionBox && App.selectionBox.surface === surface) drawSelectionBoxRect(ctx, App.selectionBox);
     ctx.restore();
+    // v70.3.1 Fix: the ctx.restore() just above also undoes the DPR
+    // setTransform() from the top of this function (it was inside the
+    // same save/restore pair as the plot-area clip), so without its own
+    // save/setTransform this pass would paint in raw device pixels
+    // against CSS-pixel coordinates — landing wildly off (small and
+    // shifted toward the top-left on any display with dpr != 1). Axis
+    // decorations get their own transform, independent of the clip.
+    ctx.save();
+    ctx.setTransform(App.dpr, 0, 0, App.dpr, 0, 0);
+    drawAxisDecorations(surface, ctx, selectedForChart, plot, cssW, cssH);
+    ctx.restore();
+    syncHlineAxisLabels(surface, selectedForChart);
     } finally {
       // The memo must never outlive the paint it belongs to: an interactive
       // call site (hit-testing mid-drag) reading a memoized value would be
       // reading coordinates from before the drag moved the object.
       endPixelMemo();
     }
+  }
+
+  // ---- v70.3 Update 1/3: hline/vline axis decorations ----------------------
+  // Small, cheap, selection-only additions — nothing here runs unless at
+  // least one hline/vline is currently selected on this surface.
+
+  function drawAxisAnchorDot(ctx, x, y) {
+    // Same look as a trend-line endpoint handle (white fill, gold ring),
+    // so a selected hline/vline reads as "part of the same object family"
+    // instead of inventing a new visual language just for these two.
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, App.HANDLE_R, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.strokeStyle = "#c9a227";
+    ctx.lineWidth = 1.5;
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function axisPad2(n) { return (n < 10 ? "0" : "") + n; }
+
+  // Matches the UTC formatting rect/vline's own time-editor fields already
+  // use elsewhere (drawing-context-menu.js) — Unix seconds -> UTC date
+  // parts, no local-timezone shift, so this label always agrees with the
+  // rest of the app's own time fields for the same object.
+  function formatAxisTime(t) {
+    var d = new Date(Number(t) * 1000);
+    return d.getUTCFullYear() + "-" + axisPad2(d.getUTCMonth() + 1) + "-" + axisPad2(d.getUTCDate()) +
+      " " + axisPad2(d.getUTCHours()) + ":" + axisPad2(d.getUTCMinutes()) + ":" + axisPad2(d.getUTCSeconds());
+  }
+
+  // Cheap perceived-brightness check to pick readable label text (white on
+  // a dark line color, near-black on a light one) without a full color
+  // library — same hex shape hexToRgba() above already parses.
+  function contrastTextColor(hex) {
+    var m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || "");
+    if (!m) return "#ffffff";
+    var r = parseInt(m[1], 16), g = parseInt(m[2], 16), b = parseInt(m[3], 16);
+    var yiq = (r * 299 + g * 587 + b * 114) / 1000;
+    return yiq >= 140 ? "#0a0e17" : "#ffffff";
+  }
+
+  // Draws a vline's selected time label directly over the time-axis strip,
+  // styled like a small axis pill in the line's own color — the closest
+  // canvas-only equivalent of what createPriceLine()'s axisLabelVisible
+  // gives an hline for free on the price axis (lightweight-charts has no
+  // matching "time line" API, so this one has to be hand-painted).
+  function drawVlineTimeLabel(ctx, obj, x, plotTop, timeScaleH, cssW) {
+    if (timeScaleH < 10) return;
+    var text = formatAxisTime(obj.points[0].time);
+    var color = (obj.style && obj.style.borderColor) || "#2962ff";
+    ctx.save();
+    ctx.font = "11px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    var padX = 6;
+    var boxW = Math.ceil(ctx.measureText(text).width) + padX * 2;
+    var boxH = Math.min(timeScaleH - 4, 20);
+    var boxX = Math.min(Math.max(0, x - boxW / 2), Math.max(0, cssW - boxW));
+    var boxY = plotTop + Math.max(0, (timeScaleH - boxH) / 2);
+    ctx.fillStyle = color;
+    ctx.fillRect(boxX, boxY, boxW, boxH);
+    ctx.fillStyle = contrastTextColor(color);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, boxX + boxW / 2, boxY + boxH / 2 + 0.5);
+    ctx.restore();
+  }
+
+  function drawAxisDecorations(surface, ctx, selectedForChart, plot, cssW, cssH) {
+    if (!selectedForChart || !selectedForChart.length) return;
+    var timeScaleH = cssH - plot.h;
+    selectedForChart.forEach(function (obj) {
+      if (!obj || obj.hidden || App.drawObjects.indexOf(obj) === -1) return;
+      if (obj.type === "hline") {
+        var px = objectPixels(surface, obj);
+        if (!px || px.y < 0 || px.y > plot.h) return;
+        drawAxisAnchorDot(ctx, plot.w, px.y);
+      } else if (obj.type === "vline") {
+        var pv = objectPixels(surface, obj);
+        if (!pv || pv.x < 0 || pv.x > plot.w) return;
+        drawAxisAnchorDot(ctx, pv.x, plot.h);
+        drawVlineTimeLabel(ctx, obj, pv.x, plot.h, timeScaleH, cssW);
+      }
+    });
+  }
+
+  // v70.3 Update 1: an hline's price label uses the library's own price
+  // line (same mechanism as the live BID/ASK lines in chart-core.js) so it
+  // gets real axis space and native rendering instead of us drawing text
+  // on top of lightweight-charts' own price scale. One native price line
+  // per selected hline per surface, created lazily and kept in step with
+  // the object's current price/color every frame; removed the moment that
+  // hline stops being selected (or is deleted) so nothing lingers.
+  function syncHlineAxisLabels(surface, selectedForChart) {
+    if (!surface.series) return;
+    var lines = surface._hlineAxisLines || (surface._hlineAxisLines = {});
+    var stillSelected = {};
+    (selectedForChart || []).forEach(function (obj) {
+      if (!obj || obj.type !== "hline" || obj.hidden || App.drawObjects.indexOf(obj) === -1) return;
+      stillSelected[obj.id] = true;
+      var price = obj.points[0].price;
+      var color = (obj.style && obj.style.borderColor) || "#c9a227";
+      var entry = lines[obj.id];
+      if (!entry) {
+        var line = surface.series.createPriceLine({
+          price: price,
+          color: color,
+          lineWidth: 1,
+          lineStyle: 0,
+          lineVisible: false, // the object's own line (drawOneObject) is what's actually seen
+          axisLabelVisible: true,
+          axisLabelColor: color,
+          axisLabelTextColor: contrastTextColor(color),
+          title: "",
+        });
+        lines[obj.id] = { obj: obj, line: line, price: price, color: color };
+      } else if (entry.price !== price || entry.color !== color) {
+        entry.line.applyOptions({ price: price, color: color, axisLabelColor: color, axisLabelTextColor: contrastTextColor(color) });
+        entry.price = price;
+        entry.color = color;
+      }
+    });
+    Object.keys(lines).forEach(function (id) {
+      if (stillSelected[id]) return;
+      try { surface.series.removePriceLine(lines[id].line); } catch (e) { /* series/surface already gone */ }
+      delete lines[id];
+    });
   }
 
   // v57 Update 7 (perf): cheap, allocation-light fingerprint of everything
@@ -1585,6 +1963,10 @@
     // purgeReplayTempObjects()). An object created outside Replay is
     // permanent, as always.
     if (obj._replayTemp === undefined) obj._replayTemp = !!App.replayActive;
+    // v71 Update 1/2: placement just finished (this is the exact "not
+    // during drawing, only after confirmation" moment spec calls for) —
+    // if Auto is on for this object, compute its timeframe map now, once.
+    applyAutoTimeframes(obj);
     App.drawObjects.push(obj);
     App.pendingObject = null;
     App.dragStart = null;
@@ -1637,6 +2019,27 @@
     return Math.floor((obj.points[0].time + obj.points[obj.points.length - 1].time) / 2);
   }
 
+  // v70.2 Fix: shared by the live-preview mousemove AND the confirming
+  // click itself, so the confirmed point always matches whatever the
+  // preview was showing the instant before the click (previously the
+  // confirming click recomputed straight from the raw mouse position,
+  // silently discarding an active Shift lock — the preview looked locked
+  // but the finalized object snapped back to the unlocked cursor spot).
+  function computePendingPointValue(surface, pos, t, price) {
+    var tool = App.pendingObject.type;
+    var lastIdx = App.pendingObject.points.length - 1;
+    if (shiftDown && tool === "trend") {
+      return trendLockedPoint(surface, App.pendingObject.points[0], pos, t, price);
+    }
+    if (shiftDown && (tool === "rect" || tool === "fib") && lastIdx === 1 && App.pendingObject._shiftLockPrice !== undefined) {
+      return { time: t, price: App.pendingObject._shiftLockPrice };
+    }
+    if (shiftDown && tool === "fibext" && lastIdx === 2 && App.pendingObject._shiftLockPrice !== undefined) {
+      return { time: t, price: App.pendingObject._shiftLockPrice };
+    }
+    return { time: t, price: price };
+  }
+
   function onCanvasMouseDown(surface, evt) {
     if (App.currentTool === "cursor") { handleCursorMouseDown(surface, evt); return; }
     if (evt.button !== 0) return; // left button only for drawing
@@ -1678,8 +2081,17 @@
           type: App.currentTool,
           points: [{ time: t0, price: price }, { time: t0, price: price }],
           style: defaultStyle(App.currentTool),
+          // v71 Update 1: a freshly drawn object of this type starts with
+          // whatever Auto on/off state was last set for that type (per-type
+          // memory, same pattern as defaultStyle() above) — hline/vline
+          // never reach this branch (they finalize on a single click via
+          // placeInstant()), so no exclusion needed here.
+          autoTf: App.StyleDefaults ? App.StyleDefaults.getAutoDefault(App.currentTool) : false,
           _preview: true,
         };
+        // v70.2: Shift may already be held down before this very first
+        // click (per Update 1/3's "before or during the first click").
+        if (shiftDown) captureShiftLock();
         return;
       }
       // A later click: confirm the pending object's current live point
@@ -1687,13 +2099,17 @@
       // surface the placement started on tracks/confirms it.
       if (App.dragStart && App.dragStart.surface !== surface) return;
       var tN = C.logicalToTime(logical);
-      if (tN !== null) App.pendingObject.points[App.pendingObject.points.length - 1] = { time: tN, price: price };
+      if (tN !== null) App.pendingObject.points[App.pendingObject.points.length - 1] = computePendingPointValue(surface, pos, tN, price);
 
       if (App.currentTool === "fibext" && App.pendingObject.points.length === 2) {
         // That was the 2nd click (Level -1) — Level -2/-1 are now both
         // fixed; start tracking the 3rd click (E2, level 0) as a new live
         // point instead of finalizing.
         App.pendingObject.points.push({ time: tN !== null ? tN : App.pendingObject.points[1].time, price: price });
+        // v70.2 Update 3: the newly-started 3rd (E2) floating point picks
+        // up the same Shift lock mechanism, independently of whatever the
+        // first two clicks did (which never lock).
+        if (shiftDown) captureShiftLock();
         return;
       }
       App.pendingObject._preview = false;
@@ -1719,7 +2135,8 @@
     // v53: generalized to "whichever point isn't confirmed yet" (always
     // the last one in the array) so this same line drives the 2-point
     // trend/rect/fib preview AND fibext's growing 2-then-3-point preview.
-    App.pendingObject.points[App.pendingObject.points.length - 1] = { time: t, price: price };
+    var lastIdx = App.pendingObject.points.length - 1;
+    App.pendingObject.points[lastIdx] = computePendingPointValue(surface, pos, t, price);
   }
 
   function onCanvasMouseUp(surface, evt) {
@@ -1974,5 +2391,12 @@
     // right-click editor, resize, etc.) calls this so the next frame
     // actually repaints. See the dirty-render note above `surfaces`.
     requestRender: requestRender,
+    // v70.7 Update 2: Timeframe Based Hidden/Show — used by drawing-
+    // context-menu.js's new Timeframes editor to read/mutate an object's
+    // per-timeframe visibility map and get it re-rendered everywhere.
+    TF_SECONDS: TF_SECONDS,
+    ensureTimeframesMap: ensureTimeframesMap,
+    isObjectVisibleAtTf: isObjectVisibleAtTf,
+    applyAutoTimeframes: applyAutoTimeframes,
   };
 })();

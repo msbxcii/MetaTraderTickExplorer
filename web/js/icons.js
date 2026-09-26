@@ -184,6 +184,19 @@
     return '<svg viewBox="0 0 122.88 101.67" fill="currentColor" stroke="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M67.14,55.68h21.15c1.13,0,2.05,0.92,2.05,2.05v41.9c0,1.12-0.92,2.05-2.05,2.05l-21.15,0 c-1.12,0-2.05-0.92-2.05-2.05v-41.9C65.09,56.6,66.01,55.68,67.14,55.68L67.14,55.68z M2.05,0H23.2c1.13,0,2.05,0.93,2.05,2.05 v97.58c0,1.12-0.93,2.05-2.05,2.05H2.05c-1.12,0-2.05-0.92-2.05-2.05V2.05C0,0.92,0.92,0,2.05,0L2.05,0z M99.68,76.33h21.15 c1.13,0,2.05,0.93,2.05,2.05v21.25c0,1.12-0.92,2.05-2.05,2.05H99.68c-1.12,0-2.05-0.92-2.05-2.05V78.38 C97.64,77.25,98.56,76.33,99.68,76.33L99.68,76.33L99.68,76.33z M34.59,31.5h21.15c1.13,0,2.05,0.93,2.05,2.05v66.07 c0,1.12-0.93,2.05-2.05,2.05H34.59c-1.12,0-2.05-0.92-2.05-2.05V33.55C32.54,32.42,33.47,31.5,34.59,31.5L34.59,31.5z"/></svg>';
   }
 
+  // V70.1 Update 3: preset-row "Modify" icon — traced from the
+  // user-supplied mod.svg (a pencil-over-page glyph), recolored to
+  // currentColor/fill so it follows its button's hover/active state
+  // exactly like every other traced glyph in this file (iconChart,
+  // iconTabCanvas, ...).
+  function iconModify() {
+    return '<svg viewBox="0 0 122.88 121.51" fill="currentColor" stroke="none"><path d="M28.66,1.64H58.88L44.46,16.71H28.66a13.52,13.52,0,0,0-9.59,4l0,0a13.52,13.52,0,0,0-4,9.59v76.14H91.21a13.5,13.5,0,0,0,9.59-4l0,0a13.5,13.5,0,0,0,4-9.59V77.3l15.07-15.74V92.85a28.6,28.6,0,0,1-8.41,20.22l0,.05a28.58,28.58,0,0,1-20.2,8.39H11.5a11.47,11.47,0,0,1-8.1-3.37l0,0A11.52,11.52,0,0,1,0,110V30.3A28.58,28.58,0,0,1,8.41,10.09L8.46,10a28.58,28.58,0,0,1,20.2-8.4ZM73,76.47l-29.42,6,4.25-31.31L73,76.47ZM57.13,41.68,96.3.91A2.74,2.74,0,0,1,99.69.38l22.48,21.76a2.39,2.39,0,0,1-.19,3.57L82.28,67,57.13,41.68Z"/></svg>';
+  }
+
+  function iconClock() {
+    return '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 4.6V8l2.6 1.6"/></svg>';
+  }
+
   window.App.Icons = {
     cursor: iconCursor,
     trend: iconTrend,
@@ -195,6 +208,7 @@
     layers: iconLayers,
     eyedropper: iconEyedropper,
     trash: iconTrash,
+    modify: iconModify,
     eye: iconEye,
     eyeOff: iconEyeOff,
     lock: iconLock,
@@ -218,5 +232,6 @@
     tabKeyboard: iconTabKeyboard,
     tabConfiguration: iconTabConfiguration,
     tabAbout: iconTabAbout,
+    clock: iconClock,
   };
 })();

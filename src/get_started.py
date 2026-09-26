@@ -31,6 +31,7 @@ import time
 
 import candle_cache
 import mt5_probe
+import runtime_paths
 import setup_state
 import symbol_manager
 import sync_process
@@ -74,14 +75,44 @@ def _count_candles(db_path):
         return 0, None, None
 
 
+def _prune_empty_dirs(base_dir):
+    """v72: best-effort cleanup after a Root Project Folder change - remove
+    `base_dir` and any of its subdirectories that turn out to be completely
+    empty, deepest first. Only ever touches directories that already have
+    nothing left in them (no file, no non-empty subdirectory), so genuine
+    data anywhere in the tree makes the whole thing a silent no-op.
+
+    Needed because several of this app's stores (e.g. ConfigStore) create
+    their own output/settings/<...>/ folder purely as a side effect of
+    being asked to *load* whatever was previously saved there - even on a
+    process that never saves anything (like this wizard, before a Root
+    Project Folder was ever chosen). Left alone, those empty folders - and
+    the "output" tree around them - would linger forever at the default
+    location once the user points the app somewhere else.
+    """
+    if not os.path.isdir(base_dir):
+        return
+    for dirpath, _dirnames, _filenames in os.walk(base_dir, topdown=False):
+        try:
+            os.rmdir(dirpath)
+        except OSError:
+            pass  # not actually empty (real data) - leave it alone
+
+
 class SetupBridge:
     """js_api for web/get-started.html. Every method returns plain JSON."""
 
-    def __init__(self, logger, setup_dir, output_dir, symbol_list_dir, log_lock=None):
+    def __init__(self, logger, setup_dir, output_dir, symbol_list_dir, root, log_lock=None):
         self._logger = logger
         self._setup_dir = setup_dir
         self._output_dir = output_dir
         self._symbol_list_dir = symbol_list_dir
+        # v72: the Root Project Folder shown/changed on the Preparation step.
+        # Starts as whatever this process already resolved (see
+        # runtime_paths.PROJECT_ROOT) - the previous override, if any, or the
+        # default location - and can be changed once, in place, before the
+        # symbol/prefill step below ever touches disk.
+        self._root = root
         self._log_lock = log_lock
         self._window = None
         self._dragger = win_drag.WindowDragger(_WINDOW_TITLE, logger)
@@ -136,11 +167,89 @@ class SetupBridge:
             "symbol": self._state.get("symbol") or "",
             "symbols": self._symbols,
             "max_prefill_days": int(HISTORY_BACKFILL_MAX_DAYS),
+            "root": self._root,
+            "default_root": runtime_paths.DEFAULT_PROJECT_ROOT,
         }
 
     def save_step(self, step):
         self._state = setup_state.save_state(self._setup_dir, step=int(step))
         return True
+
+    # -- v72: Root Project Folder ------------------------------------------
+    def browse_root_folder(self):
+        """Open a native folder picker starting at the current root, and
+        apply whatever the user chooses in one round trip."""
+        try:
+            import webview
+            result = self._window.create_file_dialog(webview.FOLDER_DIALOG, directory=self._root)
+        except Exception as e:
+            self._logger.debug(f"Root folder picker failed: {e}")
+            return {"ok": False, "error": "Could not open the folder picker."}
+        if not result:
+            return {"ok": False, "cancelled": True}
+        chosen = result[0] if isinstance(result, (list, tuple)) else result
+        return self.set_root_folder(chosen)
+
+    def set_root_folder(self, path):
+        """Move where this app reads/writes everything (data, logs,
+        settings) to `path`, effective immediately for the rest of this
+        wizard run and for every future launch.
+
+        Only ever called before step 3 (Choose Symbol) starts downloading
+        anything, so there is never any existing data to migrate - the new
+        root simply becomes the destination for the first download onward.
+        """
+        path = str(path or "").strip()
+        if not path:
+            return {"ok": False, "error": "Choose a folder first."}
+        new_root = os.path.abspath(path)
+        old_root = self._root
+        try:
+            os.makedirs(new_root, exist_ok=True)
+        except OSError as e:
+            return {"ok": False, "error": f"That folder can't be used: {e}"}
+
+        # Every other path this process uses (OUTPUT_DIR, SYMBOL_LIST_DIR,
+        # and any future relative path) is a bare relative string resolved
+        # against the current working directory - the same convention the
+        # rest of the app relies on (see runtime_paths.py). Moving the CWD
+        # here is therefore enough to redirect all of them at once, and it
+        # carries over to the prefill sync process spawned below, which
+        # inherits this process's CWD.
+        try:
+            os.chdir(new_root)
+        except OSError as e:
+            return {"ok": False, "error": f"That folder can't be used: {e}"}
+
+        old_setup_dir = self._setup_dir
+        self._setup_dir = os.path.join(new_root, SETUP_STATE_DIR)
+        carry_over = {k: v for k, v in self._state.items() if k in ("completed", "server", "symbol", "step")}
+        self._state = setup_state.save_state(self._setup_dir, **carry_over)
+
+        # v72: stepping past Welcome (before this folder was ever chosen)
+        # already wrote a setup_state.json at the OLD default location -
+        # now superseded by the copy just written above. Remove it (and its
+        # now-likely-empty parent folder) so a stray, unused copy doesn't
+        # keep sitting in the default location forever. Best-effort: if
+        # anything's odd about it (already gone, folder not actually empty,
+        # a permissions quirk), it's simply left alone.
+        if os.path.abspath(old_setup_dir) != os.path.abspath(self._setup_dir):
+            try:
+                os.remove(setup_state.state_path(old_setup_dir))
+                os.rmdir(old_setup_dir)
+            except OSError:
+                pass
+            # The setup-state folder was just one leaf under the old root's
+            # "output" tree - prune whatever else was left empty there too
+            # (e.g. ConfigStore's output/settings/app_config/, created just
+            # by loading config.py before any root was ever chosen).
+            if os.path.abspath(old_root) != os.path.abspath(new_root):
+                _prune_empty_dirs(os.path.join(old_root, "output"))
+
+        runtime_paths.write_root_override(new_root)
+        self._root = new_root
+        self._logger.info(f"Get Started: Root Project Folder set to '{new_root}'.")
+        return {"ok": True, "root": new_root}
 
     # -- step 2 -----------------------------------------------------------
     def connect_mt5(self):
@@ -312,12 +421,12 @@ def _wizard_process(result_queue, log_lock=None):
     logger, _ = setup_logger(file_lock=log_lock)
     setup_dir = os.path.join(_PROJECT_ROOT, SETUP_STATE_DIR)
 
-    bridge = SetupBridge(logger, setup_dir, OUTPUT_DIR, SYMBOL_LIST_DIR, log_lock=log_lock)
+    bridge = SetupBridge(logger, setup_dir, OUTPUT_DIR, SYMBOL_LIST_DIR, _PROJECT_ROOT, log_lock=log_lock)
     window = webview.create_window(
         _WINDOW_TITLE,
         _GET_STARTED_HTML,
         js_api=bridge,
-        width=1180, height=760, min_size=(940, 620),
+        width=1180, height=820, min_size=(940, 660),
         background_color="#0a0e17",
         frameless=True,
         # Native drag behavior introduced in V66.1 remains unchanged in V66.2.

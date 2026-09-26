@@ -85,6 +85,16 @@
         }
       ],
     },
+    {
+      title: "Chart",
+      fields: [
+        {
+          key: "SHOW_TOOL_HINTS", type: "bool",
+          title: "Show Tool Guide Text",
+          description: "Shows the small guide text at the bottom of the chart when a drawing tool is selected (e.g. \"Click on any chart panel to place the Trend Line\"). Unlike every other field on this tab, this takes effect immediately — no restart needed."
+        }
+      ],
+    },
   ];
 
   var FIELD_BY_KEY = {};
@@ -385,5 +395,15 @@
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; doSave(); }
   }
 
-  App.AppConfig = { activate: activate, deactivate: deactivate };
+  // v70.4 Update 2: SHOW_TOOL_HINTS is the one field on this tab that
+  // applies immediately instead of on next launch, so drawing-engine.js
+  // reads its live in-memory value straight out of `current` through this
+  // getter rather than waiting for a relaunch like every other field here.
+  // Defaults to true (hints shown) before the tab has loaded at all, or if
+  // the key is ever missing, matching config.py's SHOW_TOOL_HINTS default.
+  function isToolHintEnabled() {
+    return !(loaded && current.hasOwnProperty("SHOW_TOOL_HINTS") && current.SHOW_TOOL_HINTS === false);
+  }
+
+  App.AppConfig = { activate: activate, deactivate: deactivate, isToolHintEnabled: isToolHintEnabled };
 })();

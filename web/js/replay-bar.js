@@ -539,10 +539,24 @@
       App.series.setData(App.candlesByTf[tf]);
       if (visibleLogical) {
         var shift = transition.window.older ? 0 : -transition.rolled.length;
-        App.chart.timeScale().setVisibleLogicalRange({
-          from: visibleLogical.from + shift,
-          to: visibleLogical.to + shift
-        });
+        var desiredRange = { from: visibleLogical.from + shift, to: visibleLogical.to + shift };
+        // v71.1: this candle-close (bucket rollover) branch used to restore
+        // the view with a plain public setVisibleLogicalRange() call right
+        // after setData(). That is exactly the v55.4 hop (see chart-core.js's
+        // preserveLogicalRange()): setData() can re-anchor the time scale
+        // internally before the next paint, so the plain restore call let one
+        // frame render at the library's own post-setData position first -
+        // every drawn object appeared to flick sideways for an instant and
+        // then snap back to place. It happened on every single candle close
+        // in Replay (every TF, both normal and Multi-Chart), which is far
+        // more often than the original Live rollover this fix targeted.
+        // Reusing the exact same anchor-correction path removes the
+        // intermediate frame instead of just narrowing it.
+        if (App.ChartCore && App.ChartCore.preserveLogicalRange) {
+          App.ChartCore.preserveLogicalRange(desiredRange);
+        } else {
+          App.chart.timeScale().setVisibleLogicalRange(desiredRange);
+        }
       }
     } else {
       App.series.update(buildingSnapshot);

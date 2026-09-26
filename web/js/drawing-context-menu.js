@@ -104,6 +104,7 @@
     dom.dcmBorderStyle.value = obj.style.borderStyle || "solid";
     var isRect = obj.type === "rect";
     var isVline = obj.type === "vline";
+    var isHline = obj.type === "hline";
     var isFib = obj.type === "fib";
     // v53: Fib Expansion shares the exact same Level & Description table
     // as Fib Retracement (per spec) — everywhere that section applies,
@@ -120,6 +121,8 @@
     dom.dcmTimeFromRow.style.display = (isRect || isFib) ? "flex" : "none";
     dom.dcmTimeToRow.style.display = (isRect || isFib) ? "flex" : "none";
     dom.dcmVlineTimeRow.style.display = isVline ? "flex" : "none";
+    // v70.3 Update 2.
+    if (dom.dcmHlinePriceRow) dom.dcmHlinePriceRow.style.display = isHline ? "flex" : "none";
     // v36 Fix 4: Middle Line row only applies to rectangles; its color/
     // width/type fields only make sense once it's actually enabled.
     dom.dcmMiddleLineRow.style.display = isRect ? "flex" : "none";
@@ -162,6 +165,18 @@
       dom.dcmVlineTimeDate.classList.remove("dcm-dt-invalid");
       dom.dcmVlineTimeTime.classList.remove("dcm-dt-invalid");
     }
+    // v70.3 Update 2.
+    if (isHline && dom.dcmHlinePrice) {
+      dom.dcmHlinePrice.value = String(obj.points[0].price);
+      dom.dcmHlinePrice.classList.remove("dcm-dt-invalid");
+    }
+    // v70.7 Update 1/2: Timeframes panel — refresh pill/checkbox state for
+    // whichever object this menu now shows. Reads obj.timeframes without
+    // materializing it (renderTimeframesPanel() itself treats a missing
+    // map as "everything on"), so simply opening the menu never turns a
+    // freshly-drawn object's untouched (all-visible) state into a stored
+    // per-object override.
+    renderTimeframesPanel(obj);
 
     dom.contextMenuEl.classList.add("open");
     // Position after it's visible so we can read its real size and keep
@@ -179,6 +194,132 @@
     dom.contextMenuEl.classList.remove("locked-mode");
     App.activeMenuObject = null;
   }
+
+  // ---- v70.7 Update 1/2: Timeframes panel ----------------------------------
+  // Groups mirror Panel.png exactly: Seconds (1s/5s/15s), Minutes (1m/5m/
+  // 15m), Hours (1h/4h/1D). A group's own checkbox is pure UI reflecting
+  // (and, on click, setting) all three of its member pills — there is no
+  // separate "group enabled" flag stored on the object; the source of
+  // truth is always the per-timeframe map itself (see drawing-engine.js's
+  // isObjectVisibleAtTf()/ensureTimeframesMap()).
+  var TF_GROUPS = {
+    seconds: [1, 5, 15],
+    minutes: [60, 300, 900],
+    hours: [3600, 14400, 86400],
+  };
+  var tfCollapsed = false; // open by default for every object, per spec
+
+  function tfPillEls() {
+    return dom.contextMenuEl ? dom.contextMenuEl.querySelectorAll(".dcm-tf-pill") : [];
+  }
+  function tfGroupCheckboxEls() {
+    return dom.contextMenuEl ? dom.contextMenuEl.querySelectorAll(".dcm-tf-group-checkbox") : [];
+  }
+
+  // Reads obj.timeframes (or the implicit all-on default when it hasn't
+  // been touched yet) and paints every pill/checkbox to match — called
+  // whenever the menu opens for a (possibly different) object.
+  function renderTimeframesPanel(obj) {
+    if (!dom.dcmTfSection) return;
+    dom.dcmTfSection.classList.toggle("collapsed", tfCollapsed);
+    var isTimeBased = obj.type === "rect" || obj.type === "trend" || obj.type === "vline" ||
+      obj.type === "fib" || obj.type === "fibext" || obj.type === "hline";
+    // Every drawable type can be timeframe-filtered — nothing to gate on
+    // type here, unlike Border/Fill/Middle Line which only apply to some.
+    void isTimeBased;
+    tfPillEls().forEach(function (pill) {
+      var tf = Number(pill.getAttribute("data-tf"));
+      var on = App.DrawingEngine ? App.DrawingEngine.isObjectVisibleAtTf(obj, tf) : true;
+      pill.classList.toggle("active", on);
+    });
+    tfGroupCheckboxEls().forEach(function (cb) {
+      var group = cb.getAttribute("data-group");
+      var tfs = TF_GROUPS[group] || [];
+      var allOn = tfs.every(function (tf) {
+        return App.DrawingEngine ? App.DrawingEngine.isObjectVisibleAtTf(obj, tf) : true;
+      });
+      cb.checked = allOn;
+    });
+    // v71 Update 1: Auto pill — hline/vline have no time span, so Auto is
+    // never available for them (always hidden, never clickable); every
+    // other drawable type reflects/toggles obj.autoTf.
+    if (dom.dcmTfAutoBtn) {
+      var autoApplies = obj.type !== "hline" && obj.type !== "vline";
+      dom.dcmTfAutoBtn.classList.toggle("dcm-tf-auto-hidden", !autoApplies);
+      dom.dcmTfAutoBtn.classList.toggle("active", autoApplies && !!obj.autoTf);
+    }
+  }
+
+  function setTfVisible(obj, tf, on) {
+    if (!App.DrawingEngine) return;
+    var map = App.DrawingEngine.ensureTimeframesMap(obj);
+    map[tf] = on;
+  }
+
+  // Pill click — toggles that one timeframe, then re-syncs its group's
+  // checkbox (which only reflects "all three on", never sets anything
+  // itself here).
+  (function bindTimeframesPanel() {
+    if (!dom.dcmTfSection) return;
+    dom.dcmTfSection.addEventListener("click", function (evt) {
+      // v71 Update 1: the Auto pill lives inside the header, so it must be
+      // checked BEFORE the header's own collapse-toggle handling below —
+      // clicking it must only flip Auto, never expand/collapse the panel.
+      var autoBtn = evt.target.closest && evt.target.closest(".dcm-tf-auto-btn");
+      if (autoBtn) {
+        evt.stopPropagation();
+        var obj = App.activeMenuObject;
+        if (!obj || obj.type === "hline" || obj.type === "vline") return;
+        var nextAuto = !obj.autoTf;
+        obj.autoTf = nextAuto;
+        if (App.StyleDefaults) App.StyleDefaults.setAutoDefault(obj.type, nextAuto);
+        // Turning Auto on immediately (re)computes the timeframe map from
+        // the object's current, already-final time span — per spec this
+        // is a one-shot calculation on toggle, not an ongoing mechanism.
+        if (nextAuto && App.DrawingEngine && App.DrawingEngine.applyAutoTimeframes) {
+          App.DrawingEngine.applyAutoTimeframes(obj);
+        }
+        renderTimeframesPanel(obj);
+        persistChange();
+        return;
+      }
+      var pill = evt.target.closest && evt.target.closest(".dcm-tf-pill");
+      if (pill) {
+        if (!App.activeMenuObject) return;
+        var tf = Number(pill.getAttribute("data-tf"));
+        var next = !pill.classList.contains("active");
+        setTfVisible(App.activeMenuObject, tf, next);
+        // v71 Update 1: any manual pill edit turns Auto off for this
+        // object (per spec's "نکته اول") — Auto and hand-editing are
+        // mutually exclusive states, never silently overridden.
+        if (App.activeMenuObject.autoTf) App.activeMenuObject.autoTf = false;
+        renderTimeframesPanel(App.activeMenuObject);
+        persistChange();
+        return;
+      }
+      var groupCb = evt.target.closest && evt.target.closest(".dcm-tf-group-checkbox");
+      if (groupCb) {
+        if (!App.activeMenuObject) return;
+        var group = groupCb.getAttribute("data-group");
+        var tfs = TF_GROUPS[group] || [];
+        // Read the checkbox's own post-click state (the browser has
+        // already flipped it by the time "click" fires) and apply that
+        // to every timeframe in the row, per spec's two-way binding.
+        var next2 = groupCb.checked;
+        tfs.forEach(function (tf) { setTfVisible(App.activeMenuObject, tf, next2); });
+        if (App.activeMenuObject.autoTf) App.activeMenuObject.autoTf = false;
+        renderTimeframesPanel(App.activeMenuObject);
+        persistChange();
+        return;
+      }
+      var header = evt.target.closest && evt.target.closest("#dcm-tf-header");
+      if (header) {
+        tfCollapsed = !tfCollapsed;
+        dom.dcmTfSection.classList.toggle("collapsed", tfCollapsed);
+      }
+    });
+    if (dom.dcmTfClockIcon && App.Icons && App.Icons.clock) dom.dcmTfClockIcon.innerHTML = App.Icons.clock();
+  })();
 
   // v40: minimal Hide/Lock/Delete menu for a right-click that landed on an
   // object which is part of a multi-selection (see drawing-engine.js's
@@ -239,6 +380,12 @@
     if (App.activeMenuObject && App.StyleDefaults) {
       App.StyleDefaults.setDefaultStyle(App.activeMenuObject.type, App.activeMenuObject.style);
     }
+    // V70.1 Update 2: any direct edit to color/appearance no longer
+    // matches whichever preset (if any) was last applied/shown, so the
+    // dropdown's label goes back to "-". applyPresetToActiveObject()
+    // deliberately calls persistChange() (not this function), so picking
+    // a preset itself never re-triggers this.
+    setPresetDropdownLabel("-");
   }
 
   // v36 Fix 4: shows/hides the Middle Line's color/width/type fields —
@@ -372,7 +519,12 @@
   // own trash icon (click deletes that preset outright — no need to select
   // it first).
   function refreshPresetOptions(type) {
-    setPresetDropdownLabel("Default");
+    // V70.1 Update 1: the dropdown's placeholder text is "-" instead of
+    // "Default" (there's no built-in "Default" entry in this list —
+    // "Default" is just the tool's own factory look, already reachable by
+    // not picking any preset at all, so labeling the placeholder "Default"
+    // was misleading).
+    setPresetDropdownLabel("-");
     var list = dom.dcmPresetDropdownList;
     if (!list) return;
     list.innerHTML = "";
@@ -399,6 +551,22 @@
         closePresetDropdown();
       });
 
+      // V70.1 Update 3: Modify — sits left of the trash icon. Opens the
+      // same inline "save preset" box the + button does, pre-filled with
+      // this row's own name, in "editing" mode (see openPresetSaveBox()/
+      // commitPresetSave()) so confirming updates this exact preset
+      // (name and style) instead of creating a new one. Unlike the name
+      // button above, this never applies the preset to the active object.
+      var modifyBtn = document.createElement("button");
+      modifyBtn.type = "button";
+      modifyBtn.className = "dcm-preset-dropdown-item-modify";
+      modifyBtn.title = "Modify preset";
+      modifyBtn.innerHTML = App.Icons.modify();
+      modifyBtn.addEventListener("click", function (evt) {
+        evt.stopPropagation();
+        openPresetSaveBox(p.name, p.id);
+      });
+
       var trashBtn = document.createElement("button");
       trashBtn.type = "button";
       trashBtn.className = "dcm-preset-dropdown-item-trash";
@@ -411,6 +579,7 @@
       });
 
       row.appendChild(nameBtn);
+      row.appendChild(modifyBtn);
       row.appendChild(trashBtn);
       list.appendChild(row);
     });
@@ -431,24 +600,38 @@
     persistChange();
   }
 
+  // V70.1 Update 3: which preset (by id) the inline save box is currently
+  // editing — null means the box is in plain "save a new preset" mode
+  // (the + button). Set by the row's Modify icon, cleared whenever the
+  // box closes.
+  var editingPresetId = null;
+
   // ---- v37 Fix 2: inline "save preset" box (replaces window.prompt) -----
-  function openPresetSaveBox() {
+  // V70.1 Update 3: optionally opens in "editing" mode for an existing
+  // preset — prefillName/targetId come from a row's Modify icon. Opening
+  // it this way never touches the active object's own style (no preset
+  // is applied) — it only pre-fills the name so the Check mark can commit
+  // an update to that same preset instead of creating a new one.
+  function openPresetSaveBox(prefillName, targetId) {
     if (!dom.dcmPresetSaveBox) return;
     closePresetDropdown();
+    editingPresetId = targetId != null ? targetId : null;
     dom.dcmPresetSaveBox.classList.add("open");
     if (dom.dcmPresetSaveInput) {
-      dom.dcmPresetSaveInput.value = "";
+      dom.dcmPresetSaveInput.value = prefillName || "";
       dom.dcmPresetSaveInput.focus();
+      dom.dcmPresetSaveInput.select();
     }
   }
   function closePresetSaveBox() {
     if (dom.dcmPresetSaveBox) dom.dcmPresetSaveBox.classList.remove("open");
+    editingPresetId = null;
   }
   function commitPresetSave() {
     if (!App.activeMenuObject || !App.StyleDefaults || !dom.dcmPresetSaveInput) return;
     var name = dom.dcmPresetSaveInput.value.trim();
     if (!name) { closePresetSaveBox(); return; }
-    var id = App.StyleDefaults.savePreset(App.activeMenuObject.type, name, App.activeMenuObject.style);
+    var id = App.StyleDefaults.savePreset(App.activeMenuObject.type, name, App.activeMenuObject.style, editingPresetId);
     closePresetSaveBox();
     if (id === null) return;
     refreshPresetOptions(App.activeMenuObject.type);
@@ -606,6 +789,15 @@
     dom.dcmTimeFromTime.classList.toggle("dcm-dt-invalid", !valid);
     if (!valid) return;
     rectTimeEndpoints(App.activeMenuObject).startPoint.time = t;
+    // v71 Update 2: the Start/End Time fields fire "change" only once the
+    // user commits a full value (field loses focus / Enter), not per
+    // keystroke — same one-shot moment as a handle drag ending, so it's
+    // safe to recompute Auto here without giving up the "no per-digit
+    // recalculation" requirement.
+    if (App.DrawingEngine && App.DrawingEngine.applyAutoTimeframes) {
+      App.DrawingEngine.applyAutoTimeframes(App.activeMenuObject);
+      renderTimeframesPanel(App.activeMenuObject);
+    }
     persistChange();
   }
   function handleTimeToChange() {
@@ -616,6 +808,11 @@
     dom.dcmTimeToTime.classList.toggle("dcm-dt-invalid", !valid);
     if (!valid) return;
     rectTimeEndpoints(App.activeMenuObject).endPoint.time = t;
+    // v71 Update 2: see the matching note in handleTimeFromChange() above.
+    if (App.DrawingEngine && App.DrawingEngine.applyAutoTimeframes) {
+      App.DrawingEngine.applyAutoTimeframes(App.activeMenuObject);
+      renderTimeframesPanel(App.activeMenuObject);
+    }
     persistChange();
   }
   dom.dcmTimeFromDate.addEventListener("change", handleTimeFromChange);
@@ -634,6 +831,17 @@
   }
   dom.dcmVlineTimeDate.addEventListener("change", handleVlineTimeChange);
   dom.dcmVlineTimeTime.addEventListener("change", handleVlineTimeChange);
+  // v70.3 Update 2: hline price editor, same shape as handleVlineTimeChange.
+  function handleHlinePriceChange() {
+    if (!dom.dcmHlinePrice || !App.activeMenuObject || App.activeMenuObject.type !== "hline") return;
+    var p = parseFloat(dom.dcmHlinePrice.value);
+    var valid = isFinite(p);
+    dom.dcmHlinePrice.classList.toggle("dcm-dt-invalid", !valid);
+    if (!valid) return;
+    App.activeMenuObject.points[0].price = p;
+    persistChange();
+  }
+  if (dom.dcmHlinePrice) dom.dcmHlinePrice.addEventListener("change", handleHlinePriceChange);
 
   // v37 Fix 1: header Lock/Hide/Delete — same actions the Object Tree
   // panel's row buttons perform, now reachable from the style editor too.

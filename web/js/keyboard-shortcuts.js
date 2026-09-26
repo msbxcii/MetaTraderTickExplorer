@@ -15,13 +15,15 @@
 // English or Persian, per spec — "Global" here means layout-independent,
 // not that it works outside the app window.
 //
-// Backspace = undo last, Delete = clear all, Escape = cancel/deselect
-// (Escape is NOT user-remappable — it's a fixed UI convention, not listed
-// in ACTIONS), Space = Jump Time, Home/End jump to the true oldest/latest
-// history partition, matching default MetaTrader behavior. v51 adds
-// Ctrl+H / Ctrl+V for the Horizontal/Vertical Line tools, plus three more
-// actions (Rectangle / Trend Line / Fib Retracement) that ship with no
-// default key — assignable only, per spec.
+// Backspace = undo last, Delete = delete the current selection only,
+// Shift+Delete = clear all (v70.4 Update 1 — previously plain Delete
+// cleared everything), Escape = cancel/deselect (Escape is NOT
+// user-remappable — it's a fixed UI convention, not listed in ACTIONS),
+// Space = Jump Time, Home/End jump to the true oldest/latest history
+// partition, matching default MetaTrader behavior. v51 adds Ctrl+H /
+// Ctrl+V for the Horizontal/Vertical Line tools, plus three more actions
+// (Rectangle / Trend Line / Fib Retracement) that ship with no default
+// key — assignable only, per spec.
 //
 // v51 Update 2: Ctrl+H / Ctrl+V place their line immediately at the
 // mouse's current position, with no follow-up click needed — exclusive
@@ -105,8 +107,33 @@
       },
     },
     {
-      id: "deleteAll", label: "Delete All Objects",
+      // v70.4 Update 1: Delete used to clear every object on the chart
+      // regardless of selection. It now only removes whatever is currently
+      // selected (single App.selectedObject, or the panel's multi-selection
+      // in App.panelSelectedObjects) and does nothing when nothing is
+      // selected. Clearing the whole chart moved to Shift+Delete below.
+      id: "deleteSelected", label: "Delete Selected Object(s)",
       default: { ctrl: false, shift: false, alt: false, code: "Delete" },
+      run: function () {
+        var targets = (App.panelSelectedObjects && App.panelSelectedObjects.length)
+          ? App.panelSelectedObjects.slice()
+          : (App.selectedObject ? [App.selectedObject] : []);
+        if (!targets.length) return;
+        lastBulkDelete = null; // a targeted delete isn't the bulk-undo case
+        var removedCount = 0;
+        targets.forEach(function (obj) {
+          if (App.DrawingEngine && App.DrawingEngine.removeObject(obj)) removedCount++;
+        });
+        if (removedCount && App.DrawingEngine) {
+          App.DrawingEngine.showHint(
+            removedCount === 1 ? "Object deleted" : removedCount + " objects deleted"
+          );
+        }
+      },
+    },
+    {
+      id: "deleteAll", label: "Delete All Objects",
+      default: { ctrl: false, shift: true, alt: false, code: "Delete" },
       run: function () {
         if (!App.drawObjects.length) return;
         // v57 Update 15: a single keystroke used to destroy every drawn

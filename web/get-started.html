@@ -84,6 +84,22 @@
     border: 1px solid var(--border); border-radius: 10px; margin: 8px auto 0;
   }
 
+  /* v72: Root Project Folder picker (Preparation step) */
+  #root-label { font-size: 15px; font-weight: 600; margin: 22px 0 2px; }
+  #root-sub { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  #root-row { display: flex; gap: 10px; }
+  #root-path {
+    flex: 1; padding: 11px 14px; border-radius: 8px; border: 1px solid var(--border);
+    background: #0f1523; color: var(--text); font-size: 13px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  #root-browse {
+    flex: 0 0 auto; width: 44px; border-radius: 8px; border: 1px solid var(--gold);
+    background: rgba(240,180,41,.12); color: var(--gold); font-size: 16px; cursor: pointer;
+  }
+  #root-browse:hover { background: rgba(240,180,41,.2); }
+  #root-browse:disabled { opacity: .5; cursor: default; }
+
   /* symbol picker */
   #symbol-search {
     width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border);
@@ -165,7 +181,8 @@
   var S = {
     step: 1, maxDays: 3, server: "", symbols: [], selected: "",
     busy: false, message: "", messageKind: "",
-    prefill: null, prefillTimer: null, filter: ""
+    prefill: null, prefillTimer: null, filter: "",
+    root: "", rootBusy: false, rootMessage: "" // v72: Root Project Folder
   };
 
   var pane = document.getElementById("pane");
@@ -204,6 +221,8 @@
   }
 
   function viewPreparation() {
+    var rootMsg = S.rootMessage
+      ? '<div class="note error" style="margin-top:8px">' + esc(S.rootMessage) + '</div>' : '';
     return '<h2>MetaTrader Preparation</h2>' +
       '<p>In MetaTrader 5 open <code>Tools &rsaquo; Options &rsaquo; Community</code> and make sure ' +
       '<b>Python integration</b> is enabled — without it this app cannot read any data from your terminal.</p>' +
@@ -211,7 +230,13 @@
       'account the broker provides no data at all.</p>' +
       '<img id="prepare-img" src="assets/prepare.png" alt="Tools > Options > Community > Python integration" />' +
       '<p>When both are done, press <b>Next</b> and the app will try to connect and read your broker\'s symbol list.</p>' +
-      messageHtml();
+      messageHtml() +
+      '<div id="root-label">Root Project Folder</div>' +
+      '<div id="root-sub">Select the folder where your project data and configuration will be stored.</div>' +
+      '<div id="root-row">' +
+      '<div id="root-path" title="' + esc(S.root) + '">' + esc(S.root) + '</div>' +
+      '<button id="root-browse" title="Choose folder" ' + (S.rootBusy ? "disabled" : "") + '>&#128193;</button>' +
+      '</div>' + rootMsg;
   }
 
   function viewSymbol() {
@@ -269,6 +294,9 @@
     else if (S.step === 3) pane.innerHTML = viewSymbol();
     else pane.innerHTML = viewFinish();
 
+    if (S.step === 2) {
+      document.getElementById("root-browse").addEventListener("click", browseRootFolder);
+    }
     if (S.step === 3) {
       var search = document.getElementById("symbol-search");
       search.addEventListener("input", function () {
@@ -311,6 +339,23 @@
       return;
     }
     btnPrimary.innerHTML = "Next <span>&rarr;</span>";
+  }
+
+  // --------------------------------------------------------- v72: root folder
+  function browseRootFolder() {
+    S.rootBusy = true; S.rootMessage = ""; render();
+    api.browse_root_folder().then(function (result) {
+      S.rootBusy = false;
+      if (!result || !result.ok) {
+        if (result && !result.cancelled) {
+          S.rootMessage = result.error || "Could not change the Root Project Folder.";
+        }
+        render();
+        return;
+      }
+      S.root = result.root;
+      render();
+    });
   }
 
   // --------------------------------------------------------------- actions
@@ -414,6 +459,7 @@
       S.symbols = state.symbols || [];
       S.selected = state.symbol || (S.symbols.length ? S.symbols[0].symbol : "");
       S.maxDays = state.max_prefill_days || 3;
+      S.root = state.root || state.default_root || "";
       render();
     });
   }

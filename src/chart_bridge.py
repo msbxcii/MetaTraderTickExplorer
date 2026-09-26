@@ -742,26 +742,29 @@ class ChartBridge:
         frontend at startup (style-defaults.js) to repopulate its in-memory
         cache."""
         if self._style_store is None:
-            return {"defaults": {}, "presets": {}}
+            return {"defaults": {}, "presets": {}, "autoTf": {}}
         try:
             return self._style_store.load()
         except Exception as e:
             self._logger.warning(f"get_style_settings: failed: {e}")
-            return {"defaults": {}, "presets": {}}
+            return {"defaults": {}, "presets": {}, "autoTf": {}}
 
     def save_style_settings(self, settings):
         """Overwrite the on-disk store with the frontend's current full set
-        of per-type default styles and named presets. Called (debounced)
-        whenever either changes — see style-defaults.js."""
+        of per-type default styles, named presets, and (v71 Update 1) the
+        per-type Timeframes-panel Auto toggle memory. Called (debounced)
+        whenever any of these change — see style-defaults.js."""
         if self._style_store is None:
             return False
         try:
             settings = settings or {}
             defaults = settings.get("defaults") if isinstance(settings, dict) else None
             presets = settings.get("presets") if isinstance(settings, dict) else None
+            auto_tf = settings.get("autoTf") if isinstance(settings, dict) else None
             return self._style_store.save(
                 defaults if isinstance(defaults, dict) else {},
                 presets if isinstance(presets, dict) else {},
+                auto_tf if isinstance(auto_tf, dict) else {},
             )
         except Exception as e:
             self._logger.warning(f"save_style_settings: failed: {e}")

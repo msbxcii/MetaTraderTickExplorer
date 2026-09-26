@@ -45,30 +45,40 @@ class StyleStore:
                 with open(self._path, "r", encoding="utf-8") as f:
                     data = json.load(f)
             except FileNotFoundError:
-                return {"defaults": {}, "presets": {}}
+                return {"defaults": {}, "presets": {}, "autoTf": {}}
             except Exception as e:
                 if self._logger:
                     self._logger.warning(
                         f"StyleStore.load: failed to read {self._path}: {e}"
                     )
-                return {"defaults": {}, "presets": {}}
+                return {"defaults": {}, "presets": {}, "autoTf": {}}
         if not isinstance(data, dict):
-            return {"defaults": {}, "presets": {}}
+            return {"defaults": {}, "presets": {}, "autoTf": {}}
         defaults = data.get("defaults")
         presets = data.get("presets")
+        # v71 Update 1: per-object-type "Auto" toggle memory for the
+        # Timeframes panel. Missing on any file saved before this update —
+        # falls back to {} (Auto off for every type), same "start empty"
+        # policy as defaults/presets above.
+        auto_tf = data.get("autoTf")
         return {
             "defaults": defaults if isinstance(defaults, dict) else {},
             "presets": presets if isinstance(presets, dict) else {},
+            "autoTf": auto_tf if isinstance(auto_tf, dict) else {},
         }
 
-    def save(self, defaults, presets):
-        """Atomically overwrite the store with `defaults` and `presets`
-        (both JSON-able dicts). Writes to a temp file in the same
+    def save(self, defaults, presets, auto_tf=None):
+        """Atomically overwrite the store with `defaults`, `presets` and
+        `auto_tf` (all JSON-able dicts). Writes to a temp file in the same
         directory first, then renames it over the real path — same
         crash-safe atomic-replace pattern as DrawingStore.save()."""
         if not isinstance(defaults, dict) or not isinstance(presets, dict):
             return False
-        payload = {"version": 1, "defaults": defaults, "presets": presets}
+        if auto_tf is None:
+            auto_tf = {}
+        if not isinstance(auto_tf, dict):
+            return False
+        payload = {"version": 1, "defaults": defaults, "presets": presets, "autoTf": auto_tf}
         with self._lock:
             tmp_path = None
             try:

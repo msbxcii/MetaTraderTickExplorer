@@ -916,9 +916,13 @@
       panel.series.setData(panel.candles);
       if (visible) {
         var shift = transition.window.older ? 0 : -transition.rolled.length;
-        panel.chart.timeScale().setVisibleLogicalRange({
-          from: visible.from + shift, to: visible.to + shift
-        });
+        // v71.1: same candle-close rollover hop as replay-bar.js's primary-
+        // panel feedOneCandle() (see its v71.1 note) - this companion path
+        // still used the plain public setVisibleLogicalRange() restore after
+        // setData(), so panels 2/3 flicked sideways on every Replay candle
+        // close too. preservePanelLogicalRange() already exists in this file
+        // (v56, for the edge-load drag case) - reuse it here as well.
+        preservePanelLogicalRange(panel, { from: visible.from + shift, to: visible.to + shift });
       }
     } else {
       panel.series.update(buildingSnapshot);
@@ -953,9 +957,9 @@
         panel.series.setData(panel.candles);
         if (visible) {
           var shift = result.window.older ? 0 : -result.rolled.length;
-          panel.chart.timeScale().setVisibleLogicalRange({
-            from: visible.from + shift, to: visible.to + shift
-          });
+          // v71.1: same fix as feedCompanionReplayCandle()'s rolled branch
+          // above - avoid the plain post-setData() restore call.
+          preservePanelLogicalRange(panel, { from: visible.from + shift, to: visible.to + shift });
         }
         updatePanelPriceLine(panel, panel.replayBuilding.close);
       }

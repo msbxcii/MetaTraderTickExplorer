@@ -23,7 +23,7 @@ tag and the version it reports always match.
 """
 
 APP_NAME = "mt-tick.explorer"
-VERSION = "v1.0.0"
+VERSION = "v2.0.0"
 
 
 def app_title(suffix=None):

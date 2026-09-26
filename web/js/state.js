@@ -221,6 +221,13 @@ window.App = {
     dcmHeaderHide: document.getElementById("dcm-header-hide"),
     dcmHeaderDelete: document.getElementById("dcm-header-delete"),
     dcmName: document.getElementById("dcm-name"),
+    // v70.7 Update 1/2: Timeframes panel (see drawing-context-menu.js).
+    dcmTfSection: document.getElementById("dcm-tf-section"),
+    dcmTfHeader: document.getElementById("dcm-tf-header"),
+    dcmTfClockIcon: document.getElementById("dcm-tf-clock-icon"),
+    dcmTfBody: document.getElementById("dcm-tf-body"),
+    // v71 Update 1: Auto toggle pill, inline in the Timeframes header.
+    dcmTfAutoBtn: document.getElementById("dcm-tf-auto-btn"),
     dcmBorderColor: document.getElementById("dcm-border-color"),
     dcmBorderWidth: document.getElementById("dcm-border-width"),
     dcmBorderStyle: document.getElementById("dcm-border-style"),
@@ -260,6 +267,9 @@ window.App = {
     dcmVlineTimeRow: document.getElementById("dcm-vline-time-row"),
     dcmVlineTimeDate: document.getElementById("dcm-vline-time-date"),
     dcmVlineTimeTime: document.getElementById("dcm-vline-time-time"),
+    // v70.3 Update 2: hline price editor.
+    dcmHlinePriceRow: document.getElementById("dcm-hline-price-row"),
+    dcmHlinePrice: document.getElementById("dcm-hline-price"),
     dcmTimeFromDate: document.getElementById("dcm-time-from-date"),
     dcmTimeFromTime: document.getElementById("dcm-time-from-time"),
     dcmTimeToDate: document.getElementById("dcm-time-to-date"),
@@ -379,7 +389,6 @@ window.App = {
     canvasBorderDownSwatch: document.getElementById("canvas-border-down-swatch"),
     canvasWickUpSwatch: document.getElementById("canvas-wick-up-swatch"),
     canvasWickDownSwatch: document.getElementById("canvas-wick-down-swatch"),
-    canvasDarkThemeCheckbox: document.getElementById("canvas-dark-theme-checkbox"),
     // v50.3 Update 2: Price Line controls + Crosshair/Price Line thickness.
     canvasPriceLineSwatch: document.getElementById("canvas-price-line-swatch"),
     canvasPriceLineStyle: document.getElementById("canvas-price-line-style"),

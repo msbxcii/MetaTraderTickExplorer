@@ -467,6 +467,36 @@
     return true;
   }
 
+  // v55.4: setData() can internally re-anchor Lightweight Charts before
+  // the browser paints the next frame. Restoring the desired logical range
+  // with another public setVisibleLogicalRange() call can therefore expose
+  // a one-frame left/right hop (most visible on live-partition rollover,
+  // where every drawing object appears to move by exactly one candle and
+  // immediately snaps back). When the library exposes its current anchor,
+  // correct that anchor by the exact delta needed to reach the target range
+  // instead. The fallback keeps the public API path for builds where the
+  // private anchor shape is unavailable.
+  //
+  // v71.1: hoisted out of setActiveChartData() (module scope, no longer
+  // nested) and exported via App.ChartCore so any other setData() caller -
+  // e.g. replay-bar.js's candle-close rollover - can reuse this exact fix
+  // instead of duplicating the naive setData()+setVisibleLogicalRange()
+  // pattern that reintroduces the hop.
+  function preserveLogicalRange(target) {
+    var current = App.chart.timeScale().getVisibleLogicalRange();
+    if (!current || Math.abs(current.from - target.from) < 1e-9 && Math.abs(current.to - target.to) < 1e-9) {
+      return true;
+    }
+    var correction = target.from - current.from;
+    if (applyDragAnchorShift(correction)) return true;
+    try {
+      App.chart.timeScale().setVisibleLogicalRange(target);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function setActiveChartData(tf, visibleLogical, logicalShift, dragPatch, firstLiveToTwoSlotPatch, firstOldestToTwoSlotPatch) {
     var arr = combineActivePartitions(tf);
     var w = getWindow(tf);
@@ -493,30 +523,6 @@
       from: visibleLogical.from + shift,
       to: visibleLogical.to + shift,
     };
-
-    // v55.4: setData() can internally re-anchor Lightweight Charts before
-    // the browser paints the next frame. Restoring the desired logical range
-    // with another public setVisibleLogicalRange() call can therefore expose
-    // a one-frame left/right hop (most visible on live-partition rollover,
-    // where every drawing object appears to move by exactly one candle and
-    // immediately snaps back). When the library exposes its current anchor,
-    // correct that anchor by the exact delta needed to reach the target range
-    // instead. The fallback keeps the public API path for builds where the
-    // private anchor shape is unavailable.
-    function preserveLogicalRange(target) {
-      var current = App.chart.timeScale().getVisibleLogicalRange();
-      if (!current || Math.abs(current.from - target.from) < 1e-9 && Math.abs(current.to - target.to) < 1e-9) {
-        return true;
-      }
-      var correction = target.from - current.from;
-      if (applyDragAnchorShift(correction)) return true;
-      try {
-        App.chart.timeScale().setVisibleLogicalRange(target);
-        return true;
-      } catch (_) {
-        return false;
-      }
-    }
 
     if (!dragPatch) {
       preserveLogicalRange(desiredRange);
@@ -707,7 +713,11 @@
   // whole-hour timeframe with the friendlier "1m"/"1h" style instead of
   // an oversized second count, while every remaining sub-minute
   // timeframe keeps the plain "Ns" label it always had.
+  //
+  // v70.6: 86400s (1 day) is checked before the generic whole-hour case
+  // so it reads as "1D" instead of "24h".
   function formatTfLabel(tf) {
+    if (tf === 86400) return "1D";
     if (tf % 3600 === 0) return (tf / 3600) + "h";
     if (tf % 60 === 0) return (tf / 60) + "m";
     return tf + "s";
@@ -1412,6 +1422,16 @@
     // V64: live ASK line (display-only). loadInitialLiveAsk() is called once
     // from main.js after init; setLiveAsk() is what window.onLiveAsk maps to.
     setLiveAsk: setLiveAsk,
+    // v71.1: exposes the v55.4 setData()-anchor-correction fix (see
+    // preserveLogicalRange() above) so any caller that calls series.setData()
+    // and then wants to restore a specific visible logical range can reuse
+    // the same one-frame-hop-free path instead of a plain public
+    // setVisibleLogicalRange() call. replay-bar.js's Bar Replay candle-close
+    // rollover used the plain call and re-introduced that exact hop (every
+    // drawing object appears to flick sideways for a frame, then snap back)
+    // on every candle close; this export lets it reuse the fix instead of
+    // duplicating it.
+    preserveLogicalRange: preserveLogicalRange,
     syncAskLine: syncAskLine,
     loadInitialLiveAsk: loadInitialLiveAsk,
     // v40 Update 4: lets replay-bar.js update the timeframe dropdown's

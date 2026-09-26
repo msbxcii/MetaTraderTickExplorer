@@ -15,7 +15,7 @@ SRC = ROOT / "src"
 WEB = ROOT / "web"
 ICON = ROOT / "assets" / "Icon.ico"
 
-APP_NAME = "MetaTrader Tick Explorer"
+APP_NAME = "MT-Tick.Explorer"
 ENTRY_POINT = SRC / "app.py"
 
 if not ENTRY_POINT.is_file():

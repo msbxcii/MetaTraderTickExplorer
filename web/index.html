@@ -34,8 +34,9 @@
 
   /* =========================================================================
      v50.2 Update 1 — Light Theme.
-     Unchecking "Enable Dark Theme" in the Canvas tab (canvas-settings.js)
-     toggles this class onto <body>. Every element in the app is already
+     V70.8: selecting a light-toned Canvas preset (e.g. "Default Light",
+     "Ivory White") toggles this class onto <body> (see canvas-settings.js).
+     Every element in the app is already
      built on the var(--bg)/var(--panel)/var(--border)/var(--text)/
      var(--muted)/var(--up)/var(--down)/var(--gold)/var(--ov*) custom
      properties above instead of hardcoded colors, so redefining them here
@@ -179,6 +180,13 @@
     height: 14px;
     flex: 0 0 auto;
     opacity: 0.9;
+    /* v70.8 Update 3: recolored via mask instead of the raw <img> so the
+       icon always matches the titlebar-title's own color (var(--muted))
+       and flips with the Dark/Light theme, instead of staying the fixed
+       gold fill baked into assets/icon.svg. */
+    background-color: var(--muted);
+    -webkit-mask: url("assets/icon.svg") center / contain no-repeat;
+    mask: url("assets/icon.svg") center / contain no-repeat;
   }
 
   #custom-titlebar .titlebar-title {
@@ -540,7 +548,10 @@
     color: var(--text);
   }
   .symbol-dropdown .tf-dropdown-list .symbol-option.active {
-    background: rgba(201,162,39,0.12) !important;
+    /* v70.8 Update 5: was a hardcoded gold rgba() that stayed yellow no
+       matter what Selector color the user picked - now a halo mixed from
+       the live --gold token so it tracks the actual Selector color. */
+    background: color-mix(in srgb, var(--gold) 12%, transparent) !important;
     color: var(--text);
     box-shadow: inset 2px 0 0 var(--gold);
   }
@@ -1011,6 +1022,105 @@
   .dcm-header-btn.active { color: var(--gold); }
   .dcm-header-btn-danger:hover { color: var(--down); background: rgba(229, 72, 77, 0.15); }
 
+  /* v70.7 Update 3: Timeframes panel restyle — smaller/tighter to match
+     the compact height of the rest of this menu, square (not pill)
+     buttons matching the Preset dropdown's own 4px-radius look, and a
+     selected timeframe now just swaps background/text (var(--text)/
+     var(--bg) — the same two tokens that already flip correctly between
+     Light and Dark) instead of a separate accent color. Only the row
+     checkbox still uses var(--gold), the app's own Selector accent. */
+  .draw-context-menu .dcm-tf-section {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    overflow: hidden;
+    background: var(--ov3, rgba(127, 127, 127, 0.03));
+  }
+  .draw-context-menu .dcm-tf-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .draw-context-menu .dcm-tf-header-left { display: flex; align-items: center; gap: 5px; }
+  .draw-context-menu .dcm-tf-clock-icon { width: 12px; height: 12px; display: flex; color: var(--muted); }
+  .draw-context-menu .dcm-tf-clock-icon svg { width: 12px; height: 12px; display: block; }
+  .draw-context-menu .dcm-tf-title { font-size: 11px; font-weight: 600; color: var(--text); }
+  .draw-context-menu .dcm-tf-caret {
+    font-size: 8.5px;
+    color: var(--muted);
+    transition: transform 0.15s ease;
+  }
+  .draw-context-menu .dcm-tf-section.collapsed .dcm-tf-caret { transform: rotate(180deg); }
+  .draw-context-menu .dcm-tf-section.collapsed .dcm-tf-body { display: none; }
+  .draw-context-menu .dcm-tf-body {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--border);
+  }
+  .draw-context-menu .dcm-tf-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 4px 8px;
+  }
+  .draw-context-menu .dcm-tf-row + .dcm-tf-row { border-top: 1px solid var(--border); }
+  .draw-context-menu .dcm-tf-row-check {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text);
+    cursor: pointer;
+    flex: 0 0 auto;
+    min-width: 54px;
+  }
+  .draw-context-menu .dcm-tf-row-check input[type="checkbox"] {
+    width: 12px;
+    height: 12px;
+    accent-color: var(--muted);
+    cursor: pointer;
+    margin: 0;
+  }
+  .draw-context-menu .dcm-tf-pills { display: flex; gap: 4px; flex: 1 1 auto; justify-content: flex-end; }
+  .draw-context-menu .dcm-tf-pill {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--ov6, rgba(127, 127, 127, 0.06));
+    color: var(--muted);
+    font-size: 10px;
+    line-height: 1;
+    padding: 4px 0;
+    width: 34px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  }
+  .draw-context-menu .dcm-tf-pill:hover { color: var(--text); border-color: var(--muted); }
+  .draw-context-menu .dcm-tf-pill.active {
+    background: var(--border);
+    border-color: var(--muted);
+    color: var(--text);
+    font-weight: 600;
+  }
+  /* v71 Update 1: Auto pill — sits inline with the "Timeframes" title
+     (per Auto.png), sized down to fit that row and using the same
+     active/inactive look as the timeframe pills so on/off reads exactly
+     the same way. Hidden (not just inactive) for hline/vline, which have
+     no time span and therefore no Auto concept at all. */
+  .draw-context-menu .dcm-tf-auto-btn {
+    width: auto;
+    padding: 2px 7px;
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  .draw-context-menu .dcm-tf-auto-btn.dcm-tf-auto-hidden { display: none; }
+
   /* v37 Fix 3: grouped, labeled sections (Border / Fill / Middle Line)
      with their variables sharing one compact row each, instead of a long
      stack of one-field-per-row lines. */
@@ -1322,6 +1432,30 @@
   }
   .draw-context-menu .dcm-preset-dropdown-item-trash svg { width: 12px; height: 12px; display: block; }
   .draw-context-menu .dcm-preset-dropdown-item-trash:hover { color: var(--down); background: rgba(229, 72, 77, 0.15); }
+  /* V70.1 Update 3: Modify icon — sits just left of each preset row's
+     trash icon; opens that row's name pre-filled in the same inline
+     "save preset" box instead of applying the preset. Same sizing as
+     the trash button, themed with the app's gold accent (edit, not
+     delete) rather than red. */
+  .draw-context-menu .dcm-preset-dropdown-item-modify {
+    flex: 0 0 auto;
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.15s ease, background 0.15s ease;
+  }
+  .draw-context-menu .dcm-preset-dropdown-item-modify svg { width: 11px; height: 11px; display: block; }
+  .draw-context-menu .dcm-preset-dropdown-item-modify:hover { color: var(--gold); background: rgba(201, 162, 39, 0.15); }
+  .draw-context-menu .dcm-preset-dropdown-item-trash { transition: color 0.15s ease, background 0.15s ease; }
   .draw-context-menu .dcm-preset-dropdown-empty {
     color: var(--muted);
     font-size: 11.5px;
@@ -1334,8 +1468,16 @@
     align-items: center;
     gap: 5px;
   }
-  .draw-context-menu .dcm-preset-save-box.open { display: flex; }
+  .draw-context-menu .dcm-preset-save-box.open { display: flex; animation: dcm-preset-savebox-in 0.15s ease forwards; }
   .draw-context-menu .dcm-preset-save-box .dcm-name-input { flex: 1 1 auto; }
+  /* V70.1: small themed fade+slide-in, matching the rest of the app's
+     minimal open transitions (e.g. About panel's update progress bar),
+     used whether the box was opened via "+" or via a row's new Modify
+     icon (Update 3). */
+  @keyframes dcm-preset-savebox-in {
+    from { opacity: 0; transform: translateY(-3px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
   .draw-context-menu .dcm-icon-btn {
     appearance: none;
     flex: 0 0 auto;
@@ -2602,7 +2744,7 @@
   .about-text-content h6 {
     font-family: Bahnschrift, "Segoe UI", sans-serif;
     font-weight: 400;
-    color: var(--gold);
+    color: var(--text);
     margin: 18px 0 8px;
     line-height: 1.35;
   }
@@ -2624,12 +2766,14 @@
     border-radius: 3px;
     padding: 1px 5px;
   }
-  .about-text-content a { color: var(--gold); text-decoration: none; }
-  .about-text-content a:hover { text-decoration: underline; }
+  /* Update 2: About text links no longer follow the user-editable Selector
+     (--gold) accent — a fixed theme-neutral color instead. */
+  .about-text-content a { color: var(--text); text-decoration: underline; }
+  .about-text-content a:hover { text-decoration: none; }
   .about-text-content blockquote {
     margin: 0 0 10px;
     padding: 4px 12px;
-    border-left: 2px solid var(--gold);
+    border-left: 2px solid var(--border);
     color: var(--muted);
   }
   .about-text-content hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
@@ -2654,7 +2798,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--gold);
+    /* Update 2: no longer follows the user-editable Selector (--gold)
+       accent — a fixed theme-neutral color instead. */
+    color: var(--text);
     background: var(--ov5);
     border: 1px solid var(--border);
     border-radius: 50%;
@@ -2678,7 +2824,9 @@
     font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
     font-size: 15px;
     font-weight: 600;
-    color: var(--gold);
+    /* Update 2: no longer follows the user-editable Selector (--gold)
+       accent — a fixed theme-neutral color instead. */
+    color: var(--text);
     letter-spacing: 0.02em;
   }
   .about-update-btn {
@@ -2864,7 +3012,10 @@
   .canvas-grid-checkbox-label input[type="checkbox"] {
     width: 16px;
     height: 16px;
-    accent-color: var(--gold);
+    /* Update 1: no longer follows the user-editable Selector (--gold)
+       accent — uses a fixed theme-neutral color instead, so toggling the
+       Selector color doesn't change these checkboxes. */
+    accent-color: var(--text);
     cursor: pointer;
   }
   .canvas-grid-swatch.hidden { visibility: hidden; }
@@ -2958,9 +3109,30 @@
   }
   .canvas-preset-dropdown-item-trash svg { width: 12px; height: 12px; display: block; }
   .canvas-preset-dropdown-item-trash:hover { color: var(--down); background: rgba(229, 72, 77, 0.15); }
+  .canvas-preset-dropdown-item-trash { transition: color 0.15s ease, background 0.15s ease; }
+  /* V70.1 Update 3: Modify icon — same treatment as the drawing tool's
+     own preset-row Modify icon (.dcm-preset-dropdown-item-modify). */
+  .canvas-preset-dropdown-item-modify {
+    flex: 0 0 auto;
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.15s ease, background 0.15s ease;
+  }
+  .canvas-preset-dropdown-item-modify svg { width: 11px; height: 11px; display: block; }
+  .canvas-preset-dropdown-item-modify:hover { color: var(--gold); background: rgba(201, 162, 39, 0.15); }
   .canvas-preset-dropdown-empty { color: var(--muted); font-size: 11.5px; padding: 6px 8px; }
   .canvas-preset-save-box { display: none; align-items: center; gap: 5px; margin-top: 8px; }
-  .canvas-preset-save-box.open { display: flex; }
+  .canvas-preset-save-box.open { display: flex; animation: dcm-preset-savebox-in 0.15s ease forwards; }
   .canvas-preset-name-input {
     flex: 1 1 auto;
     background: var(--bg);
@@ -3156,7 +3328,10 @@
   /* v33.2 fix 4: every row multi-selected via Ctrl/Shift is just as
      "selected" as the single active row, so it gets the exact same
      yellow highlight — no dimmer/separate look anymore. */
-  .obj-row.panel-selected { background: rgba(201, 162, 39, 0.16); }
+  /* v70.8 Update 5: same fix as the symbol dropdown's .active row above -
+     halo now mixed from the live --gold token instead of a hardcoded
+     yellow rgba(), so it matches whatever Selector color is chosen. */
+  .obj-row.panel-selected { background: color-mix(in srgb, var(--gold) 16%, transparent); }
   /* v33.1 Fix 6: an object whose anchor time sits before the first
      available historical candle on the current timeframe. v33.2 fix 3:
      these rows can still be selected, just never jumped to — the cursor
@@ -3552,9 +3727,15 @@
     left: 50%;
     bottom: 14px;
     transform: translateX(-50%);
-    background: rgba(17, 22, 31, 0.92);
+    /* v70.4 Update 2: was a hardcoded dark rgba() — looked fine in Dark
+       Mode but sat as a near-black pill on top of the Light Theme canvas.
+       Now built on the same --panel/--border/--text theme variables as
+       everything else, so Light Theme gets a proper light, readable
+       version automatically (see body.light-theme above). */
+    background: var(--panel);
     border: 1px solid var(--border);
-    color: var(--muted);
+    color: var(--text);
+    box-shadow: 0 2px 10px var(--ov8);
     font-size: 12px;
     padding: 6px 12px;
     border-radius: 20px;
@@ -3586,7 +3767,7 @@
          while double-clicking it toggles maximize. -->
     <div id="custom-titlebar">
       <div class="titlebar-drag" id="titlebar-drag">
-        <img class="titlebar-icon" src="assets/icon.svg" alt="" />
+        <div class="titlebar-icon" aria-hidden="true"></div>
         <span class="titlebar-title" id="titlebar-title">MetaTrader Tick Explorer</span>
       </div>
       <div class="titlebar-controls">
@@ -3979,16 +4160,10 @@
                   </label>
                   <button type="button" id="canvas-grid-vert-swatch" class="canvas-grid-swatch"></button>
                 </div>
-                <!-- V64.1 Update 1: Enable Dark Theme sits directly under the
-                     Vertical Grid Line row, inside the Chart column, with the
-                     same row spacing as the rows above it (it used to be a
-                     separate block below both columns). -->
-                <div class="canvas-row">
-                  <label class="canvas-grid-checkbox-label">
-                    <input type="checkbox" id="canvas-dark-theme-checkbox" checked />
-                    <span>Enable Dark Theme</span>
-                  </label>
-                </div>
+                <!-- V70.8: "Enable Dark Theme" checkbox removed — dark/light
+                     app theme now travels with the Canvas preset itself (see
+                     the built-in Default Dark / Default Light / Ivory White /
+                     Emerald Black presets in canvas-settings.js). -->
                 <!-- V64.1 Update 2: Enable Ask Price — unchecked by default;
                      while unchecked no ASK line is drawn on any chart. Color /
                      line type / width are the same controls (and the same
@@ -4051,8 +4226,8 @@
               <div class="canvas-preset-line">
                 <div class="canvas-preset-dropdown" id="canvas-preset-dropdown">
                   <button type="button" class="canvas-preset-dropdown-btn" id="canvas-preset-dropdown-btn">
-                    <span id="canvas-preset-dropdown-label">Default</span>
-                    <span class="caret">▾</span>
+                    <span id="canvas-preset-dropdown-label">-</span>
+                    <span class="caret">▼</span>
                   </button>
                   <div class="canvas-preset-dropdown-list" id="canvas-preset-dropdown-list"></div>
                 </div>
@@ -4161,6 +4336,61 @@
       <label>Name</label>
       <input type="text" id="dcm-name" class="dcm-name-input" autocomplete="off" />
     </div>
+    <!-- v70.7 Update 1/2: Timeframes panel — per Panel.png, sits right under
+         Name for every object type. Three rows (Seconds/Minutes/Hours),
+         each with a group checkbox and three timeframe pills; collapsible
+         via the header caret, open by default. Also doubles as the editor
+         for "Timeframe Based Hidden or Show" (Update 2) — a pill's on/off
+         state is literally the object's per-timeframe visibility. -->
+    <div class="dcm-tf-section" id="dcm-tf-section">
+      <div class="dcm-tf-header" id="dcm-tf-header">
+        <span class="dcm-tf-header-left">
+          <span class="dcm-tf-clock-icon" id="dcm-tf-clock-icon"></span>
+          <span class="dcm-tf-title">Timeframes</span>
+          <!-- v71 Update 1: Auto toggle — same pill look/feel as the tf
+               pills below (dcm-tf-pill class reused), but clicking it must
+               only flip Auto on/off, never open/close this section, so it
+               stops propagation up to the header's own click handler. -->
+          <button type="button" class="dcm-tf-pill dcm-tf-auto-btn" id="dcm-tf-auto-btn" title="Auto">Auto</button>
+        </span>
+        <span class="dcm-tf-caret" id="dcm-tf-caret">▼</span>
+      </div>
+      <div class="dcm-tf-body" id="dcm-tf-body">
+        <div class="dcm-tf-row" data-group="seconds">
+          <label class="dcm-tf-row-check">
+            <input type="checkbox" class="dcm-tf-group-checkbox" data-group="seconds" />
+            <span>Seconds</span>
+          </label>
+          <div class="dcm-tf-pills">
+            <button type="button" class="dcm-tf-pill" data-tf="1">1s</button>
+            <button type="button" class="dcm-tf-pill" data-tf="5">5s</button>
+            <button type="button" class="dcm-tf-pill" data-tf="15">15s</button>
+          </div>
+        </div>
+        <div class="dcm-tf-row" data-group="minutes">
+          <label class="dcm-tf-row-check">
+            <input type="checkbox" class="dcm-tf-group-checkbox" data-group="minutes" />
+            <span>Minutes</span>
+          </label>
+          <div class="dcm-tf-pills">
+            <button type="button" class="dcm-tf-pill" data-tf="60">1m</button>
+            <button type="button" class="dcm-tf-pill" data-tf="300">5m</button>
+            <button type="button" class="dcm-tf-pill" data-tf="900">15m</button>
+          </div>
+        </div>
+        <div class="dcm-tf-row" data-group="hours">
+          <label class="dcm-tf-row-check">
+            <input type="checkbox" class="dcm-tf-group-checkbox" data-group="hours" />
+            <span>Hours</span>
+          </label>
+          <div class="dcm-tf-pills">
+            <button type="button" class="dcm-tf-pill" data-tf="3600">1h</button>
+            <button type="button" class="dcm-tf-pill" data-tf="14400">4h</button>
+            <button type="button" class="dcm-tf-pill" data-tf="86400">1D</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <!-- v37 Fix 2: style presets — a minimal themed dropdown (each row has
          its own trash icon) instead of a native <select>, and an inline
          "save as" box instead of a native window.prompt(). -->
@@ -4169,7 +4399,7 @@
       <div class="dcm-preset-line">
         <div class="dcm-preset-dropdown" id="dcm-preset-dropdown">
           <button type="button" class="dcm-preset-dropdown-btn" id="dcm-preset-dropdown-btn">
-            <span id="dcm-preset-dropdown-label">Default</span>
+            <span id="dcm-preset-dropdown-label">-</span>
             <span class="caret">▼</span>
           </button>
           <div class="dcm-preset-dropdown-list" id="dcm-preset-dropdown-list"></div>
@@ -4258,6 +4488,15 @@
       <div class="dcm-dt">
         <input type="text" id="dcm-vline-time-date" class="dcm-dt-date" placeholder="YYYY-MM-DD" inputmode="numeric" />
         <input type="text" id="dcm-vline-time-time" class="dcm-dt-time" placeholder="HH:MM:SS" inputmode="numeric" />
+      </div>
+    </div>
+    <!-- v70.3 Update 2: hline-only price editor, same shape as the vline
+         time editor above (one field instead of two, since a horizontal
+         line only has a price, no time component). -->
+    <div class="dcm-row dcm-row-stacked" id="dcm-hline-price-row">
+      <label>Price</label>
+      <div class="dcm-dt">
+        <input type="text" id="dcm-hline-price" class="dcm-dt-time" placeholder="Price" inputmode="decimal" />
       </div>
     </div>
     <div class="dcm-row dcm-row-stacked" id="dcm-time-from-row">

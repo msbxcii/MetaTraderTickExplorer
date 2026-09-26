@@ -78,6 +78,17 @@
 // V64.1 that still hold the OLD factory values for the grid toggles / text
 // size (both grids on, size 8) are moved to the new defaults once (see
 // migrateOldDefaults()); anything the user customised is left alone.
+//
+// V70.8: the standalone "Enable Dark Theme" checkbox is gone. Dark/light now
+// travels with the Canvas preset itself: the old single undeletable
+// "Default" preset is replaced by four undeletable, unmodifiable built-in
+// presets at the top of the Preset list — Default Dark, Default Light,
+// Ivory White, Emerald Black (see BUILTIN_PRESETS below) — each carrying its
+// own `darkTheme` flag, so picking one both re-themes the chart's own
+// colors AND flips the app-wide light-theme/dark-theme class via the same
+// applyDarkTheme() as before. DEFAULTS (the factory fallback used for a
+// brand-new install and for sanitizeSettings()) now mirrors Default Dark's
+// values one-for-one.
 // =============================================================================
 
 (function () {
@@ -101,12 +112,14 @@
     crosshairStyle: "dotted",
     textColor: "#8b95a5",
     textSize: 14,        // V64.1 Update 4 (was 8)
-    bodyUp: "#3fb68b",
-    bodyDown: "#e5484d",
-    borderUp: "#3fb68b",
-    borderDown: "#e5484d",
-    wickUp: "#3fb68b",
-    wickDown: "#e5484d",
+    // V70.8: candle palette now matches the built-in "Default Dark" preset
+    // (was #3fb68b/#e5484d).
+    bodyUp: "#089981",
+    bodyDown: "#f23645",
+    borderUp: "#089981",
+    borderDown: "#f23645",
+    wickUp: "#089981",
+    wickDown: "#f23645",
     darkTheme: true,
     // v50.1 Update 1: both grid lines on by default, colored the same as
     // chart-core.js's hardcoded grid color ("#161c27" for vert & horz).
@@ -136,12 +149,98 @@
     askWidth: 1,
     // V64.2: Daily Break (a vertical line at the first candle of each trading
     // day) - off by default; color / width default to the Crosshair's. Solid only.
+    // V70.8: color now matches "Default Dark" (was #6b7686).
     dailyBreakEnabled: false,
-    dailyBreakColor: "#6b7686",
+    dailyBreakColor: "#2c3342",
     dailyBreakWidth: 1,
     // Bumped when the factory defaults change (see migrateOldDefaults()).
-    defaultsRev: 2,
+    defaultsRev: 3,
   };
+
+  // V70.8: replaces the old single undeletable "Default" preset. Four
+  // built-in presets, always shown first in the Preset dropdown, never
+  // deletable or modifiable (no trash/modify icons — see
+  // refreshPresetOptions()). Each is a full settings object layered on top
+  // of DEFAULTS via sanitizeSettings() so any field the spec didn't call
+  // out (line styles/widths, Ask/Daily-Break enabled-state, text size)
+  // quietly inherits the same sensible values as "Default Dark".
+  var BUILTIN_PRESETS = [
+    {
+      id: "__default_dark__",
+      name: "Default Dark",
+      settings: {
+        background: "#0a0e17",
+        crosshairColor: "#6b7686",
+        priceLineColor: "#8b95a5",
+        textColor: "#8b95a5",
+        selectorColor: "#c9a227",
+        bodyUp: "#089981", bodyDown: "#f23645",
+        borderUp: "#089981", borderDown: "#f23645",
+        wickUp: "#089981", wickDown: "#f23645",
+        gridHorzEnabled: false, gridVertEnabled: false,
+        askColor: "#8b95a5",
+        dailyBreakColor: "#2c3342",
+        darkTheme: true,
+      },
+    },
+    {
+      id: "__default_light__",
+      name: "Default Light",
+      settings: {
+        background: "#f5f5f5",
+        crosshairColor: "#6b7686",
+        priceLineColor: "#8b95a5",
+        textColor: "#8b95a5",
+        selectorColor: "#c3c3c3",
+        bodyUp: "#089981", bodyDown: "#f23645",
+        borderUp: "#089981", borderDown: "#f23645",
+        wickUp: "#089981", wickDown: "#f23645",
+        gridHorzEnabled: false, gridVertEnabled: false,
+        askColor: "#8b95a5",
+        dailyBreakColor: "#c7c7c7",
+        darkTheme: false,
+      },
+    },
+    {
+      id: "__ivory_white__",
+      name: "Ivory White",
+      settings: {
+        background: "#fdf5e6",
+        crosshairColor: "#000000",
+        priceLineColor: "#000000",
+        textColor: "#292929",
+        selectorColor: "#f5deb6",
+        bodyUp: "#32cd32", bodyDown: "#b22222",
+        borderUp: "#000000", borderDown: "#000000",
+        wickUp: "#000000", wickDown: "#000000",
+        gridHorzEnabled: false, gridVertEnabled: false,
+        askColor: "#000000",
+        dailyBreakColor: "#f5deb6",
+        darkTheme: false,
+      },
+    },
+    {
+      id: "__emerald_black__",
+      name: "Emerald Black",
+      settings: {
+        background: "#11161f",
+        crosshairColor: "#778899",
+        priceLineColor: "#778899",
+        textColor: "#778899",
+        selectorColor: "#daa520",
+        bodyUp: "#0ee715", bodyDown: "#ffffff",
+        borderUp: "#0ee715", borderDown: "#ffffff",
+        wickUp: "#0ee715", wickDown: "#ffffff",
+        gridHorzEnabled: false, gridVertEnabled: false,
+        askColor: "#778899",
+        dailyBreakColor: "#2c3342",
+        darkTheme: true,
+      },
+    },
+  ];
+  function findBuiltinPreset(id) {
+    return BUILTIN_PRESETS.filter(function (p) { return p.id === id; })[0] || null;
+  }
 
   var LINE_STYLE_MAP = { solid: 0, dotted: 1, dashed: 2 };
   var THICKNESS_OPTIONS = [1, 2, 3, 4];
@@ -433,10 +532,12 @@
     el.addEventListener("input", function () {
       state[key] = el.value;
       onApply();
+      markPresetDirty();
     });
     el.addEventListener("change", function () {
       state[key] = el.value;
       onApply();
+      markPresetDirty();
       persist();
     });
   }
@@ -474,6 +575,7 @@
   dom.canvasCrosshairStyle.addEventListener("change", function () {
     state.crosshairStyle = dom.canvasCrosshairStyle.value;
     applyCrosshair();
+    markPresetDirty();
     persist();
   });
 
@@ -484,6 +586,7 @@
     dom.canvasPriceLineStyle.addEventListener("change", function () {
       state.priceLineStyle = dom.canvasPriceLineStyle.value;
       applyPriceLine();
+      markPresetDirty();
       persist();
     });
   }
@@ -505,6 +608,7 @@
     dom.canvasCrosshairWidth.addEventListener("change", function () {
       state.crosshairWidth = Number(dom.canvasCrosshairWidth.value);
       applyCrosshair();
+      markPresetDirty();
       persist();
     });
   }
@@ -514,6 +618,7 @@
     dom.canvasAskWidth.addEventListener("change", function () {
       state.askWidth = Number(dom.canvasAskWidth.value);
       applyAsk();
+      markPresetDirty();
       persist();
     });
   }
@@ -522,6 +627,7 @@
     dom.canvasAskStyle.addEventListener("change", function () {
       state.askStyle = dom.canvasAskStyle.value;
       applyAsk();
+      markPresetDirty();
       persist();
     });
   }
@@ -530,6 +636,7 @@
     dom.canvasAskCheckbox.addEventListener("change", function () {
       state.askEnabled = dom.canvasAskCheckbox.checked;
       applyAsk();
+      markPresetDirty();
       persist();
     });
   }
@@ -539,6 +646,7 @@
     dom.canvasDailyBreakWidth.addEventListener("change", function () {
       state.dailyBreakWidth = Number(dom.canvasDailyBreakWidth.value);
       applyDailyBreak();
+      markPresetDirty();
       persist();
     });
   }
@@ -547,6 +655,7 @@
     dom.canvasDailyBreakCheckbox.addEventListener("change", function () {
       state.dailyBreakEnabled = dom.canvasDailyBreakCheckbox.checked;
       applyDailyBreak();
+      markPresetDirty();
       persist();
     });
   }
@@ -556,6 +665,7 @@
     dom.canvasPriceLineWidth.addEventListener("change", function () {
       state.priceLineWidth = Number(dom.canvasPriceLineWidth.value);
       applyPriceLine();
+      markPresetDirty();
       persist();
     });
   }
@@ -573,21 +683,15 @@
   dom.canvasTextSize.addEventListener("change", function () {
     state.textSize = Number(dom.canvasTextSize.value);
     applyText();
+    markPresetDirty();
     persist();
   });
 
-  // "Enable Dark Theme" — checked by default. Unchecking it switches the
-  // whole app to Light Theme (see applyDarkTheme()); re-checking it
-  // switches back to Dark. Applied immediately (not just on `change`, to
-  // match every other Canvas control's live-preview behavior) and
-  // persisted like every other field.
-  dom.canvasDarkThemeCheckbox.checked = !!state.darkTheme;
+  // V70.8: no more standalone checkbox — state.darkTheme now only ever
+  // changes as part of applying a preset (see applyPreset()). Just apply
+  // whatever was loaded/defaulted so the app-wide theme class is correct
+  // on first paint.
   applyDarkTheme();
-  dom.canvasDarkThemeCheckbox.addEventListener("change", function () {
-    state.darkTheme = dom.canvasDarkThemeCheckbox.checked;
-    applyDarkTheme();
-    persist();
-  });
 
   // v50.1 Update 1: grid-line enable checkboxes — toggling one hides/shows
   // its swatch and immediately hides/shows that grid line on the chart.
@@ -599,6 +703,7 @@
       state[stateKey] = checkboxEl.checked;
       if (swatchEl) swatchEl.classList.toggle("hidden", !checkboxEl.checked);
       applyGrid();
+      markPresetDirty();
       persist();
     });
   }
@@ -638,7 +743,6 @@
     if (dom.canvasDailyBreakSwatch) dom.canvasDailyBreakSwatch.value = state.dailyBreakColor;
     if (dom.canvasDailyBreakWidth) dom.canvasDailyBreakWidth.value = String(state.dailyBreakWidth);
     if (dom.canvasDailyBreakCheckbox) dom.canvasDailyBreakCheckbox.checked = !!state.dailyBreakEnabled;
-    if (dom.canvasDarkThemeCheckbox) dom.canvasDarkThemeCheckbox.checked = !!state.darkTheme;
     if (dom.canvasGridHorzCheckbox) {
       dom.canvasGridHorzCheckbox.checked = !!state.gridHorzEnabled;
       if (dom.canvasGridHorzSwatch) dom.canvasGridHorzSwatch.classList.toggle("hidden", !state.gridHorzEnabled);
@@ -652,7 +756,6 @@
   }
 
   // ---- v50.1 Update 3: named Canvas presets --------------------------------
-  var PRESET_DEFAULT_ID = "__default__";
 
   function closePresetDropdown() {
     if (dom.canvasPresetDropdownWrap) dom.canvasPresetDropdownWrap.classList.remove("open");
@@ -667,6 +770,16 @@
     if (dom.canvasPresetDropdownLabel) dom.canvasPresetDropdownLabel.textContent = text;
   }
 
+  // V70.1 Update 2: any direct edit to a Canvas field no longer matches
+  // whichever preset (if any) was last applied/shown, so the dropdown's
+  // placeholder goes back to "-". Called only from the real field-change
+  // listeners below — never from applyPreset()/deletePreset()/
+  // commitPresetSave(), so picking, saving or deleting a preset itself
+  // never re-triggers this.
+  function markPresetDirty() {
+    setPresetDropdownLabel("-");
+  }
+
   function nextPresetId() {
     var max = 0;
     presetsCache.forEach(function (p) {
@@ -676,27 +789,29 @@
     return max + 1;
   }
 
-  // Rebuilds the preset dropdown list. "Default" is always the first,
-  // undeletable entry — clicking it resets every Canvas field to the
-  // factory theme (DEFAULTS).
+  // Rebuilds the preset dropdown list. The four BUILTIN_PRESETS always come
+  // first (name only — no Modify/Trash icons, since they can't be renamed
+  // or deleted), followed by the user's own saved presets as before.
   function refreshPresetOptions() {
     var list = dom.canvasPresetDropdownList;
     if (!list) return;
     list.innerHTML = "";
 
-    var defaultRow = document.createElement("div");
-    defaultRow.className = "canvas-preset-dropdown-item";
-    var defaultBtn = document.createElement("button");
-    defaultBtn.type = "button";
-    defaultBtn.className = "canvas-preset-dropdown-item-name";
-    defaultBtn.textContent = "Default";
-    defaultBtn.addEventListener("click", function (evt) {
-      evt.stopPropagation();
-      applyPreset(PRESET_DEFAULT_ID);
-      closePresetDropdown();
+    BUILTIN_PRESETS.forEach(function (bp) {
+      var row = document.createElement("div");
+      row.className = "canvas-preset-dropdown-item";
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "canvas-preset-dropdown-item-name";
+      btn.textContent = bp.name;
+      btn.addEventListener("click", function (evt) {
+        evt.stopPropagation();
+        applyPreset(bp.id);
+        closePresetDropdown();
+      });
+      row.appendChild(btn);
+      list.appendChild(row);
     });
-    defaultRow.appendChild(defaultBtn);
-    list.appendChild(defaultRow);
 
     presetsCache.forEach(function (p) {
       var row = document.createElement("div");
@@ -712,6 +827,20 @@
         closePresetDropdown();
       });
 
+      // V70.1 Update 3: Modify — left of the trash icon, same as the
+      // drawing tool's own preset rows. Opens the inline save box
+      // pre-filled with this row's name, in "editing" mode, without
+      // applying the preset to the live Canvas settings.
+      var modifyBtn = document.createElement("button");
+      modifyBtn.type = "button";
+      modifyBtn.className = "canvas-preset-dropdown-item-modify";
+      modifyBtn.title = "Modify preset";
+      modifyBtn.innerHTML = App.Icons.modify();
+      modifyBtn.addEventListener("click", function (evt) {
+        evt.stopPropagation();
+        openPresetSaveBox(p.name, p.id);
+      });
+
       var trashBtn = document.createElement("button");
       trashBtn.type = "button";
       trashBtn.className = "canvas-preset-dropdown-item-trash";
@@ -723,6 +852,7 @@
       });
 
       row.appendChild(nameBtn);
+      row.appendChild(modifyBtn);
       row.appendChild(trashBtn);
       list.appendChild(row);
     });
@@ -734,9 +864,10 @@
   function applyPreset(id) {
     var settings;
     var label;
-    if (id === PRESET_DEFAULT_ID) {
-      settings = cloneDefaults();
-      label = "Default";
+    var builtin = findBuiltinPreset(id);
+    if (builtin) {
+      settings = sanitizeSettings(builtin.settings);
+      label = builtin.name;
     } else {
       var found = presetsCache.filter(function (p) { return p.id === id; })[0];
       if (!found) return;
@@ -755,24 +886,65 @@
     persist();
   }
 
-  function openPresetSaveBox() {
+  // V70.1 Update 3: which preset (by id) the inline save box is currently
+  // editing — null means plain "save a new preset" mode (the + button).
+  var editingPresetId = null;
+
+  // Adds a new preset, or — if `name` exactly matches an already-existing
+  // different preset, or `targetId` names one directly (the Modify icon)
+  // — updates that preset's name/settings in place. Two presets can never
+  // share a name, so a name match always wins over a targetId match.
+  function upsertPreset(name, settings, targetId) {
+    var byName = presetsCache.filter(function (p) { return p.name === name; })[0];
+    var byId = targetId != null ? presetsCache.filter(function (p) { return p.id === targetId; })[0] : null;
+    var resultId;
+    if (byName) {
+      byName.settings = settings;
+      if (byId && byId !== byName) {
+        presetsCache = presetsCache.filter(function (p) { return p !== byId; });
+      }
+      resultId = byName.id;
+    } else if (byId) {
+      byId.name = name;
+      byId.settings = settings;
+      resultId = byId.id;
+    } else {
+      resultId = nextPresetId();
+      presetsCache.push({ id: resultId, name: name, settings: settings });
+    }
+    return resultId;
+  }
+
+  // V70.1 Update 3: optionally opens in "editing" mode for an existing
+  // preset — prefillName/targetId come from a row's Modify icon. Opening
+  // it this way never applies the preset to the live Canvas settings —
+  // it only pre-fills the name so the Check mark can commit an update to
+  // that same preset instead of creating a new one.
+  function openPresetSaveBox(prefillName, targetId) {
     if (!dom.canvasPresetSaveBox) return;
     closePresetDropdown();
+    editingPresetId = targetId != null ? targetId : null;
     dom.canvasPresetSaveBox.classList.add("open");
     if (dom.canvasPresetSaveInput) {
-      dom.canvasPresetSaveInput.value = "";
+      dom.canvasPresetSaveInput.value = prefillName || "";
       dom.canvasPresetSaveInput.focus();
+      dom.canvasPresetSaveInput.select();
     }
   }
   function closePresetSaveBox() {
     if (dom.canvasPresetSaveBox) dom.canvasPresetSaveBox.classList.remove("open");
+    editingPresetId = null;
   }
   function commitPresetSave() {
     if (!dom.canvasPresetSaveInput) return;
     var name = dom.canvasPresetSaveInput.value.trim();
     if (!name) { closePresetSaveBox(); return; }
-    var id = nextPresetId();
-    presetsCache.push({ id: id, name: name, settings: deepCopy(state) });
+    // V70.8: the four built-in preset names are reserved.
+    if (BUILTIN_PRESETS.some(function (bp) { return bp.name === name; })) {
+      dom.canvasPresetSaveInput.focus();
+      return;
+    }
+    var id = upsertPreset(name, deepCopy(state), editingPresetId);
     closePresetSaveBox();
     refreshPresetOptions();
     setPresetDropdownLabel(name);

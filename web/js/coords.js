@@ -47,9 +47,13 @@
       var frac = logical - lo;
       return xLo + (xHi - xLo) * frac;
     }
+    // v70.9: invert the live logical-to-pixel mapping for continuous X.
     function xToLogical(x) {
-      var l = getChart().timeScale().coordinateToLogical(x);
-      return l === null || l === undefined ? null : l;
+      var ts = getChart().timeScale();
+      var x0 = ts.logicalToCoordinate(0);
+      var x1 = ts.logicalToCoordinate(1);
+      if (x0 === null || x0 === undefined || x1 === null || x1 === undefined || x1 === x0) return null;
+      return (x - x0) / (x1 - x0);
     }
     function priceToY(price) {
       var y = getSeries().priceToCoordinate(price);

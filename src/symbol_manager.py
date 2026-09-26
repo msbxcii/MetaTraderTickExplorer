@@ -64,9 +64,22 @@ def last_session_path(output_dir):
 
 
 def _atomic_write(path, data):
+    """Write `data` as JSON to `path`, atomically.
+
+    v72: the temp file is created with dir=parent (the SAME folder/drive as
+    the final path) - previously it defaulted to the OS temp folder, which
+    normally sits on the system drive. That was invisible as long as the
+    project root was always on that same drive too, but once the user can
+    point the Root Project Folder at a different drive (Get Started's Root
+    Project Folder picker), os.replace() below cannot move a file across
+    drives on Windows, so this silently failed every time the root wasn't on
+    the OS temp folder's drive - which is exactly why the last-used symbol/
+    server was never remembered after choosing a Root Project Folder on a
+    different drive.
+    """
     parent = os.path.dirname(path)
     os.makedirs(parent, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix=".symbol-")
+    fd, tmp = tempfile.mkstemp(prefix=".symbol-", dir=parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
