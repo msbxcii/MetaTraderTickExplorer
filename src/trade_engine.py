@@ -21,6 +21,10 @@ Safety rules:
 import math
 import time
 
+# Tag written into every order comment (visible in the MT5/broker history).
+# MT5 limits comments to 31 chars: 16 for the tag + space + ~10-char req_id.
+ORDER_TAG = "mt-tick.explorer"
+
 STALE_SECONDS = 5.0
 MAGIC = 840084
 DEVIATION_POINTS = 30
@@ -317,7 +321,7 @@ def open_market(mt5, cmd, symbol):
         return _err("Not enough free margin (%.2f needed)" % margin)
 
     rr = max(0.0, float(cmd.get("tp_rr") or 0))
-    comment = ("CT84 %s" % cmd.get("req_id", ""))[:31]
+    comment = ("%s %s" % (ORDER_TAG, cmd.get("req_id", "")))[:31]
     last = None
     for attempt in range(3):
         if attempt:
@@ -598,7 +602,7 @@ def close(mt5, cmd):
             req = {"action": mt5.TRADE_ACTION_DEAL, "position": int(p.ticket), "symbol": p.symbol, "volume": vol,
                    "type": mt5.ORDER_TYPE_SELL if is_buy else mt5.ORDER_TYPE_BUY,
                    "price": float(tick.bid if is_buy else tick.ask), "deviation": DEVIATION_POINTS,
-                   "magic": int(p.magic), "comment": "CT84 close", "type_time": mt5.ORDER_TIME_GTC,
+                   "magic": int(p.magic), "comment": ORDER_TAG + " close", "type_time": mt5.ORDER_TIME_GTC,
                    "type_filling": _filling(mt5, info)}
             res = mt5.order_send(req)
             if res is not None and res.retcode in _OK_CODES:

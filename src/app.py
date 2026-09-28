@@ -307,6 +307,7 @@ def main():
 
     logger.info("#" * 60)
     logger.info(f"Starting {app_version.app_title()}")
+    logger.info(app_version.FREE_NOTICE)
     logger.info("No default symbol configured. Symbol selection is handled by Get Started.")
     logger.info("#" * 60)
 

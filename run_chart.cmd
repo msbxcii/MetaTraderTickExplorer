@@ -1,6 +1,6 @@
 @echo off
 REM =============================================================================
-REM run_chart.cmd - V68
+REM run_chart.cmd
 REM
 REM The launcher keeps a visible Cmd window for source launches. V66.2 removes
 REM ALL automatic package installation. Before the chart starts, a small
@@ -10,11 +10,13 @@ REM never runs pip install automatically. The user is given the exact manual
 REM command instead.
 REM =============================================================================
 chcp 65001 >nul
-title MetaTrader Tick Explorer V68 (live chart)
 cd /d "%~dp0"
+set "APP_TITLE=MetaTrader Tick Explorer"
+for /f "usebackq delims=" %%T in (`python -c "import sys; sys.path.insert(0, 'src'); import version; print(version.app_title())" 2^>nul`) do set "APP_TITLE=%%T"
+title %APP_TITLE% (live chart)
 
 echo ============================================================
-echo   MetaTrader Tick Explorer V68 (live chart)
+echo   %APP_TITLE% (live chart)
 echo   Checking runtime requirements (read-only) ...
 echo   No package installation will be performed automatically.
 echo ============================================================

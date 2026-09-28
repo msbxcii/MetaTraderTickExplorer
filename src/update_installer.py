@@ -31,7 +31,10 @@ import time
 import urllib.request
 
 from runtime_paths import PROJECT_ROOT
-from update_checker import EXPECTED_EXE_NAME
+import version as _app_version
+
+# Stable name for the staged download (the release asset itself is versioned).
+EXPECTED_EXE_NAME = f"{_app_version.APP_NAME}.exe"
 
 # Everything this module writes lives under PROJECT_ROOT (see
 # runtime_paths.py - %LOCALAPPDATA%\MT-TickExplorer for the frozen build),

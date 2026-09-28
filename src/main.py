@@ -19,6 +19,7 @@ def main():
 
     logger.info("#" * 60)
     logger.info(f"Starting {app_version.app_title()}")
+    logger.info(app_version.FREE_NOTICE)
     logger.info(f"Target symbol selected in Get Started")
     logger.info("#" * 60)
 

@@ -391,9 +391,15 @@
     if (e.pointerType && e.pointerType !== "mouse") return;
     var pn = panelAt(e);
     if (!pn) { if (armed && e.button === 2) disarm(); return; }
-    if (!armed || e.button === 1) active = pn; // V88: gesture stays on its panel
+    // Trade trigger buttons come from Settings > Keyboard Shortcuts
+    // (defaults: Middle Mouse = market, Shift + Middle Mouse = pending).
+    var KS = App.KeyboardShortcuts;
+    var tradeAct = KS && KS.tradeActionForMouse ? KS.tradeActionForMouse(e)
+      : (e.button === 1 ? (e.shiftKey ? "pending" : "market") : null);
+    var tradeBtn = tradeAct || (armed && (KS && KS.isTradeMouseButton ? KS.isTradeMouseButton(e) : e.button === 1));
+    if (!armed || tradeBtn) active = pn; // V88: gesture stays on its panel
     var handled = false;
-    if (e.button === 1) { if (armed) disarm(); else arm(e, e.shiftKey); handled = true; }
+    if (tradeBtn) { if (armed) disarm(); else arm(e, tradeAct === "pending"); handled = true; }
     else if (armed && e.button === 0) { place(e); handled = true; }
     else if (armed && e.button === 2) { disarm(); handled = true; }
     else if (e.button === 0 && !App.replayActive) {
@@ -406,7 +412,7 @@
   ["mousedown", "mouseup", "click", "auxclick", "dblclick"].forEach(function (n) {
     window.addEventListener(n, function (e) {
       if (!swallow && !(armed && inside(e))) return;
-      if (n === "mousedown" && e.button === 1) e.preventDefault(); // no autoscroll
+      if (n === "mousedown" && e.button !== 0 && e.button !== 2) e.preventDefault(); // no autoscroll / nav
       e.stopPropagation();
       if (n === "click" || n === "auxclick" || n === "dblclick") swallow = false;
     }, true);
@@ -418,6 +424,21 @@
   window.addEventListener("contextmenu", function (e) {
     if (swallow || armed) { e.preventDefault(); e.stopPropagation(); swallow = false; }
   }, true);
+
+  // Last pointer position over a chart panel, so a keyboard-bound trade
+  // shortcut can arm exactly where the mouse is.
+  var lastPointer = null;
+  window.addEventListener("pointermove", function (e) {
+    if (panelAt(e)) lastPointer = { target: e.target, clientX: e.clientX, clientY: e.clientY };
+  }, true);
+  function toggleArm(pending) {
+    if (armed) { disarm(); return; }
+    if (!lastPointer) { T().toast("Move the mouse over a chart first", "info"); return; }
+    var pn = panelAt(lastPointer);
+    if (!pn) return;
+    active = pn;
+    arm(lastPointer, pending);
+  }
 
   window.addEventListener("pointermove", function (e) {
     if (armed) { var pa = panelAt(e); if (pa) active = pa; mouseY = e.clientY; schedule(); return; }
@@ -478,6 +499,7 @@
     onSpecs: function () { if (armed) schedule(); },
     onResult: onResult,
     isArmed: function () { return armed; },
+    toggleArm: toggleArm,
     focus: setFocus,
   };
 })();

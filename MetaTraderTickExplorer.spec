@@ -8,6 +8,7 @@ bundle because the Python side loads the HTML/Markdown files directly.
 from pathlib import Path
 
 from PyInstaller.building.build_main import Analysis, PYZ, EXE
+import sys
 
 
 ROOT = Path(SPECPATH).resolve()
@@ -15,7 +16,12 @@ SRC = ROOT / "src"
 WEB = ROOT / "web"
 ICON = ROOT / "assets" / "Icon.ico"
 
-APP_NAME = "MT-Tick.Explorer"
+# Name + version come from src/version.py (single source of truth), so the
+# output is e.g. dist\mt-tick.explorer-v3.0.0.exe
+sys.path.insert(0, str(SRC))
+import version as app_version  # noqa: E402
+
+APP_NAME = f"{app_version.APP_NAME}-{app_version.VERSION}"
 ENTRY_POINT = SRC / "app.py"
 
 if not ENTRY_POINT.is_file():

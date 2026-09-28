@@ -14,7 +14,9 @@ import json
 import re
 import urllib.request
 
-# v68: set this once you create the GitHub repo - e.g. "yourname/MetaTraderTickExplorer".
+# v68: GitHub repo ("owner/name") that "Check for Update" queries.
+# FORKS: change this to YOUR OWN repository, otherwise your build will be
+# offered the official project's releases.
 # Until this is filled in, check_for_update() returns an "unconfigured" status
 # instead of guessing a URL.
 GITHUB_REPO = "msbxcii/MetaTraderTickExplorer"
@@ -27,7 +29,12 @@ _TIMEOUT_SECONDS = 6
 # name build.cmd/the .spec file produce - see EXPECTED_EXE_NAME in
 # update_installer.py, which imports this same value so the two can never
 # drift apart.
-EXPECTED_EXE_NAME = "MetaTrader Tick Explorer.exe"
+import version as _app_version  # noqa: E402
+
+# Released assets are versioned (mt-tick.explorer-v3.0.0.exe), so a newer
+# release is matched by the "<APP_NAME>-" prefix rather than an exact name.
+EXE_NAME_PREFIX = f"{_app_version.APP_NAME}-"
+EXPECTED_EXE_NAME = _app_version.exe_name()
 
 
 def _parse_version(tag):
@@ -48,7 +55,7 @@ def _find_exe_asset(assets):
     release page instead, same as before this download feature existed)."""
     exe_assets = [a for a in (assets or []) if str(a.get("name", "")).lower().endswith(".exe")]
     for a in exe_assets:
-        if a.get("name", "").lower() == EXPECTED_EXE_NAME.lower():
+        if a.get("name", "").lower().startswith(EXE_NAME_PREFIX.lower()):
             return a
     return exe_assets[0] if len(exe_assets) == 1 else None
 

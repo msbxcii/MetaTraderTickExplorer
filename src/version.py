@@ -26,6 +26,23 @@ APP_NAME = "mt-tick.explorer"
 VERSION = "v3.0.0"
 
 
+# Official distribution notice. Shown in the startup log, the Get Started
+# wizard and the About tab. MetaTrader Tick Explorer is free software; any
+# build sold for money did not come from the official project.
+OFFICIAL_REPO_URL = "https://github.com/msbxcii/MetaTraderTickExplorer"
+FREE_NOTICE = (
+    "MetaTrader Tick Explorer is free and open-source software. "
+    "Official builds are distributed only at " + OFFICIAL_REPO_URL + "/releases. "
+    "If you paid for this software, you have been scammed."
+)
+
+
+def exe_name():
+    """Release executable filename, e.g. ``"mt-tick.explorer-v3.0.0.exe"``.
+    Used by the PyInstaller spec, build.cmd and the update checker."""
+    return f"{APP_NAME}-{VERSION}.exe"
+
+
 def app_title(suffix=None):
     """``"<APP_NAME> <VERSION>"``, with an optional ``" - <suffix>"``
     appended - e.g. ``app_title("Get Started")`` or ``app_title(symbol)``.

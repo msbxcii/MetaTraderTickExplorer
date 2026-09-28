@@ -164,6 +164,21 @@
       },
     },
     {
+      // Trading Panel: arm a market order at the mouse position. Ships on
+      // Middle Mouse; can be re-bound to another mouse button or a key
+      // (a key arms at the last known mouse position over the chart).
+      id: "tradeMarket", label: "Trade: Open Market Order",
+      default: { ctrl: false, shift: false, alt: false, code: "Mouse1" },
+      trade: "market",
+      run: function () { if (App.TradeLines && App.TradeLines.toggleArm) App.TradeLines.toggleArm(false); },
+    },
+    {
+      id: "tradePending", label: "Trade: Open Pending Order",
+      default: { ctrl: false, shift: true, alt: false, code: "Mouse1" },
+      trade: "pending",
+      run: function () { if (App.TradeLines && App.TradeLines.toggleArm) App.TradeLines.toggleArm(true); },
+    },
+    {
       id: "objHLine", label: "Object: Horizontal Line",
       default: { ctrl: true, shift: false, alt: false, code: "KeyH" },
       // v51 Update 2: placed immediately at the current mouse position —
@@ -244,7 +259,14 @@
     Delete: "Delete", Escape: "Esc", Tab: "Tab", Enter: "Enter",
     ArrowUp: "\u2191", ArrowDown: "\u2193", ArrowLeft: "\u2190", ArrowRight: "\u2192",
     PageUp: "PageUp", PageDown: "PageDown",
+    Mouse1: "Middle Mouse", Mouse3: "Mouse Back", Mouse4: "Mouse Forward",
   };
+
+  // Mouse buttons that can be bound (pointer event .button -> code). Left
+  // and right click are reserved for the chart/drawing tools.
+  var MOUSE_CODES = { 1: "Mouse1", 3: "Mouse3", 4: "Mouse4" };
+  function mouseCode(evt) { return MOUSE_CODES[evt.button] || null; }
+  function isMouseCode(code) { return /^Mouse[0-9]$/.test(code || ""); }
 
   function codeLabel(code) {
     if (!code) return "";
@@ -351,6 +373,47 @@
     return evt.code === b.code && !!evt.ctrlKey === !!b.ctrl && !!evt.shiftKey === !!b.shift && !!evt.altKey === !!b.alt;
   }
 
+  function matchesMouse(evt, b) {
+    var code = mouseCode(evt);
+    if (!code || !b || b.code !== code) return false;
+    return !!evt.ctrlKey === !!b.ctrl && !!evt.shiftKey === !!b.shift && !!evt.altKey === !!b.alt;
+  }
+
+  // Which trade action ("market" / "pending") a mouse event triggers, or
+  // null. Queried by trade-lines.js, which owns the chart-panel gesture.
+  function tradeActionForMouse(evt) {
+    for (var i = 0; i < ACTIONS.length; i++) {
+      var a = ACTIONS[i];
+      if (a.trade && matchesMouse(evt, bindings[a.id])) return a.trade;
+    }
+    return null;
+  }
+  function isTradeMouseButton(evt) {
+    var code = mouseCode(evt);
+    if (!code) return false;
+    return ACTIONS.some(function (a) { return a.trade && bindings[a.id] && bindings[a.id].code === code; });
+  }
+
+  // Non-trade actions bound to a mouse button (e.g. Jump Time on Mouse
+  // Back) fire here. Trade actions are dispatched by trade-lines.js.
+  window.addEventListener("pointerdown", function (evt) {
+    if (capturing || !mouseCode(evt)) return;
+    for (var i = 0; i < ACTIONS.length; i++) {
+      var a = ACTIONS[i];
+      if (!a.trade && matchesMouse(evt, bindings[a.id])) {
+        if (a.run) a.run();
+        evt.preventDefault();
+        return;
+      }
+    }
+  }, true);
+  // Stop Mouse Back/Forward from navigating the embedded browser away.
+  ["mouseup", "auxclick"].forEach(function (n) {
+    window.addEventListener(n, function (evt) {
+      if (evt.button === 3 || evt.button === 4) evt.preventDefault();
+    }, true);
+  });
+
   document.addEventListener("keydown", function (evt) {
     if (capturing) return; // handled by the capture listener below instead
     if (isTypingTarget(document.activeElement)) return;
@@ -387,6 +450,19 @@
 
   function stopCaptureListeners() {
     document.removeEventListener("keydown", onCaptureKeydown, true);
+    window.removeEventListener("pointerdown", onCapturePointerdown, true);
+  }
+
+  // While capturing, a middle/back/forward click is recorded as the new
+  // binding (with any held Ctrl/Shift/Alt), e.g. "Shift + Middle Mouse".
+  function onCapturePointerdown(evt) {
+    if (!capturing) return;
+    var code = mouseCode(evt);
+    if (!code) return; // left/right click: let the confirm/cancel buttons work
+    evt.preventDefault();
+    evt.stopPropagation();
+    capturing.pending = { ctrl: evt.ctrlKey, shift: evt.shiftKey, alt: evt.altKey, code: code };
+    renderRow(capturing.actionId);
   }
 
   function onCaptureKeydown(evt) {
@@ -409,6 +485,7 @@
     if (capturing) cancelCapture();
     capturing = { actionId: actionId, pending: null };
     document.addEventListener("keydown", onCaptureKeydown, true);
+    window.addEventListener("pointerdown", onCapturePointerdown, true);
     renderRow(actionId);
   }
 
@@ -462,7 +539,7 @@
     refs.badge.classList.remove("kbd-unassigned", "kbd-listening");
     if (isCapturing) {
       refs.badge.classList.add("kbd-listening");
-      refs.badge.textContent = capturing.pending ? formatBinding(capturing.pending) : "Press a key\u2026";
+      refs.badge.textContent = capturing.pending ? formatBinding(capturing.pending) : "Press a key or mouse button\u2026";
     } else if (current) {
       refs.badge.textContent = formatBinding(current);
     } else {
@@ -558,5 +635,7 @@
     activate: activate,
     deactivate: deactivate,
     load: load,
+    tradeActionForMouse: tradeActionForMouse,
+    isTradeMouseButton: isTradeMouseButton,
   };
 })();
