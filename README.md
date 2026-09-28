@@ -10,17 +10,6 @@ English | [فارسی](README-fa.md)
 
 > **Not affiliated with or endorsed by MetaQuotes Ltd.** See [Trademarks](#trademarks).
 
-## 🆓 Official Distribution & Anti-Scam Notice
-
-**MetaTrader Tick Explorer is, and will always remain, completely free.** It is published as open-source software under the Apache License 2.0 by its original author, Msbxcii.
-
-- The **only** official source is this repository: <https://github.com/msbxcii/MetaTraderTickExplorer>. Official builds are published **only** on its [Releases](https://github.com/msbxcii/MetaTraderTickExplorer/releases) page.
-- The official project **never** charges for downloads, licenses, activation keys, "premium" features, subscriptions or support, and has **no** official Telegram channel, reseller or paid distributor.
-- **If you were asked to pay** for this software, or for any of its features, **you have been scammed.** Please ask for a refund, report the seller, and [open an issue](https://github.com/msbxcii/MetaTraderTickExplorer/issues) so other users can be warned.
-- Builds from any other source may be modified and may contain malware. Only run builds you downloaded from the official Releases page or built yourself from this source code.
-
-Forks are welcome under the license terms (see [Forks & Branding](#forks--branding)), but they must not be presented as the official project.
-
 ## Table of Contents
 
 - [Official Distribution & Anti-Scam Notice](#-official-distribution--anti-scam-notice)
