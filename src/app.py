@@ -49,7 +49,8 @@ def _handle_live_queue_message(window, bridge, message, logger, identity_callbac
             window.evaluate_js("window.onCacheReady && window.onCacheReady()")
         elif kind == "candles":
             payload_json = json.dumps(message.get("data") or {})
-            window.evaluate_js(f"window.onLiveCandles && window.onLiveCandles({payload_json})")
+            server_msc = json.dumps(message.get("server_msc"))  # V81: broker clock
+            window.evaluate_js(f"window.onLiveCandles && window.onLiveCandles({payload_json}, {server_msc})")
         elif kind == "ask":
             # V64: display-only live ASK. The bridge keeps the newest value in RAM
             # (for a page that loads while the market is quiet) and rejects a
@@ -78,6 +79,14 @@ def _handle_live_queue_message(window, bridge, message, logger, identity_callbac
             window.evaluate_js(
                 f"window.onExtendStatus && window.onExtendStatus({state_json}, {data_json})"
             )
+        elif kind == "positions":  # V83: Trade panel live positions
+            window.evaluate_js(f"window.onTradePositions && window.onTradePositions({json.dumps(message.get('data') or [])})")
+        elif kind == "trade_result":  # V84
+            window.evaluate_js(f"window.onTradeResult && window.onTradeResult({json.dumps(message.get('data') or {})})")
+        elif kind == "trade_specs":  # V84
+            window.evaluate_js(f"window.onTradeSpecs && window.onTradeSpecs({json.dumps(message.get('data') or {})})")
+        elif kind == "trade_history":  # V83: Trade panel History tab
+            window.evaluate_js(f"window.onTradeHistory && window.onTradeHistory({json.dumps(message.get('data') or {})})")
         elif kind == "identity":
             # v62: the sync process (the only place that talks to MT5)
             # reports the real broker server / a freshly discovered symbol list.
@@ -112,7 +121,7 @@ def _live_queue_consumer(window, bridge, live_queue, consumer_stop, logger, iden
         except (OSError, EOFError):
             break
 
-        if (message or {}).get("type") not in ("candles", "ask"):
+        if (message or {}).get("type") not in ("candles", "ask", "positions"):
             _handle_live_queue_message(window, bridge, message, logger, identity_callback, sync_log_callback)
             continue
 
@@ -124,6 +133,7 @@ def _live_queue_consumer(window, bridge, live_queue, consumer_stop, logger, iden
         # event): only the newest one is delivered.
         latest_candles = None
         latest_ask = None
+        latest_positions = None  # V83: state message, only newest matters
         deferred_controls = []
         pending = message
         while pending is not None:
@@ -137,6 +147,8 @@ def _live_queue_consumer(window, bridge, live_queue, consumer_stop, logger, iden
                 latest_candles = pending
             elif pending_type == "ask":
                 latest_ask = pending
+            elif pending_type == "positions":
+                latest_positions = pending
             else:
                 deferred_controls.append(pending)
             try:
@@ -157,6 +169,8 @@ def _live_queue_consumer(window, bridge, live_queue, consumer_stop, logger, iden
             _handle_live_queue_message(window, bridge, latest_candles, logger, identity_callback, sync_log_callback)
         if latest_ask is not None:
             _handle_live_queue_message(window, bridge, latest_ask, logger, identity_callback, sync_log_callback)
+        if latest_positions is not None:
+            _handle_live_queue_message(window, bridge, latest_positions, logger, identity_callback, sync_log_callback)
 
 
 def _migrate_settings_file(legacy_dir, new_dir, filename, logger=None):

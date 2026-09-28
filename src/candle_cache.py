@@ -128,6 +128,15 @@ def align_down_ms(ms_value, bucket_ms):
     return _align_down(ms_value, bucket_ms)
 
 
+def _child_tf(timeframe_seconds):
+    """V76: largest smaller cached timeframe that divides this one."""
+    best = 1
+    for tf in _TF_TABLES:
+        if tf < timeframe_seconds and timeframe_seconds % tf == 0 and tf > best:
+            best = tf
+    return best
+
+
 def _refresh_derived_table(conn, timeframe_seconds, fresh_1s_candles):
     """Rebuild the tail of one dedicated timeframe table (candles_5s,
     candles_15s, ...) that could have changed because of the just-inserted
@@ -152,8 +161,13 @@ def _refresh_derived_table(conn, timeframe_seconds, fresh_1s_candles):
     bucket_ms = timeframe_seconds * 1000
     boundary_ms = _align_down(fresh_1s_candles[0].bucket_start_ms, bucket_ms)
 
-    base = load_cached_1s_candles(conn, time_from_ms=boundary_ms)
-    derived_candles = merge_candles(base, base_bucket_ms=1000, factor=timeframe_seconds)
+    # V76: merge from the next-smaller table (already refreshed in this same
+    # transaction) instead of every 1s row since the bucket start - e.g. 1D
+    # reads <=6 4h rows, not up to 86,400 1s rows. Same result (pure merge).
+    child_tf = _child_tf(timeframe_seconds)
+    base = _load_candles_from_table(conn, _TF_TABLES[child_tf], time_from_ms=boundary_ms)
+    derived_candles = merge_candles(base, base_bucket_ms=child_tf * 1000,
+                                    factor=timeframe_seconds // child_tf)
     if not derived_candles:
         return 0
 
@@ -188,7 +202,7 @@ def _write_1s_and_derived(conn, fresh_1s_candles):
             ),
         )
 
-        for tf in _TF_TABLES:
+        for tf in sorted(_TF_TABLES):  # V76: ascending, children first
             if tf == 1:
                 continue
             _refresh_derived_table(conn, tf, fresh_1s_candles)

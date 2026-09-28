@@ -600,11 +600,26 @@ class ChartBridge:
             except Exception as e:
                 self._logger.warning(f"get_history_window: failed to build window: {e}")
                 return {"before": [], "after": [], "target_time": None}
-        return {
-            "before": _candles_to_dicts(result.get("before", []), None),
-            "after": _candles_to_dicts(result.get("after", []), None),
-            "target_time": result.get("target_time"),
-        }
+        before = _candles_to_dicts(result.get("before", []), None)
+        after = _candles_to_dicts(result.get("after", []), None)
+        target = result.get("target_time")
+        # V78: a jump that reaches the live edge must also get the live
+        # overlay (seconds not yet flushed to SQLite, up to ~5s); otherwise
+        # the next live push only carries 2 candles and 1s shows a 2-4s gap.
+        try:
+            last_cached_ms = candle_cache.get_last_cached_bucket_start_ms(self._conn)
+            tf_ms = timeframe_seconds * 1000
+            edge = before + after
+            if edge and (last_cached_ms is None or
+                         edge[-1]["time"] * 1000 >= (last_cached_ms // tf_ms) * tf_ms):
+                merged = self._merge_live_overlay(timeframe_seconds, edge)
+                if merged is not edge and target is not None:
+                    target_s = int(target) // 1000  # target_time is ms
+                    before = [c for c in merged if c["time"] <= target_s]
+                    after = [c for c in merged if c["time"] > target_s]
+        except Exception as e:
+            self._logger.debug(f"get_history_window: live overlay merge skipped: {e}")
+        return {"before": before, "after": after, "target_time": target}
 
     def get_history_page_after(self, timeframe_seconds, after_time, limit=None):
         """Return up to ``limit`` candles strictly newer than ``after_time``.
@@ -647,6 +662,14 @@ class ChartBridge:
             else:
                 latest_bucket_ms = (last_cached_ms // (timeframe_seconds * 1000)) * (timeframe_seconds * 1000)
                 is_latest = bool(payload) and payload[-1]["time"] * 1000 >= latest_bucket_ms
+        # V78: same live-overlay seam fix as get_history_window().
+        if is_latest or not payload:
+            merged = self._merge_live_overlay(
+                timeframe_seconds, payload, min_time=int(after_time) + 1
+            )
+            if merged is not payload and merged:
+                payload = merged
+                is_latest = True
         return {"candles": payload, "is_latest": is_latest}
 
     def get_history_page(self, timeframe_seconds, before_time, limit=None):
@@ -1184,6 +1207,81 @@ class ChartBridge:
             return {"ok": True}
         except Exception as e:
             self._logger.warning(f"start_backfill: failed to enqueue request: {e}")
+            return {"ok": False}
+
+    # V83: Trade panel. Like start_backfill, these only enqueue a command
+    # for the sync process (the only MT5 owner); results come back as
+    # window.onTradePositions / window.onTradeHistory via live_queue.
+    def set_trade_feed(self, active, lines=True, comm=None):
+        # V84: lines=True keeps chart SL/TP lines fed while the panel is closed.
+        # V85: comm = user commission per symbol {sym: {"v", "mode"}}.
+        cmd = {"type": "trade_feed", "active": bool(active), "lines": bool(lines)}
+        if isinstance(comm, dict):
+            cmd["comm"] = comm
+        return self._enqueue_trade_cmd(cmd)
+
+    # V85: Trade panel settings saved to disk (localStorage does not survive restarts).
+    _TRADE_SETTINGS = os.path.join(_PROJECT_ROOT, "output", "settings", "trade_settings", "trade_settings.json")
+
+    def get_trade_settings(self):
+        try:
+            with open(self._TRADE_SETTINGS, "r", encoding="utf-8") as f:
+                d = json.load(f)
+            return d if isinstance(d, dict) else {}
+        except Exception:
+            return {}
+
+    def save_trade_settings(self, settings):
+        try:
+            os.makedirs(os.path.dirname(self._TRADE_SETTINGS), exist_ok=True)
+            tmp = self._TRADE_SETTINGS + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(settings or {}, f)
+            os.replace(tmp, self._TRADE_SETTINGS)
+            return True
+        except Exception as e:
+            self._logger.warning(f"save_trade_settings: failed: {e}")
+            return False
+
+    # V84: trade actions. "ts" lets the sync process refuse a stale command.
+    def trade_open(self, params):
+        return self._enqueue_trade_action("trade_open", params)
+
+    def trade_pending(self, params):  # V88
+        return self._enqueue_trade_action("trade_pending", params)
+
+    def trade_cancel(self, params):  # V88
+        return self._enqueue_trade_action("trade_cancel", params)
+
+    def trade_modify(self, params):
+        return self._enqueue_trade_action("trade_modify", params)
+
+    def trade_close(self, params):
+        return self._enqueue_trade_action("trade_close", params)
+
+    def trade_riskfree(self, params):
+        return self._enqueue_trade_action("trade_riskfree", params)
+
+    def _enqueue_trade_action(self, kind, params):
+        cmd = dict(params or {})
+        cmd["type"] = kind
+        cmd["ts"] = time.time()
+        if kind in ("trade_open", "trade_pending"):
+            cmd.setdefault("symbol", self._symbol)
+        return self._enqueue_trade_cmd(cmd)
+
+    def request_trade_history(self, period="week"):
+        period = period if period in ("today", "week", "month") else "week"
+        return self._enqueue_trade_cmd({"type": "trade_history_request", "period": period})
+
+    def _enqueue_trade_cmd(self, cmd):
+        if self._backfill_cmd_queue is None:
+            return {"ok": False}
+        try:
+            self._backfill_cmd_queue.put_nowait(cmd)
+            return {"ok": True}
+        except Exception as e:
+            self._logger.debug(f"trade command enqueue failed: {e}")
             return {"ok": False}
 
     def start_extend(self, target_date):

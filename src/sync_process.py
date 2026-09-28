@@ -32,8 +32,9 @@ import candle_cache
 import mt5_connector
 import symbol_manager
 import tick_explorer
+import trade_engine  # V84
 import tick_store
-from live_candle_buffer import LiveCandleBuffer
+from live_candle_buffer import LiveCandleBuffer, LiveTimeframeState
 from tick_explorer import _msc_to_datetime_utc  # (v46.2) was used below but
 # never imported - every Extend request crashed with a NameError on its very
 # first day, silently swallowed by sync_ticks_forward's on_idle try/except
@@ -468,6 +469,133 @@ def _process_extend_request(mt5, conn, logger, live_queue, cmd, symbol=None):
         logger.debug(f"live_queue.put_nowait (extend done) failed: {e}")
 
 
+# ---- V83: Trade panel data (positions / closed-trade history) -------------
+_TRADE_DIGITS = {}
+
+
+def _trade_digits(mt5, sym):
+    d = _TRADE_DIGITS.get(sym)
+    if d is None:
+        info = mt5.symbol_info(sym)
+        d = int(info.digits) if info is not None else 5
+        _TRADE_DIGITS[sym] = d
+    return d
+
+
+_INIT_R = {}  # V86: ticket -> initial SL distance (pruned when the position closes)
+
+
+def _init_r(mt5, p):
+    t = int(p.ticket)
+    r = _INIT_R.get(t)
+    if r is None or (r == 0 and p.sl):
+        r = 0.0
+        try:  # SL of the opening order = initial SL (survives restarts / risk-free moves)
+            os_ = sorted(mt5.history_orders_get(position=t) or (), key=lambda o: o.time_setup_msc)
+            for o in os_:
+                if float(o.sl) > 0:
+                    r = abs(float(p.price_open) - float(o.sl))
+                    break
+        except Exception:
+            pass
+        if r == 0 and p.sl:
+            r = abs(float(p.price_open) - float(p.sl))
+        _INIT_R[t] = r
+    return r
+
+
+def _collect_positions(mt5, comm=None):
+    out = []
+    comm = comm or {}
+    positions = mt5.positions_get() or ()
+    live = {int(p.ticket) for p in positions}
+    for t in [t for t in _INIT_R if t not in live]:
+        del _INIT_R[t]
+    for p in positions:
+        u = comm.get(p.symbol) or {}  # V85: user commission for this symbol wins
+        fee, be = trade_engine.position_cost(mt5, p, u.get("v"), u.get("mode") or "lot")
+        out.append({
+            "fee": fee, "be": be, "r0": _init_r(mt5, p),
+            "ticket": int(p.ticket), "symbol": p.symbol, "type": int(p.type),
+            "volume": float(p.volume), "price_open": float(p.price_open),
+            "sl": float(p.sl), "tp": float(p.tp),
+            "profit": round(float(p.profit), 2),  # V83: same as MT5 Profit column
+            "digits": _trade_digits(mt5, p.symbol),
+        })
+    out.sort(key=lambda x: x["ticket"], reverse=True)
+    # V88: pending orders, pinned first (kind="pending", type 2..5)
+    pend = []
+    for o in (mt5.orders_get() or ()):
+        if int(o.type) not in trade_engine.PENDING_TYPES:
+            continue
+        pend.append({
+            "kind": "pending", "ticket": int(o.ticket), "symbol": o.symbol, "type": int(o.type),
+            "volume": float(o.volume_current), "price_open": float(o.price_open),
+            "sl": float(o.sl), "tp": float(o.tp), "r0": abs(float(o.price_open) - float(o.sl)) if o.sl else 0.0,
+            "digits": _trade_digits(mt5, o.symbol),
+        })
+    pend.sort(key=lambda x: x["ticket"], reverse=True)
+    return pend + out
+
+
+def _collect_trade_history(mt5, period, symbol=None):
+    """Closed trades of the last `days` days, one row per position.
+    V83 fix: times are BROKER time (MT5 deal timestamps are server-time
+    epochs), and "profit" matches MT5's History Profit column (deal profit
+    only); swap/commission/fee are sent separately."""
+    # V83: period = "today" | "week" (since Saturday 00:00 broker) | "month"
+    # (since the 1st, 00:00 broker).
+    period = str(period or "week")
+    now = datetime.now(timezone.utc)
+    deals = mt5.history_deals_get(now - timedelta(days=34), now + timedelta(days=2))
+    if deals is None:
+        return {"trades": [], "error": "History unavailable"}
+    # Broker "now" = newest server-time stamp we can see.
+    broker_now = 0
+    try:
+        t = mt5.symbol_info_tick(symbol) if symbol else None
+        broker_now = int(t.time) if t is not None else 0
+    except Exception:
+        pass
+    if not broker_now:
+        broker_now = max([int(d.time) for d in deals] or [int(time.time())])
+    day_start = broker_now - broker_now % 86400
+    bdt = datetime.fromtimestamp(broker_now, tz=timezone.utc)
+    if period == "today":
+        cutoff = day_start
+    elif period == "month":
+        cutoff = day_start - (bdt.day - 1) * 86400
+    else:  # week: Saturday = weekday 5
+        cutoff = day_start - ((bdt.weekday() - 5) % 7) * 86400
+    by_pos = {}
+    for d in deals:
+        if int(d.type) not in (0, 1) or not d.position_id:
+            continue
+        g = by_pos.setdefault(int(d.position_id), {"in": [], "out": [], "profit": 0.0, "costs": 0.0})
+        g["profit"] += float(d.profit)
+        g["costs"] += float(d.swap) + float(d.commission) + float(getattr(d, "fee", 0.0))
+        (g["in"] if int(d.entry) == 0 else g["out"]).append(d)
+    trades = []
+    for pid, g in by_pos.items():
+        if not g["out"] or not g["in"]:
+            continue
+        first_in = min(g["in"], key=lambda x: x.time_msc)
+        last_out = max(g["out"], key=lambda x: x.time_msc)
+        if int(last_out.time) < cutoff:
+            continue
+        vol_out = sum(float(x.volume) for x in g["out"])
+        close_px = sum(float(x.price) * float(x.volume) for x in g["out"]) / vol_out if vol_out else float(last_out.price)
+        trades.append({
+            "position_id": pid, "symbol": first_in.symbol, "type": int(first_in.type),
+            "volume": vol_out, "price_open": float(first_in.price), "price_close": close_px,
+            "profit": round(g["profit"], 2), "costs": round(g["costs"], 2),
+            "time_open": int(first_in.time), "time_close": int(last_out.time),
+            "broker_now": broker_now,
+            "digits": _trade_digits(mt5, first_in.symbol),
+        })
+    return {"trades": trades, "broker_now": broker_now}
+
+
 def run(db_path, live_queue, stop_event, backfill_cmd_queue=None, symbol=None, expected_server=None, log_lock=None, session_log_queue=None):
     """Entry point executed inside the child process. Must stay picklable-
     argument-friendly: db_path is a str, live_queue/stop_event are
@@ -644,6 +772,13 @@ def run(db_path, live_queue, stop_event, backfill_cmd_queue=None, symbol=None, e
         # comment below.
         last_sent_bucket_ms = {}
 
+        # v75: remembers the largest configured timeframe's current bucket
+        # start across calls, so the instant that bucket rolls over (top of
+        # the hour/day, per whichever timeframe is largest) the very next
+        # tail rebuild still reaches back to the OLD bucket start for one
+        # push - see the anchor logic below for why this is needed.
+        tail_anchor_state = {"largest_bucket_start_ms": None}
+
         # v57 Update 4: memo for the cache-backed part of the live-tail
         # window (see _build_live_tail_candle_set), plus the last candle
         # payload actually pushed, so a tick that leaves every rendered field
@@ -661,6 +796,8 @@ def run(db_path, live_queue, stop_event, backfill_cmd_queue=None, symbol=None, e
             cache_state["last_refresh_monotonic"] = time.monotonic()
 
         live_buffer = LiveCandleBuffer(conn, logger=logger)
+        # V76: in-RAM current candle per timeframe (seeded once, then O(1)/tick).
+        tf_state = LiveTimeframeState(CHART_TIMEFRAMES_SECONDS)
 
         # V64: live ASK line. The ASK is display-only: it is never aggregated,
         # never stored in SQLite and never enters a candle. Only its newest value
@@ -720,6 +857,7 @@ def run(db_path, live_queue, stop_event, backfill_cmd_queue=None, symbol=None, e
                     return  # nothing to show the chart yet; keep catching up quietly
 
                 cache_state["caught_up"] = True
+                tf_state.reset()  # V76: reseed after reload
                 # The reload about to be sent gives the frontend a fresh,
                 # fully authoritative history, so there is no prior baseline
                 # left to compare future live-tail patches against.
@@ -780,7 +918,29 @@ def run(db_path, live_queue, stop_event, backfill_cmd_queue=None, symbol=None, e
                 # timeframe's current bucket is covered too, since they
                 # all divide evenly into it.
                 largest_tf_ms = max(CHART_TIMEFRAMES_SECONDS) * 1000
-                current_largest_bucket_start_ms = candle_cache.align_down_ms(newest_ms, largest_tf_ms)
+                fresh_largest_bucket_start_ms = candle_cache.align_down_ms(newest_ms, largest_tf_ms)
+
+                # v75: the tick that crosses into a new largest-tf bucket
+                # (top of the hour, or top of the day once a 1d timeframe is
+                # the largest configured one) is exactly when
+                # fresh_largest_bucket_start_ms jumps forward to the NEW
+                # bucket's start. Anchoring the window to that fresh value
+                # immediately would cut the just-closed bucket's own earlier
+                # 1s candles out of this same rebuild, so merge_candles()
+                # would rebuild that closing candle's Open/High/Low from only
+                # its last couple of seconds instead of its true full range -
+                # a wrong value that then never gets corrected, because the
+                # very next rebuild anchors past that bucket entirely and
+                # stops touching it. Keeping the previous (not-yet-advanced)
+                # anchor for exactly this one rebuild guarantees the closing
+                # bucket is still rebuilt from its true start before the
+                # window moves past it.
+                anchor_bucket_start_ms = tail_anchor_state["largest_bucket_start_ms"]
+                if anchor_bucket_start_ms is None:
+                    anchor_bucket_start_ms = fresh_largest_bucket_start_ms
+                current_largest_bucket_start_ms = anchor_bucket_start_ms
+                tail_anchor_state["largest_bucket_start_ms"] = fresh_largest_bucket_start_ms
+
                 tail_from_ms = min(newest_ms - tail_lookback_ms, current_largest_bucket_start_ms)
                 try:
                     # v57 Update 4: same window, same candles, but read from
@@ -791,9 +951,14 @@ def run(db_path, live_queue, stop_event, backfill_cmd_queue=None, symbol=None, e
                     # across the cache/raw join by seeding the fresh part
                     # from the last cached Close - see the helper's own
                     # docstring at the top of this file.
-                    candle_set = _build_live_tail_candle_set(
-                        conn, CHART_TIMEFRAMES_SECONDS, tail_from_ms, live_buffer
-                    )
+                    # V76: full cache+merge rebuild only to (re)seed the
+                    # in-RAM state; normal ticks just fold into it.
+                    if not tf_state.apply(live_buffer):
+                        candle_set = _build_live_tail_candle_set(
+                            conn, CHART_TIMEFRAMES_SECONDS, tail_from_ms, live_buffer
+                        )
+                        tf_state.seed(candle_set, live_buffer, tail_from_ms)
+                    candle_set = tf_state.candle_set()
 
                     # v55.5: the LIVE_PUSH_CANDLES_PER_TF truncation above is
                     # only safe when at most that many candles closed, per
@@ -868,34 +1033,119 @@ def run(db_path, live_queue, stop_event, backfill_cmd_queue=None, symbol=None, e
             last_pushed_payload["data"] = payload
 
             try:
-                live_queue.put_nowait({"type": "candles", "data": payload, "symbol": symbol})
+                msg = {"type": "candles", "data": payload, "symbol": symbol}
+                # V81: broker clock (newest tick time) for the candle countdown;
+                # only at the live edge, never during catch-up/backfill.
+                if is_live_edge and live_buffer.last_msc is not None:
+                    msg["server_msc"] = int(live_buffer.last_msc)
+                live_queue.put_nowait(msg)
             except Exception as e:
                 logger.debug(f"live_queue.put_nowait failed (queue full or window process gone?): {e}")
 
 
-        def check_backfill_queue():
-            # (v44) Non-blocking: only acts when the window process has
-            # actually put something in the queue, so this costs nothing
-            # on every normal live-sync iteration.
-            if backfill_cmd_queue is None:
-                return
+        # V83: Trade panel live feed state (on only while the panel is open).
+        trade_state = {"active": False, "lines": False, "last_push": 0.0, "last_payload": None, "last_specs": 0.0}
+        pending_cmds = []  # V84: non-trade commands (backfill/extend), one per pass
+
+        def push_msg(msg):
             try:
-                cmd = backfill_cmd_queue.get_nowait()
-            except Exception:
+                live_queue.put_nowait(msg)
+            except Exception as e:
+                logger.debug(f"live_queue.put_nowait ({msg.get('type')}) failed: {e}")
+
+        def push_specs(force=False):
+            # V84: symbol volume limits / tick value / balance / open risk for
+            # the lot preview and Max-risk gauge; ~1 s while anything is shown.
+            now = time.monotonic()
+            if not force and now - trade_state["last_specs"] < 1.0:
                 return
-            if not cmd:
+            trade_state["last_specs"] = now
+            try:
+                push_msg({"type": "trade_specs", "data": trade_engine.specs(mt5, symbol)})
+            except Exception as e:
+                logger.debug(f"trade specs failed: {e}")
+
+        def poll_trade_positions():
+            # V84: "lines" mode (panel closed) keeps chart SL/TP lines alive
+            # without profit, so it pushes only when a position changes.
+            if not (trade_state["active"] or trade_state["lines"]):
                 return
+            now = time.monotonic()
+            if now - trade_state.get("last_poll", 0.0) < 0.1:
+                return
+            trade_state["last_poll"] = now
+            push_specs()
+            try:
+                data = _collect_positions(mt5, trade_state.get("comm"))
+            except Exception as e:
+                logger.debug(f"positions_get failed: {e}")
+                return
+            if not trade_state["active"]:
+                for d in data:
+                    d.pop("profit", None)
+            if data == trade_state["last_payload"] and now - trade_state["last_push"] < 3.0:
+                return
+            trade_state["last_payload"] = data
+            trade_state["last_push"] = now
+            push_msg({"type": "positions", "data": data})
+
+        def run_trade_cmd(cmd):
+            t0 = time.monotonic()
+            res = trade_engine.handle(mt5, cmd, symbol)
+            res["req_id"] = cmd.get("req_id")
+            res["kind"] = cmd.get("type")
+            logger.info(f"Trade {cmd.get('type')} -> {res.get('msg')} ({(time.monotonic() - t0) * 1000:.0f} ms)")
+            push_msg({"type": "trade_result", "data": res})
+            # Refresh lines/list/risk at once instead of waiting for the poll.
+            trade_state["last_poll"] = 0.0
+            trade_state["last_payload"] = None
+            poll_trade_positions()
+            push_specs(force=True)
+
+        def check_backfill_queue():
+            # (v44) Non-blocking. V84: drains everything queued; trade
+            # commands run immediately (latency = one loop pass), slow
+            # backfill/extend jobs wait their turn one per pass.
+            poll_trade_positions()
+            if backfill_cmd_queue is not None:
+                for _ in range(32):
+                    try:
+                        cmd = backfill_cmd_queue.get_nowait()
+                    except Exception:
+                        break
+                    if not cmd:
+                        continue
+                    cmd_type = cmd.get("type")
+                    if cmd_type in ("trade_open", "trade_modify", "trade_close", "trade_riskfree", "trade_pending", "trade_cancel"):
+                        run_trade_cmd(cmd)
+                    elif cmd_type == "trade_feed":
+                        trade_state["active"] = bool(cmd.get("active"))
+                        trade_state["lines"] = bool(cmd.get("lines", trade_state["lines"]))
+                        if isinstance(cmd.get("comm"), dict):
+                            trade_state["comm"] = cmd["comm"]
+                        trade_state["last_push"] = 0.0
+                        trade_state["last_payload"] = None
+                        trade_state["last_poll"] = 0.0
+                        poll_trade_positions()
+                        push_specs(force=True)
+                    elif cmd_type == "trade_history_request":
+                        try:
+                            data = _collect_trade_history(mt5, cmd.get("period") or "week", symbol=symbol)
+                        except Exception as e:
+                            logger.debug(f"trade history failed: {e}")
+                            data = {"trades": [], "error": "History unavailable"}
+                        push_msg({"type": "trade_history", "data": data})
+                    else:
+                        pending_cmds.append(cmd)
+            if not pending_cmds:
+                return
+            cmd = pending_cmds.pop(0)
             cmd_type = cmd.get("type")
             if cmd_type == "backfill_request":
                 _process_backfill_request(mt5, conn, logger, live_queue, cmd, symbol=symbol)
             elif cmd_type == "extend_request":
                 _process_extend_request(mt5, conn, logger, live_queue, cmd, symbol=symbol)
-            # v57 Update 4: Backfill/Extend rewrite candle rows through
-            # refresh_range(), which can touch rows INSIDE the live-tail
-            # window without moving the newest cached bucket that the memo is
-            # keyed on. Dropping the memo here is a single dict clear and
-            # removes that edge case entirely rather than relying on the next
-            # ordinary refresh() to invalidate it.
+            # v57 Update 4 note (memo drop after backfill) kept below.
 
         tick_explorer.sync_ticks_forward(
             mt5, conn, logger, on_new_ticks=push_live_tick, on_status=send_status,

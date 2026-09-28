@@ -69,6 +69,11 @@
     // the generic addSeries(SeriesTypeDefinition, options) call, passing the
     // exported CandlestickSeries definition. Options themselves are
     // unchanged, so none of the calculation/rendering behavior below moves.
+    // V80: free (non-magnetic) vertical crosshair.
+    if (App.FreeCrosshair) App.FreeCrosshair.attach(App.chart, dom.chartContainer, function () {
+      return { candles: App.candlesByTf[App.currentTf], tf: App.currentTf };
+    });
+
     App.series = App.chart.addSeries(LightweightCharts.CandlestickSeries, {
       upColor: "#3fb68b",
       downColor: "#e5484d",
@@ -1317,6 +1322,7 @@
         var visible = App.chart.timeScale().getVisibleLogicalRange();
         w.newer = candles;
         setActiveChartData(tf, visible, 0);
+        if (viewportLostData(App.chart, (App.candlesByTf[tf] || []).length)) App.chart.timeScale().scrollToRealTime(); // V79
         // v41 perf: a periodic cache-ready refresh is a distinct trigger
         // from window.onLiveCandles (see CANDLE_CACHE_REFRESH_INTERVAL_
         // SECONDS in config.py) and can replace the visible candle data
@@ -1331,10 +1337,50 @@
   // ---- Live updates (pushed from Python via window.evaluate_js) -----------
   // Live state transitions are calculated by SlidingWindow; this adapter only
   // reflects the resulting state into the chart.
+  // V79: live self-heal. After an internet/MT5 drop the live edge could end
+  // up (a) scrolled far past the data (blank chart, only the price label
+  // moving - zoom keeps the right offset so it never recovers) or (b) missing
+  // candles when a reload was lost. Both are detected here cheaply per push
+  // and fixed exactly like a timeframe switch would (fresh live partition).
+  var liveHealInFlight = false;
+  function viewportLostData(chart, len) {
+    if (!chart || !(len > 0)) return false;
+    var r = chart.timeScale().getVisibleLogicalRange();
+    return !!(r && (r.from > len - 1 || r.to < 0));
+  }
+  function missedLiveCandles(w, tail) {
+    var live = w && w.rightIsLive && w.newer;
+    if (!live || !live.length || !tail || !tail.length) return false;
+    // tail = [previous, current]; if even the previous candle is newer than
+    // everything resident, at least one closed candle never reached us.
+    return tail.length > 1 && tail[0].time > live[live.length - 1].time;
+  }
+  function healLiveEdge(tf) {
+    if (liveHealInFlight || App.replayActive) return;
+    liveHealInFlight = true;
+    var gen = App.historyGeneration;
+    window.pywebview.api.get_history_set(tf).then(function (data) {
+      liveHealInFlight = false;
+      if (gen !== App.historyGeneration || App.currentTf !== tf || App.replayActive) return;
+      var w = getWindow(tf);
+      if (w && !w.rightIsLive) return; // user moved into history meanwhile
+      var candles = (data && data[String(tf)]) || [];
+      if (!candles.length) return;
+      rememberInitialPartition(tf, candles);
+      App.series.setData(candles);
+      App.chart.timeScale().scrollToRealTime();
+      if (App.DrawingEngine && App.DrawingEngine.requestRender) App.DrawingEngine.requestRender();
+    }).catch(function (err) {
+      liveHealInFlight = false;
+      console.error("healLiveEdge failed:", err);
+    });
+  }
+
   function mergeAuthoritativeTail(tf, tailCandles) {
     if (tf !== App.currentTf || !tailCandles || !tailCandles.length) return;
 
     var w = getWindow(tf);
+    if (missedLiveCandles(w, tailCandles)) { healLiveEdge(tf); return; } // V79
     var visibleLogical = App.chart ? App.chart.timeScale().getVisibleLogicalRange() : null;
     var result = App.SlidingWindow.mergeLiveTail(w, tailCandles, App.LAZY_LOAD_CHUNK);
     if (!result.changed) return;
@@ -1356,6 +1402,7 @@
         ? 0
         : (atLiveEdge ? -result.rolled.length : 0);
       setActiveChartData(tf, visibleLogical, logicalShift);
+      if (viewportLostData(App.chart, (App.candlesByTf[tf] || []).length)) App.chart.timeScale().scrollToRealTime(); // V79
       return;
     }
 
@@ -1368,7 +1415,13 @@
       } else if (!activeArr.length || liveBar.time > activeArr[activeArr.length - 1].time) {
         activeArr.push(liveBar);
       }
-      if (App.series) App.series.update(liveBar);
+      if (App.series) {
+        try { App.series.update(liveBar); } catch (e) { healLiveEdge(tf); return; } // V79
+      }
+    }
+    // V79: blank-chart guard (view drifted entirely right/left of the data).
+    if (w && w.rightIsLive && viewportLostData(App.chart, activeArr.length)) {
+      App.chart.timeScale().scrollToRealTime();
     }
   }
 
@@ -1387,7 +1440,8 @@
     mergeAuthoritativeTail(tf, liveTail);
   }
 
-  window.onLiveCandles = function (candleSetByTf) {
+  window.onLiveCandles = function (candleSetByTf, serverMsc) {
+    if (App.CandleCountdown) App.CandleCountdown.onBrokerTime(serverMsc); // V81
     if (!candleSetByTf || App.currentTf === null) return;
     // v40: while Bar Replay is active the chart is deliberately showing a
     // past point in time (replayed forward at a chosen speed) — real live
@@ -1432,6 +1486,8 @@
     // on every candle close; this export lets it reuse the fix instead of
     // duplicating it.
     preserveLogicalRange: preserveLogicalRange,
+    viewportLostData: viewportLostData, // V79
+    missedLiveCandles: missedLiveCandles, // V79
     syncAskLine: syncAskLine,
     loadInitialLiveAsk: loadInitialLiveAsk,
     // v40 Update 4: lets replay-bar.js update the timeframe dropdown's

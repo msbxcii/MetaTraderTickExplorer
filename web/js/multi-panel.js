@@ -268,6 +268,10 @@
     if (App.CanvasSettings && App.CanvasSettings.applyToPanel) {
       App.CanvasSettings.applyToPanel(panel);
     }
+    // V80: free (non-magnetic) vertical crosshair.
+    if (App.FreeCrosshair) App.FreeCrosshair.attach(chart, mount, function () {
+      return { candles: panel.candles, tf: panel.tf };
+    });
 
     var drawSurface = App.DrawingEngine.createPanelSurface({
       chart: chart,
@@ -331,6 +335,10 @@
       // Window edge-load logic, not the overlay repaint.
       if (App.DrawingEngine.requestRender) App.DrawingEngine.requestRender();
       if (!range || panel.tf === null || !panel.window) return;
+      // V77: same guard as the primary chart's App.jumpTransactionActive -
+      // range callbacks fired by a jump's own setData()/re-centering must not
+      // start an edge load that later re-anchors the view (half-hidden bug).
+      if (panel.jumpTransactionActive) return;
       var arr = panel.candles || [];
       var atLeft = range.from < App.LAZY_LOAD_EDGE_BARS;
       var atRight = range.to > (arr.length - 1 - App.LAZY_LOAD_EDGE_BARS);
@@ -626,12 +634,17 @@
 
     var requestGeneration = panel.requestGeneration;
     panel.loadingDirection = direction;
+    var loadToken = panel.loadToken = {}; // V77
     var request = direction === "older"
       ? window.pywebview.api.get_history_page(panel.tf, source[0].time, App.LAZY_LOAD_CHUNK)
       : window.pywebview.api.get_history_page_after(panel.tf, source[source.length - 1].time, App.LAZY_LOAD_CHUNK);
 
     request.then(function (payload) {
-      if (requestGeneration !== panel.requestGeneration || App.replayActive || panel.tf === null) return;
+      if (requestGeneration !== panel.requestGeneration || App.replayActive || panel.tf === null) {
+        // V77: a superseded load must not leave the edge loader locked.
+        if (panel.loadToken === loadToken) { panel.loadingDirection = null; panel.loadToken = null; }
+        return;
+      }
 
       var candles = Array.isArray(payload) ? payload : ((payload && payload.candles) || []);
       var pageIsLatest = !!(payload && !Array.isArray(payload) && payload.is_latest);
@@ -1096,6 +1109,7 @@
         // stays in sync with the price scale's real state.
         if (panel.setAutoFit) panel.setAutoFit(true);
 
+        var jumpToken = panel.jumpTransactionActive = {}; // V77 (token)
         panel.series.setData(panel.candles);
 
         // Center the target in the view, matching jump-time.js's own
@@ -1109,8 +1123,15 @@
         var to = targetIndex + half;
         if (from < 0) { to -= from; from = 0; }
         panel.chart.timeScale().setVisibleLogicalRange({ from: from, to: to });
+        // V77: release after the view settles (2 frames), like the primary.
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            if (panel.jumpTransactionActive === jumpToken) panel.jumpTransactionActive = false;
+          });
+        });
       });
     }).catch(function (err) {
+      panel.jumpTransactionActive = false;
       console.error("Companion Jump Time failed:", tf, err);
     });
   }
@@ -1151,6 +1172,12 @@
       // regardless of whether the candle series itself changed below.
       updatePanelPriceLine(p, liveBar.close);
       if (!p.window) return;
+      // V79: missed closed candles (lost reload after a drop) -> rebuild the
+      // live partition like a timeframe switch instead of gluing a gap.
+      if (App.ChartCore.missedLiveCandles && App.ChartCore.missedLiveCandles(p.window, tail)) {
+        healCompanionLive(p);
+        return;
+      }
       var visibleLogical = p.chart.timeScale().getVisibleLogicalRange();
       var result = App.SlidingWindow.mergeLiveTail(p.window, tail, App.LAZY_LOAD_CHUNK);
       if (!result.changed) return;
@@ -1180,13 +1207,49 @@
             to: visibleLogical.to + logicalShift
           });
         }
+        guardCompanionViewport(p); // V79
         return;
       }
 
       p.candles = App.SlidingWindow.combineRender(p.window);
       var active = p.window.newer || [];
       var livePart = active.length ? active[active.length - 1] : null;
-      if (livePart) p.series.update(livePart);
+      if (livePart) {
+        try { p.series.update(livePart); } catch (e) { healCompanionLive(p); return; } // V79
+      }
+      guardCompanionViewport(p);
+    });
+  }
+
+  // V79: blank-chart guard + live self-heal for companion panels.
+  function guardCompanionViewport(p) {
+    if (p.window && p.window.rightIsLive && App.ChartCore.viewportLostData &&
+        App.ChartCore.viewportLostData(p.chart, (p.candles || []).length)) {
+      p.chart.timeScale().scrollToRealTime();
+    }
+  }
+
+  function healCompanionLive(p) {
+    if (p.healInFlight || p.tf === null || App.replayActive) return;
+    p.healInFlight = true;
+    var tf = p.tf;
+    var requestGeneration = ++p.requestGeneration;
+    window.pywebview.api.get_history_set(tf).then(function (data) {
+      p.healInFlight = false;
+      if (requestGeneration !== p.requestGeneration || p.tf !== tf || App.replayActive) return;
+      var candles = (data && data[String(tf)]) || [];
+      if (!candles.length) return;
+      p.window = App.SlidingWindow.initialLive(candles);
+      p.candles = App.SlidingWindow.combine(p.window);
+      p.edgeLoadArmed.older = true;
+      p.edgeLoadArmed.newer = true;
+      p.loadingDirection = null;
+      p.loadToken = null;
+      p.series.setData(p.candles);
+      p.chart.timeScale().scrollToRealTime();
+    }).catch(function (err) {
+      p.healInFlight = false;
+      console.error("Companion live heal failed:", tf, err);
     });
   }
 
@@ -1208,6 +1271,7 @@
         if (visibleLogical) {
           try { p.chart.timeScale().setVisibleLogicalRange(visibleLogical); } catch (e) {}
         }
+        guardCompanionViewport(p); // V79
       }).catch(function (err) {
         console.error("Companion panel cache refresh failed:", p.tf, err);
       });
@@ -1215,8 +1279,8 @@
   }
 
   var originalOnLiveCandles = window.onLiveCandles;
-  window.onLiveCandles = function (candleSetByTf) {
-    if (originalOnLiveCandles) originalOnLiveCandles(candleSetByTf);
+  window.onLiveCandles = function (candleSetByTf, serverMsc) {
+    if (originalOnLiveCandles) originalOnLiveCandles(candleSetByTf, serverMsc);
     feedLiveCandles(candleSetByTf);
   };
 

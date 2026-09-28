@@ -3745,6 +3745,126 @@
     transition: opacity 0.15s ease;
   }
   .hint-toast.show { opacity: 1; }
+
+  /* ---- V83: Trade panel. Same open/close width animation and header-
+     toggle styling as the Object Tree; colors from the theme tokens so it
+     follows Dark/Light Default automatically. */
+  #trade-panel-toggle {
+    appearance: none; border: none; background: transparent; color: var(--muted);
+    width: 26px; height: 26px; border-radius: 4px; display: flex;
+    align-items: center; justify-content: center; cursor: pointer; padding: 0;
+  }
+  #trade-panel-toggle svg { width: 14px; height: 14px; display: block; }
+  #trade-panel-toggle:hover { color: var(--text); background: var(--ov4); }
+  #trade-panel-toggle.active { background: var(--gold); color: #1a1500; }
+
+  .trade-panel {
+    --tp-panel2: color-mix(in srgb, var(--text) 3%, var(--panel));
+    --tp-gold-bg: color-mix(in srgb, var(--tp-accent) 22%, transparent);
+    --tp-up-bg: color-mix(in srgb, var(--up) 15%, transparent);
+    --tp-down-bg: color-mix(in srgb, var(--down) 15%, transparent);
+    --tp-blue: #3b82f6;
+    /* V87: panel accent follows Dark/Light theme, not the Selector color */
+    --tp-accent: #e0b23a;
+    position: relative; flex: 0 0 auto; width: 0; overflow: hidden;
+    background: var(--panel); border-left: 0 solid var(--border);
+    display: flex; flex-direction: column; transition: width 0.18s ease;
+    font-size: 12px; color: var(--text);
+  }
+  .trade-panel.open { width: 310px; border-left: 1px solid var(--border); box-shadow: -8px 0 24px rgba(0,0,0,0.35); }
+  .trade-panel-inner { width: 310px; flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+  .tp-tabs { display: flex; border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+  .tp-tab { flex: 1; text-align: center; padding: 10px 0 9px; font-size: 12.5px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
+  .tp-tab:hover { color: var(--text); }
+  .tp-tab.active { color: var(--text); border-bottom-color: var(--tp-accent); }
+  .tp-content { flex: 1 1 auto; min-height: 0; padding: 12px; display: flex; flex-direction: column; overflow: hidden; }
+  .tp-settings { flex: 0 0 auto; }
+  .tp-field-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .tp-field-label { width: 84px; flex-shrink: 0; color: var(--muted); font-size: 11.5px; }
+  .tp-input-wrap { flex: 1; display: flex; border: 1px solid var(--border); border-radius: 4px; background: var(--tp-panel2); overflow: hidden; }
+  .tp-input-wrap:focus-within { border-color: var(--tp-accent); }
+  .tp-input-wrap input { flex: 1; min-width: 0; background: transparent; border: none; outline: none; color: var(--text); padding: 6px 8px; font: inherit; font-size: 12.5px; }
+  .tp-unit-toggle { display: flex; border-left: 1px solid var(--border); }
+  .tp-unit-toggle button { border: none; background: transparent; color: var(--muted); font-size: 11px; padding: 0 9px; cursor: pointer; }
+  .tp-unit-toggle button.active { background: var(--tp-gold-bg); color: var(--tp-accent); }
+  .tp-box { background: var(--tp-panel2); border: 1px solid var(--border); border-radius: 5px; padding: 8px 12px; margin-bottom: 8px; }
+  .tp-kv { display: flex; justify-content: space-between; margin: 2px 0; }
+  .tp-kv .k { color: var(--muted); }
+  .tp-kv .v { font-weight: 600; }
+  .tp-lots { color: var(--tp-accent); }
+  .tp-money-risk { color: var(--down); }
+  .tp-chip-row, .tp-hist-filters { display: flex; gap: 6px; flex: 1; }
+  .tp-hist-filters { flex: 0 0 auto; margin-bottom: 10px; }
+  .tp-chip { flex: 1; text-align: center; padding: 5px 0; border-radius: 4px; border: 1px solid var(--border); background: var(--tp-panel2); color: var(--muted); font-size: 11.5px; cursor: pointer; }
+  .tp-chip:hover { color: var(--text); }
+  .tp-chip.selected { border-color: var(--tp-accent); color: var(--tp-accent); background: var(--tp-gold-bg); }
+  .tp-gauge-track { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; margin-top: 8px; }
+  .tp-gauge-fill { height: 100%; width: 0; background: var(--up); border-radius: 3px; transition: width .2s; }
+  .tp-gauge-labels { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); margin-top: 4px; }
+  .tp-hint { font-size: 10.5px; color: var(--muted); margin-top: 4px; line-height: 1.45; }
+  .tp-open-box { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; border-top: 1px solid var(--border); padding-top: 8px; }
+  .tp-select-all { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); margin-bottom: 8px; cursor: pointer; }
+  .trade-panel input[type=checkbox] { accent-color: var(--tp-accent); margin: 0; }
+  .tp-bulk-actions { display: flex; gap: 6px; margin-bottom: 8px; }
+  .tp-bulk-btn { flex: 1; padding: 6px 0; font-size: 11px; border-radius: 4px; border: 1px solid var(--border); background: var(--tp-panel2); cursor: pointer; }
+  .tp-bulk-btn.rf, .tp-item-actions .rf { color: var(--tp-blue); }
+  .tp-bulk-btn.close, .tp-item-actions .close { color: var(--down); }
+  .tp-bulk-btn:hover, .tp-item-actions button:hover { background: var(--ov8); }
+  .tp-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 2px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+  .tp-list::-webkit-scrollbar { width: 6px; }
+  .tp-list::-webkit-scrollbar-track { background: transparent; }
+  .tp-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .tp-item { background: var(--tp-panel2); border: 1px solid var(--border); border-radius: 5px; padding: 8px 9px; flex: 0 0 auto; }
+  .tp-row1 { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .tp-row1 > span { display: flex; align-items: center; gap: 6px; }
+  .tp-sym { font-weight: 700; font-size: 12px; }
+  .tp-side { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 3px; }
+  .tp-side.buy { background: var(--tp-up-bg); color: var(--up); }
+  .tp-side.sell { background: var(--tp-down-bg); color: var(--down); }
+  .tp-pl { font-weight: 700; font-size: 12px; }
+  .tp-pos { color: var(--up); }
+  .tp-neg { color: var(--down); }
+  .tp-be { color: var(--tp-accent); } /* V85 */
+  .tp-row2 { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); }
+  .tp-item-actions { display: flex; gap: 5px; margin-top: 6px; }
+  .tp-item-actions button { flex: 1; font-size: 10px; padding: 5px 0; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--muted); cursor: pointer; }
+  /* V83: off-screen history rows skip layout/paint (keeps panel open/close smooth). */
+  #tp-hist-list .tp-item { content-visibility: auto; contain-intrinsic-size: auto 52px; }
+  .trade-panel:not(.open) .tp-content { visibility: hidden; }
+  body.light-theme .trade-panel { --tp-accent: #9a6a00; --tp-blue: #1d5fd6; }
+  .tp-tab.active { border-bottom-color: var(--text); }
+  .tp-chip.selected, .tp-unit-toggle button.active { color: var(--text); border-color: var(--text); background: var(--ov8); }
+  .tp-lots { color: var(--tp-accent); }
+  .tp-row2 .tp-be { color: inherit; } /* V87: BE styled like entry */
+  .trade-panel input[type=checkbox] { accent-color: var(--text); }
+  .tp-input-wrap:focus-within { border-color: var(--muted); }
+  /* V87: BE right after entry; hover focus dims the other trades */
+  .tp-row2 .tp-be { margin-left: 8px; }
+  #tp-open-list .tp-item { transition: opacity .12s; }
+  #tp-open-list.tp-focus .tp-item:not(.tp-focused) { opacity: .35; }
+  /* V84: trade toasts + fast-order cursor */
+  #tl-toasts { position: fixed; left: 50%; bottom: 46px; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 6px; pointer-events: none; align-items: center; }
+  .tl-toast { background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--up); color: var(--text); font-size: 12px; padding: 7px 12px; border-radius: 5px; box-shadow: 0 6px 18px rgba(0,0,0,.35); max-width: 460px; }
+  .tl-toast.err { border-left-color: var(--down); }
+  .tl-toast.info { border-left-color: var(--gold); }
+  /* V88: order preview risk/reward boxes */
+  .tl-box { position: absolute; left: 0; top: 0; bottom: 0; pointer-events: none; z-index: 3; }
+  .tl-box > div { position: absolute; left: 0; right: 0; }
+  .tl-box-r { background: color-mix(in srgb, var(--down) 16%, transparent); }
+  .tl-box-g { background: color-mix(in srgb, var(--up) 16%, transparent); }
+  .tp-muted { color: var(--muted); font-weight: 500; font-size: 11px; }
+  .tl-armed, .tl-armed * { cursor: crosshair !important; }
+  .tl-hover, .tl-hover * { cursor: ns-resize !important; }
+  .tp-item-actions button:disabled, .tp-bulk-btn:disabled { opacity: .45; pointer-events: none; }
+  .tp-fee-box { display: flex; justify-content: space-between; align-items: center; background: var(--tp-panel2); border: 1px solid var(--border); border-radius: 5px; padding: 8px 12px; margin-bottom: 12px; font-size: 11.5px; color: var(--muted); flex: 0 0 auto; }
+  .tp-fee-tag { font-size: 10px; font-weight: 600; color: var(--muted); background: color-mix(in srgb, var(--muted) 16%, transparent); padding: 2px 6px; border-radius: 3px; margin-right: 6px; }
+  .tp-fee-tag.big { font-size: 12px; padding: 3px 8px; margin: 0; }
+  .tp-empty { color: var(--muted); text-align: center; padding: 24px 8px; font-size: 11.5px; }
+  .tp-day-label { font-size: 10.5px; color: var(--muted); letter-spacing: .4px; margin: 6px 0 0; flex: 0 0 auto; }
+  .tp-hist-summary { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; flex: 0 0 auto; }
+  .tp-stat { background: var(--tp-panel2); border: 1px solid var(--border); border-radius: 5px; padding: 8px; text-align: center; }
+  .tp-stat .num { font-size: 14px; font-weight: 700; }
+  .tp-stat .lbl { font-size: 10px; color: var(--muted); margin-top: 3px; }
 </style>
 </head>
 <body>
@@ -3819,6 +3939,10 @@
              surface's top-right corner and into the header's tool cluster,
              as its own single-icon pill matching the layout switcher's box
              style, right after it. -->
+        <!-- V83: Trade panel toggle, left of Object Tree. -->
+        <div class="pill-group objects-toggle-wrap">
+          <button id="trade-panel-toggle" type="button" title="Trade"></button>
+        </div>
         <div class="pill-group objects-toggle-wrap">
           <button id="objects-panel-toggle" type="button" title="Object Tree"></button>
         </div>
@@ -3885,6 +4009,84 @@
             </span>
           </div>
           <div id="objects-panel-list" class="objects-panel-list"></div>
+        </div>
+      </div>
+
+      <!-- V83: Trade panel (History / Trade tabs), sibling of Object Tree. -->
+      <div id="trade-panel" class="trade-panel">
+        <div class="trade-panel-inner">
+          <div class="tp-tabs">
+            <div class="tp-tab active" data-tab="trade">Trade</div>
+            <div class="tp-tab" data-tab="history">History</div>
+          </div>
+
+          <div class="tp-content" id="tp-tab-trade">
+            <div class="tp-settings">
+              <div class="tp-field-row">
+                <div class="tp-field-label">Risk</div>
+                <div class="tp-input-wrap">
+                  <input type="text" id="tp-risk-input" value="1.0" inputmode="decimal">
+                  <div class="tp-unit-toggle" id="tp-risk-unit"><button type="button" class="active" data-u="pct">%</button><button type="button" data-u="money">$</button></div>
+                </div>
+              </div>
+              <!-- V85: commission ROUND TRIP (entry+exit), $/lot or % of trade value, saved per symbol. Empty = auto. -->
+              <div class="tp-field-row">
+                <div class="tp-field-label" title="Round trip (entry + exit), per symbol. $/lot = fixed money per lot, % = percent of trade value. Leave empty to auto-detect from your deals on this symbol.">Commission</div>
+                <div class="tp-input-wrap">
+                  <input type="text" id="tp-comm-input" value="" placeholder="Auto" inputmode="decimal">
+                  <div class="tp-unit-toggle" id="tp-comm-unit"><button type="button" class="active" data-u="lot">$/lot</button><button type="button" data-u="pct">%</button></div>
+                </div>
+              </div>
+              <div class="tp-box tp-risk-summary">
+                <div class="tp-kv"><span class="k">Calculated lot</span><span class="v tp-lots" id="tp-calc-lot">—</span></div>
+                <div class="tp-kv"><span class="k">Risk amount</span><span class="v tp-money-risk" id="tp-risk-amount">—</span></div>
+                <div class="tp-hint" id="tp-lot-hint">Middle-click the chart, then left-click to place the stop loss.</div>
+              </div>
+              <div class="tp-field-row">
+                <div class="tp-field-label">Take profit lock</div>
+                <div class="tp-chip-row" id="tp-chip-row">
+                  <div class="tp-chip" data-rr="0" title="No TP">Off</div><div class="tp-chip" data-rr="1">TP1</div><div class="tp-chip selected" data-rr="2">TP2</div><div class="tp-chip" data-rr="3">TP3</div><div class="tp-chip" data-rr="4">TP4</div>
+                </div>
+              </div>
+              <div class="tp-box">
+                <div class="tp-field-row" style="margin-bottom:0">
+                  <div class="tp-field-label">Max risk</div>
+                  <div class="tp-input-wrap">
+                    <input type="text" id="tp-maxrisk-input" value="5.0" inputmode="decimal">
+                    <div class="tp-unit-toggle" id="tp-maxrisk-unit"><button type="button" class="active" data-u="pct">%</button><button type="button" data-u="money">$</button></div>
+                  </div>
+                </div>
+                <div class="tp-gauge-track"><div class="tp-gauge-fill" id="tp-gauge-fill"></div></div>
+                <div class="tp-gauge-labels"><span id="tp-open-risk">Open risk —</span><span id="tp-risk-limit">Limit 5.0%</span></div>
+                <div class="tp-hint">New trades are blocked once combined open risk reaches the limit above (0 = off).</div>
+              </div>
+            </div>
+
+            <div class="tp-open-box">
+              <label class="tp-select-all"><input type="checkbox" id="tp-select-all"> Select all</label>
+              <div class="tp-bulk-actions">
+                <button type="button" class="tp-bulk-btn rf" id="tp-bulk-rf">Risk-free selected</button>
+                <button type="button" class="tp-bulk-btn close" id="tp-bulk-close">Close selected</button>
+              </div>
+              <div class="tp-list" id="tp-open-list"></div>
+            </div>
+          </div>
+
+          <div class="tp-content" id="tp-tab-history" style="display:none">
+            <div class="tp-hist-filters" id="tp-hist-filters">
+              <div class="tp-chip" data-period="today">Today</div>
+              <div class="tp-chip selected" data-period="week">Last Week</div>
+              <div class="tp-chip" data-period="month">Last Month</div>
+            </div>
+            <div class="tp-hist-summary">
+              <div class="tp-stat"><div class="num" id="tp-hist-net">—</div><div class="lbl">Net P/L</div></div>
+              <div class="tp-stat"><div class="num" id="tp-hist-count">—</div><div class="lbl">Trades</div></div>
+              <div class="tp-stat"><div class="num" id="tp-hist-win">—</div><div class="lbl">Win rate</div></div>
+            </div>
+            <!-- V84: total fees (commission + swap + fee) of the period -->
+            <div class="tp-fee-box"><span>Total fees this period</span><span class="tp-fee-tag big" id="tp-hist-fees">—</span></div>
+            <div class="tp-list" id="tp-hist-list"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -4529,7 +4731,12 @@
 <script src="js/drawing-engine.js"></script>
 <script src="js/drawing-persistence.js"></script>
 <script src="js/object-panel.js"></script>
+<script src="js/trade-panel.js"></script>
+<script src="js/trade-lines.js"></script>
+<script src="js/free-crosshair.js"></script>
 <script src="js/chart-core.js"></script>
+<script src="js/candle-countdown.js"></script>
+<script src="js/ruler.js"></script>
 <script src="js/multi-panel.js"></script>
 <script src="js/keyboard-shortcuts.js"></script>
 <script src="js/jump-time.js"></script>

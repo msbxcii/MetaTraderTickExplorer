@@ -26,6 +26,8 @@ class LiveCandleBuffer:
         )
         self._seed_rebuild_pending = self._seed_bucket is not None
         self._last_msc = None
+        # V76: 1s buckets touched since the last drain_dirty() call.
+        self._dirty = OrderedDict()
 
     @property
     def last_msc(self):
@@ -85,10 +87,19 @@ class LiveCandleBuffer:
                 state[3] = bid
                 state[4] += 1
 
+            self._dirty[bucket] = state
             self._last_msc = time_msc
             added += 1
 
         return added
+
+    def drain_dirty(self):
+        """V76: return [(bucket, o, h, l, c, n)] touched since the last call."""
+        if not self._dirty:
+            return []
+        out = [(b, st[0], st[1], st[2], st[3], st[4]) for b, st in self._dirty.items()]
+        self._dirty.clear()
+        return out
 
     def _previous_close(self, bucket):
         # Most transitions are satisfied from the already-retained newest
@@ -129,3 +140,94 @@ class LiveCandleBuffer:
     def flush(self):
         """Persist pending candle state and retain only the newest live bucket."""
         return self._persist_pending(clear_all=False)
+
+
+class LiveTimeframeState:
+    """V76: per-timeframe current candles kept in RAM.
+
+    Seeded once from cache + pending 1s state; afterwards only the 1s
+    candles touched by new ticks are folded in (O(1) per timeframe), instead
+    of re-merging the whole current largest-timeframe bucket on every tick.
+    Result is identical to merge_candles() over the 1s stream.
+    """
+
+    def __init__(self, timeframes, keep=3):
+        self._tfs = sorted(set(int(t) for t in timeframes))
+        self._keep = max(2, int(keep))
+        self._buffer = None
+        self.reset()
+
+    def reset(self):
+        self._candles = None  # tf -> list of [bucket, o, h, l, c, n]
+        self._last_1s = None  # (bucket, tick_count) already included
+
+    @property
+    def ready(self):
+        return self._candles is not None
+
+    def seed(self, candle_set, live_buffer, tail_from_ms=None):
+        self._buffer = live_buffer
+        live_buffer.drain_dirty()  # everything so far is inside candle_set
+        cands = {}
+        for tf in self._tfs:
+            src = candle_set.get(tf) or []
+            if tail_from_ms is not None:
+                # drop candles cut by the window's left edge (incomplete)
+                src = [c for c in src if c[0] >= tail_from_ms]
+            cands[tf] = [list(c) for c in src[-self._keep:]]
+        one = candle_set.get(1)
+        if one is None:
+            one = []
+            pend = live_buffer.snapshot_candles()
+            if pend:
+                one = pend
+        self._last_1s = (one[-1][0], one[-1][5]) if one else None
+        self._candles = cands
+
+    def apply(self, live_buffer):
+        """Fold newly touched 1s candles in. Returns False if a reseed is needed."""
+        if self._candles is None or live_buffer is not self._buffer:
+            return False
+        for b, o, h, l, c, n in live_buffer.drain_dirty():
+            last = self._last_1s
+            if last is not None and b < last[0]:
+                continue  # already included (older second)
+            if last is not None and b == last[0]:
+                delta = n - last[1]
+                for tf in self._tfs:
+                    cur = self._candles[tf]
+                    if not cur:
+                        return False
+                    k = cur[-1]
+                    if h > k[2]:
+                        k[2] = h
+                    if l < k[3]:
+                        k[3] = l
+                    k[4] = c
+                    k[5] += delta
+            else:
+                for tf in self._tfs:
+                    cur = self._candles[tf]
+                    tb = (b // (tf * 1000)) * (tf * 1000)
+                    if cur and cur[-1][0] == tb:
+                        k = cur[-1]
+                        if h > k[2]:
+                            k[2] = h
+                        if l < k[3]:
+                            k[3] = l
+                        k[4] = c
+                        k[5] += n
+                    elif not cur or cur[-1][0] < tb:
+                        cur.append([tb, o, h, l, c, n])
+                        if len(cur) > self._keep:
+                            del cur[0]
+                    else:
+                        return False  # time went backwards: reseed
+            self._last_1s = (b, n)
+        return True
+
+    def candle_set(self):
+        return {
+            tf: [candle_cache.Candle(*k) for k in cur]
+            for tf, cur in self._candles.items()
+        }
