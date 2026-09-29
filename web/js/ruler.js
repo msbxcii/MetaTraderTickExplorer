@@ -1,4 +1,5 @@
-// V82: MT5-style Ruler. Shift+Left Click on any chart panel sets the anchor;
+// V82: MT5-style Ruler. Shift+Left Click on any chart panel sets the anchor
+// (v89: previewed on every multi-chart panel; disabled while drawing/editing an object);
 // moving the mouse shows a line + label "time, points, %"; the next Left Click
 // ends it. Drawn on one lightweight overlay canvas per ruler session (only
 // repainted on mousemove), clicks are swallowed so drawing tools never react.
@@ -43,7 +44,9 @@
   // x -> unix seconds, continuous (V82.1): fractional bar index from two bar
   // coordinates, interpolated inside the real gap to the next bar (same math
   // as free-crosshair.js), so the duration is second-accurate on any TF.
-  function timeAtX(panel, x) {
+  // v89: timeAtXf keeps the fraction (used to mirror the point on the other
+  // panels); timeAtX floors it exactly like before.
+  function timeAtXf(panel, x) {
     var ts = panel.chart.timeScale();
     var c = panel.candles();
     var tf = Number(panel.tf()) || 60;
@@ -57,7 +60,34 @@
     if (i < 0) t = Number(c[0].time) + logical * tf;
     else if (i >= n - 1) t = Number(c[n - 1].time) + (logical - (n - 1)) * tf;
     else t = Number(c[i].time) + f * (Number(c[i + 1].time) - Number(c[i].time));
-    return Math.floor(t);
+    return t;
+  }
+  function timeAtX(panel, x) {
+    var t = timeAtXf(panel, x);
+    return t === null ? null : Math.floor(t);
+  }
+
+  // v89: real time -> x on ANY panel (its own candles/timeframe), used to
+  // project the ruler onto the other multi-chart panels.
+  function timeToX(panel, time) {
+    var c = panel.candles(), tf = Number(panel.tf()) || 60, n = c.length;
+    if (!n || time === null) return null;
+    var logical;
+    if (n === 1 || time <= c[0].time) logical = (time - c[0].time) / tf;
+    else if (time >= c[n - 1].time) logical = (n - 1) + (time - c[n - 1].time) / tf;
+    else {
+      var lo = 0, hi = n - 1;
+      while (hi - lo > 1) { var mid = (lo + hi) >> 1; if (c[mid].time <= time) lo = mid; else hi = mid; }
+      var span = c[hi].time - c[lo].time;
+      logical = lo + (span > 0 ? (time - c[lo].time) / span : 0);
+    }
+    var ts = panel.chart.timeScale(), fl = Math.floor(logical);
+    var xa = ts.logicalToCoordinate(fl);
+    if (xa === null || xa === undefined) return null;
+    if (logical === fl) return xa;
+    var xb = ts.logicalToCoordinate(fl + 1);
+    if (xb === null || xb === undefined) return null;
+    return xa + (xb - xa) * (logical - fl);
   }
 
   function decimalsOf(panel, price) {
@@ -81,82 +111,121 @@
   cursorStyle.textContent = "html.ruler-active, html.ruler-active * { cursor: crosshair !important; }";
   document.head.appendChild(cursorStyle);
 
-  function start(hit) {
-    document.documentElement.classList.add("ruler-active");
-    var host = hit.panel.host;
+  // v89 Update 3: one overlay canvas per visible panel; the panel where the
+  // ruler was started drives it, every other panel mirrors the same
+  // (time, price) anchor/end point through its own time/price mapping.
+  function makeView(p, origin) {
+    var host = p.host;
     if (getComputedStyle(host).position === "static") host.style.position = "relative";
     var cv = document.createElement("canvas");
     cv.style.cssText = "position:absolute;left:0;top:0;pointer-events:none;z-index:6;";
     host.appendChild(cv);
-    var price = hit.panel.series.coordinateToPrice(hit.y);
-    r = { panel: hit.panel, cv: cv, price: price, time: timeAtX(hit.panel, hit.x), x: hit.x,
-      last: null, raf: false };
-    resize();
+    return { panel: p, cv: cv, origin: origin, dpr: 1 };
+  }
+
+  function start(hit) {
+    document.documentElement.classList.add("ruler-active");
+    var views = [];
+    panelsList().forEach(function (p) {
+      if (!p.host.offsetParent) return; // hidden / maximized-away panel
+      views.push(makeView(p, p.host === hit.panel.host));
+    });
+    var ov = views.filter(function (v) { return v.origin; })[0];
+    var price = ov.panel.series.coordinateToPrice(hit.y);
+    r = { panel: ov.panel, views: views, price: price, time: timeAtX(ov.panel, hit.x), timeF: timeAtXf(ov.panel, hit.x),
+      x: hit.x, last: null, raf: false };
     draw(hit.x, hit.y);
   }
 
-  function resize() {
-    var h = r.panel.host, dpr = window.devicePixelRatio || 1;
-    r.cv.width = Math.round(h.clientWidth * dpr);
-    r.cv.height = Math.round(h.clientHeight * dpr);
-    r.cv.style.width = h.clientWidth + "px";
-    r.cv.style.height = h.clientHeight + "px";
-    r.dpr = dpr;
+  function resizeView(v) {
+    var h = v.panel.host, dpr = window.devicePixelRatio || 1;
+    v.cv.width = Math.round(h.clientWidth * dpr);
+    v.cv.height = Math.round(h.clientHeight * dpr);
+    v.cv.style.width = h.clientWidth + "px";
+    v.cv.style.height = h.clientHeight + "px";
+    v.dpr = dpr;
   }
 
   function stop() {
     document.documentElement.classList.remove("ruler-active");
     if (!r) return;
-    if (r.cv.parentNode) r.cv.parentNode.removeChild(r.cv);
+    r.views.forEach(function (v) { if (v.cv.parentNode) v.cv.parentNode.removeChild(v.cv); });
     r = null;
   }
 
-  function draw(x, y) {
-    var p = r.panel, ctx = r.cv.getContext("2d");
+  // Paints one view: anchor cross-lines, the ruler line and the label.
+  // (ax, ay) = anchor in this view's pixels, (x, y) = end point.
+  function paintView(v, ax, ay, x, y, text) {
+    var p = v.panel, ctx = v.cv.getContext("2d");
     var W = p.host.clientWidth, H = p.host.clientHeight;
     var plotW = W - p.chart.priceScale("right").width();
     var plotH = H - p.chart.timeScale().height();
-    if (r.cv.width !== Math.round(W * r.dpr) || r.cv.height !== Math.round(H * r.dpr)) resize();
-    ctx.setTransform(r.dpr, 0, 0, r.dpr, 0, 0);
+    if (v.cv.width !== Math.round(W * v.dpr) || v.cv.height !== Math.round(H * v.dpr)) resizeView(v);
+    ctx.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    // anchor re-projected each paint so it stays glued to its price/time
-    var ax = anchorX(), ay = p.series.priceToCoordinate(r.price);
-    if (ax === null || ay === null) return;
-    x = Math.min(x, plotW - 1); y = Math.min(y, plotH - 1);
+    if (ax === null || ay === null || x === null || y === null) return;
     var lo = p.chart.options().layout || {};
     var fs = Number(lo.fontSize) || 12;
     var ch = (p.chart.options().crosshair || {}).vertLine || {};
     var color = ch.color || lo.textColor || "#8b95a5";
 
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, plotW, plotH); ctx.clip(); // keep mirrored lines off the axes
     ctx.strokeStyle = color; ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(0, Math.round(ay) + 0.5); ctx.lineTo(plotW, Math.round(ay) + 0.5); // anchor h-line
     ctx.moveTo(Math.round(ax) + 0.5, 0); ctx.lineTo(Math.round(ax) + 0.5, plotH); // anchor v-line
     ctx.stroke();
     ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(x, y); ctx.stroke(); // ruler line
+    ctx.restore();
 
-    var price = p.series.coordinateToPrice(y);
-    var t = timeAtX(p, x);
-    if (price === null || !Number.isFinite(r.price)) return;
-    var dec = decimalsOf(p, r.price);
-    var points = Math.round((price - r.price) * Math.pow(10, dec));
-    var pct = r.price ? (price - r.price) / r.price * 100 : 0;
-    var dur = (t !== null && r.time !== null) ? fmtDuration(t - r.time) : "--:--:--";
-    var text = dur + ",  " + (points > 0 ? "+" : "") + points + " pts,  " +
-      (pct > 0 ? "+" : "") + pct.toFixed(2) + "%";
-
+    if (!text) return;
     ctx.font = fs + "px " + (lo.fontFamily || "-apple-system,BlinkMacSystemFont,'Trebuchet MS',Roboto,Ubuntu,sans-serif");
     ctx.textBaseline = "top";
     var tw = ctx.measureText(text).width, pad = 4, bh = fs + 6;
-    var lx = x + 10, ly = y + 10;
-    if (lx + tw + pad * 2 > plotW) lx = x - 10 - tw - pad * 2;
-    if (ly + bh > plotH) ly = y - 10 - bh;
+    var cx = Math.max(0, Math.min(x, plotW - 1)), cy = Math.max(0, Math.min(y, plotH - 1));
+    var lx = cx + 10, ly = cy + 10;
+    if (lx + tw + pad * 2 > plotW) lx = cx - 10 - tw - pad * 2;
+    if (ly + bh > plotH) ly = cy - 10 - bh;
     ctx.fillStyle = (lo.background && lo.background.color) || "#0a0e17";
     ctx.globalAlpha = 0.85;
     ctx.fillRect(lx, ly, tw + pad * 2, bh);
     ctx.globalAlpha = 1;
     ctx.fillStyle = lo.textColor || "#d1d4dc";
     ctx.fillText(text, lx + pad, ly + 3);
+  }
+
+  function draw(x, y) {
+    var o = r.panel, ov = r.views.filter(function (v) { return v.origin; })[0];
+    if (!ov) return;
+    var W = o.host.clientWidth, H = o.host.clientHeight;
+    var plotW = W - o.chart.priceScale("right").width();
+    var plotH = H - o.chart.timeScale().height();
+    x = Math.min(x, plotW - 1); y = Math.min(y, plotH - 1);
+
+    var price = o.series.coordinateToPrice(y);
+    var tF = timeAtXf(o, x);
+    var t = tF === null ? null : Math.floor(tF);
+    var text = null;
+    if (price !== null && Number.isFinite(r.price)) {
+      var dec = decimalsOf(o, r.price);
+      var points = Math.round((price - r.price) * Math.pow(10, dec));
+      var pct = r.price ? (price - r.price) / r.price * 100 : 0;
+      var dur = (t !== null && r.time !== null) ? fmtDuration(t - r.time) : "--:--:--";
+      text = dur + ",  " + (points > 0 ? "+" : "") + points + " pts,  " +
+        (pct > 0 ? "+" : "") + pct.toFixed(2) + "%";
+    }
+
+    r.views.forEach(function (v) {
+      if (v.origin) {
+        // anchor re-projected each paint so it stays glued to its price
+        paintView(v, anchorX(), o.series.priceToCoordinate(r.price), x, y, text);
+      } else {
+        var p = v.panel;
+        paintView(v, timeToX(p, r.timeF), p.series.priceToCoordinate(r.price),
+          timeToX(p, tF), price === null ? null : p.series.priceToCoordinate(price), text);
+      }
+    });
   }
 
   // V82.1 Fix: just return the stored x coordinate. Anchor stays pinned to
@@ -185,6 +254,10 @@
     if (e.button !== 0) { if (r && e.button === 2) { swallow(e); stop(); } return; }
     if (r) { swallow(e); stop(); eatUntilClick = true; return; } // any left click ends the ruler
     if (!e.shiftKey) return;
+    // v89 Update 4: while a drawing tool is armed, an object is being drawn
+    // or its points are being edited, Shift+click belongs to the drawing
+    // (Shift = lock price); the Ruler shortcut is disabled then.
+    if (App.DrawingEngine && App.DrawingEngine.isDrawingBusy && App.DrawingEngine.isDrawingBusy(e)) return;
     var hit = panelAt(e);
     if (!hit) return;
     swallow(e);

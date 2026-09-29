@@ -36,6 +36,7 @@ def _safe_filename(symbol):
 class DrawingStore:
     def __init__(self, drawings_dir, symbol, logger=None):
         self._dir = drawings_dir
+        self._symbol = str(symbol)  # v89: which symbol this store currently points at
         self._path = os.path.join(drawings_dir, _safe_filename(symbol))
         self._logger = logger
         self._lock = threading.Lock()
@@ -43,6 +44,7 @@ class DrawingStore:
 
     def set_symbol(self, symbol):
         with self._lock:
+            self._symbol = str(symbol)
             self._path = os.path.join(self._dir, _safe_filename(symbol))
 
     def load(self):
@@ -53,18 +55,22 @@ class DrawingStore:
         read (never raises — a corrupt/missing file just means "start
         empty", it should never keep the chart itself from opening)."""
         with self._lock:
+            sym = self._symbol
             try:
                 with open(self._path, "r", encoding="utf-8") as f:
                     data = json.load(f)
             except FileNotFoundError:
-                return {"objects": [], "folders": []}
+                return {"objects": [], "folders": [], "symbol": sym}
             except Exception as e:
                 if self._logger:
                     self._logger.warning(
                         f"DrawingStore.load: failed to read {self._path}: {e}"
                     )
-                return {"objects": [], "folders": []}
+                return {"objects": [], "folders": [], "symbol": sym}
         if isinstance(data, dict):
+            # v89: a file stamped with a different symbol is never shown here.
+            if data.get("symbol") not in (None, sym):
+                return {"objects": [], "folders": [], "symbol": sym}
             objects = data.get("objects")
             folders = data.get("folders")
         else:
@@ -74,9 +80,10 @@ class DrawingStore:
         return {
             "objects": objects if isinstance(objects, list) else [],
             "folders": folders if isinstance(folders, list) else [],
+            "symbol": sym,
         }
 
-    def save(self, objects, folders=None):
+    def save(self, objects, folders=None, symbol=None):
         """Atomically overwrite the store with `objects` (a JSON-able
         list) and, v33.1, `folders` (a JSON-able list of Object Tree
         folders; defaults to an empty list so older callers that only pass
@@ -92,8 +99,15 @@ class DrawingStore:
             folders = []
         if not isinstance(folders, list):
             return False
-        payload = {"version": 2, "objects": objects, "folders": folders}
         with self._lock:
+            # v89: write to the file of the symbol the objects were LOADED
+            # for (sent by the frontend), not whatever symbol the store points
+            # at now - a save that races a symbol switch (e.g. the page's
+            # beforeunload flush) used to dump the old symbol's objects into
+            # the new symbol's file.
+            target_symbol = str(symbol) if symbol else self._symbol
+            target_path = os.path.join(self._dir, _safe_filename(target_symbol))
+            payload = {"version": 2, "symbol": target_symbol, "objects": objects, "folders": folders}
             tmp_path = None
             try:
                 fd, tmp_path = tempfile.mkstemp(
@@ -101,13 +115,13 @@ class DrawingStore:
                 )
                 with os.fdopen(fd, "w", encoding="utf-8") as f:
                     json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
-                os.replace(tmp_path, self._path)
+                os.replace(tmp_path, target_path)
                 tmp_path = None
                 return True
             except Exception as e:
                 if self._logger:
                     self._logger.warning(
-                        f"DrawingStore.save: failed to write {self._path}: {e}"
+                        f"DrawingStore.save: failed to write {target_path}: {e}"
                     )
                 return False
             finally:

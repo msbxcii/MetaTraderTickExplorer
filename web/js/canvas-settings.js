@@ -171,6 +171,7 @@
       settings: {
         background: "#0a0e17",
         crosshairColor: "#6b7686",
+        crosshairStyle: "solid", // v89: built-in presets use a Solid crosshair
         priceLineColor: "#8b95a5",
         textColor: "#8b95a5",
         selectorColor: "#c9a227",
@@ -189,6 +190,7 @@
       settings: {
         background: "#f5f5f5",
         crosshairColor: "#6b7686",
+        crosshairStyle: "solid", // v89: built-in presets use a Solid crosshair
         priceLineColor: "#8b95a5",
         textColor: "#8b95a5",
         selectorColor: "#c3c3c3",
@@ -207,6 +209,7 @@
       settings: {
         background: "#fdf5e6",
         crosshairColor: "#000000",
+        crosshairStyle: "solid", // v89: built-in presets use a Solid crosshair
         priceLineColor: "#000000",
         textColor: "#292929",
         selectorColor: "#f5deb6",
@@ -225,6 +228,7 @@
       settings: {
         background: "#11161f",
         crosshairColor: "#778899",
+        crosshairStyle: "solid", // v89: built-in presets use a Solid crosshair
         priceLineColor: "#778899",
         textColor: "#778899",
         selectorColor: "#daa520",

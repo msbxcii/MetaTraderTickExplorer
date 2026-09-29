@@ -43,6 +43,13 @@
     return any ? map : undefined;
   }
 
+  // v89: the symbol the current App.drawObjects were loaded for. Saves are
+  // tagged with it (so a save racing a symbol switch cannot land in the new
+  // symbol's file) and are skipped until the first load has finished (an
+  // early flush would overwrite the saved file with an empty list).
+  var loadedSymbol = null;
+  var loaded = false;
+
   var saveTimer = null;
   var saveInFlight = false;
   var saveAgainAfterInFlight = false;
@@ -220,6 +227,8 @@
       var rawFolders = Array.isArray(data) ? [] : (data && data.folders);
       var parsedFolders = deserializeFolders(rawFolders);
       var parsedObjects = deserializeObjects(rawObjects, parsedFolders.folders.map(function (f) { return f.id; }));
+      loadedSymbol = (data && !Array.isArray(data) && data.symbol) || null;
+      loaded = true;
       App.drawObjects = parsedObjects.objects;
       App.nextObjectId = parsedObjects.maxId + 1;
       App.objectFolders = parsedFolders.folders;
@@ -238,8 +247,9 @@
 
   function doSave() {
     if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.save_drawings) return;
+    if (!loaded) return; // v89
     saveInFlight = true;
-    window.pywebview.api.save_drawings(serializeObjects(), serializeFolders()).catch(function (err) {
+    window.pywebview.api.save_drawings(serializeObjects(), serializeFolders(), loadedSymbol).catch(function (err) {
       console.error("Saving drawings failed:", err);
     }).then(function () {
       saveInFlight = false;

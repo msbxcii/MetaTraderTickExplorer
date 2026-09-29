@@ -36,6 +36,7 @@
   var drag = null;         // {ticket, which, line, price}
   var swallow = false;     // eat the mouse events that follow a handled pointerdown
   var hoverHit = null;
+  var ctxBlock = false;    // v89: swallow the contextmenu that follows a right-click drag-cancel
 
   function T() { return App.Trade; }
   function cssVar(n, fb) {
@@ -343,6 +344,24 @@
     return best;
   }
 
+  // v89 Update 2: abort a SL/TP/entry drag - the lines snap back to the
+  // position's real prices and nothing is sent to MT5.
+  function cancelDrag() {
+    var d = drag; if (!d) return false;
+    drag = null;
+    document.body.classList.remove("tl-hover");
+    var L = posLines[d.key];
+    if (L) { L.key = ""; renderPositions(); }
+    return true;
+  }
+
+  // v89 Update 5: the drawing layer (armed tool, object being edited, or a
+  // pointer over an object/its handles) has priority over the SL/TP lines.
+  function drawingOwns(e) {
+    var DE = App.DrawingEngine;
+    return !!(DE && DE.ownsPointer && DE.ownsPointer(e));
+  }
+
   function finishDrag() {
     var d = drag; drag = null;
     document.body.classList.remove("tl-hover");
@@ -389,6 +408,7 @@
   // ---- event wiring (capture phase) ---------------------------------------
   window.addEventListener("pointerdown", function (e) {
     if (e.pointerType && e.pointerType !== "mouse") return;
+    if (e.button !== 2) ctxBlock = false;
     var pn = panelAt(e);
     if (!pn) { if (armed && e.button === 2) disarm(); return; }
     // Trade trigger buttons come from Settings > Keyboard Shortcuts
@@ -404,6 +424,7 @@
     else if (armed && e.button === 2) { disarm(); handled = true; }
     else if (e.button === 0 && !App.replayActive) {
       var h = hitTest(e.clientY);
+      if (h && drawingOwns(e)) h = null; // v89 Update 5
       if (h) { drag = { key: h.key, ticket: h.ticket, which: h.which, line: h.line, price: null }; handled = true; }
     }
     if (handled) { swallow = true; e.stopPropagation(); }
@@ -411,6 +432,7 @@
 
   ["mousedown", "mouseup", "click", "auxclick", "dblclick"].forEach(function (n) {
     window.addEventListener(n, function (e) {
+      if (n === "mousedown" && e.button === 2 && drag) { cancelDrag(); ctxBlock = true; } // v89 Update 2
       if (!swallow && !(armed && inside(e))) return;
       if (n === "mousedown" && e.button !== 0 && e.button !== 2) e.preventDefault(); // no autoscroll / nav
       e.stopPropagation();
@@ -422,7 +444,7 @@
     if (swallow) { e.stopPropagation(); setTimeout(function () { swallow = false; }, 0); }
   }, true);
   window.addEventListener("contextmenu", function (e) {
-    if (swallow || armed) { e.preventDefault(); e.stopPropagation(); swallow = false; }
+    if (swallow || armed || ctxBlock) { e.preventDefault(); e.stopPropagation(); swallow = false; ctxBlock = false; }
   }, true);
 
   // Last pointer position over a chart panel, so a keyboard-bound trade
@@ -463,6 +485,7 @@
     if (!Object.keys(posLines).length) return;
     active = panelAt(e) || active;
     var h = hitTest(e.clientY);
+    if (h && drawingOwns(e)) h = null; // v89 Update 5
     if (!!h !== !!hoverHit) document.body.classList.toggle("tl-hover", !!h);
     hoverHit = h;
   }, true);
@@ -470,7 +493,7 @@
   document.addEventListener("keydown", function (e) {
     if (e.key !== "Escape") return;
     if (armed) { disarm(); e.stopPropagation(); }
-    else if (drag) { var L = posLines[drag.key]; drag = null; if (L) { L.key = ""; renderPositions(); } }
+    else if (drag) cancelDrag();
   }, true);
   window.addEventListener("blur", function () { if (armed) disarm(); if (drag) { drag = null; renderPositions(); } });
 

@@ -393,6 +393,66 @@
     dirtyConsumedBy = {};
   }
 
+  // v89 Update 6: Rectangle fill is painted by a chart series-primitive on
+  // the 'bottom' z-order, i.e. UNDER the candles (the overlay canvas sits
+  // above them, so a fill there dimmed the chart). It reads the live objects
+  // and this surface's own mapping at draw time, so pan/zoom needs no work
+  // from us; the overlay only calls requestUpdate() when a fill changed
+  // (see syncFillPrimitive). Borders/handles/hit-testing stay on the overlay.
+  function makeFillPrimitive(surface) {
+    var reqUpdate = null;
+    var renderer = {
+      draw: function (target) {
+        if (App.jumpRenderSuppressed) return;
+        target.useMediaCoordinateSpace(function (scope) { paintRectFills(surface, scope.context); });
+      },
+    };
+    var view = { zOrder: function () { return "bottom"; }, renderer: function () { return renderer; } };
+    return {
+      paneViews: function () { return [view]; },
+      attached: function (p) { reqUpdate = p && p.requestUpdate; },
+      detached: function () { reqUpdate = null; },
+      requestUpdate: function () { if (reqUpdate) reqUpdate(); },
+    };
+  }
+
+  function fillableRect(obj, tf) {
+    return obj && obj.type === "rect" && !obj.hidden && obj.style && obj.style.fillOpacity > 0 &&
+      isObjectVisibleAtTf(obj, tf);
+  }
+
+  function paintRectFills(surface, ctx) {
+    var tf = surfaceTf(surface);
+    function one(obj) {
+      if (!fillableRect(obj, tf)) return;
+      var px = computeObjectPixels(surface, obj);
+      if (!px) return;
+      ctx.fillStyle = hexToRgba(obj.style.fillColor, obj.style.fillOpacity);
+      ctx.fillRect(Math.min(px.x1, px.x2), Math.min(px.y1, px.y2), Math.abs(px.x2 - px.x1), Math.abs(px.y2 - px.y1));
+    }
+    App.drawObjects.forEach(one);
+    one(App.pendingObject);
+  }
+
+  // Cheap: only asks the chart to redraw when something that affects a fill
+  // changed since the last overlay paint (no fills on screen => constant "").
+  function syncFillPrimitive(surface) {
+    var prim = surface._fillPrim;
+    if (!prim) return;
+    var tf = surfaceTf(surface), sig = "";
+    function add(o) {
+      if (!fillableRect(o, tf)) return;
+      sig += o.style.fillColor + o.style.fillOpacity + ":" +
+        o.points.map(function (p) { return p.time + "/" + p.price; }).join(",") + ";";
+    }
+    App.drawObjects.forEach(add);
+    add(App.pendingObject);
+    if (sig) sig += surface._paintedSignature + (App.jumpRenderSuppressed ? "J" : "");
+    if (sig === surface._fillSig) return;
+    surface._fillSig = sig;
+    prim.requestUpdate();
+  }
+
   function makeSurface(opts) {
     var surface = {
       chart: opts.chart,
@@ -427,6 +487,11 @@
       }),
     };
     surfaces.push(surface);
+    // v89 Update 6: fill layer under the candles.
+    try {
+      surface._fillPrim = makeFillPrimitive(surface);
+      surface.series.attachPrimitive(surface._fillPrim);
+    } catch (e) { surface._fillPrim = null; }
     return surface;
   }
 
@@ -437,6 +502,10 @@
     delete dirtyConsumedBy[surfaceKey(surface)];
     if (App.interaction && App.interaction.surface === surface) App.interaction = null;
     if (App.selectionBox && App.selectionBox.surface === surface) App.selectionBox = null;
+    if (surface._fillPrim) {
+      try { surface.series.detachPrimitive(surface._fillPrim); } catch (e) { /* series already gone */ }
+      surface._fillPrim = null;
+    }
     // v70.3 Update 1: drop any native price lines this surface still owns
     // for a selected hline — best-effort, since a closed companion
     // panel's series may already be gone by the time this runs.
@@ -856,28 +925,8 @@
       points: obj.points.map(function (p) {
         return isTimeBased ? { time: p.time, price: p.price } : { logical: p.logical, price: p.price };
       }),
-      style: {
-        borderColor: obj.style.borderColor,
-        borderWidth: obj.style.borderWidth,
-        borderStyle: obj.style.borderStyle || "solid",
-        fillColor: obj.style.fillColor,
-        fillOpacity: obj.style.fillOpacity,
-        // v36 Fix 4: clone the Middle Line settings too (rect only) — a
-        // cloned rectangle should look identical to its source, not reset
-        // to "no middle line".
-        middleLine: obj.style.middleLine ? {
-          enabled: obj.style.middleLine.enabled,
-          style: obj.style.middleLine.style,
-          color: obj.style.middleLine.color,
-          width: obj.style.middleLine.width,
-        } : undefined,
-        // v47: a cloned Fib object keeps its own level table/description
-        // setting, exactly like a cloned rectangle keeps its Middle Line.
-        levels: obj.style.levels ? obj.style.levels.map(function (l) {
-          return { id: l.id, level: l.level, description: l.description };
-        }) : undefined,
-        showDescription: !!obj.style.showDescription,
-      },
+      // v89: deep-copy the whole style (was a field list that dropped borderOpacity / middleLine.opacity).
+      style: JSON.parse(JSON.stringify(obj.style)),
       // v33: a clone is always a fresh, plain object — the source object
       // can only have reached this point via hitTest()'s default (locked-
       // and hidden-excluding) hit test, so it was never locked or hidden
@@ -1350,10 +1399,8 @@
     } else if (obj.type === "rect") {
       var rx = Math.min(px.x1, px.x2), ry = Math.min(px.y1, px.y2);
       var rw = Math.abs(px.x2 - px.x1), rh = Math.abs(px.y2 - px.y1);
-      if (style.fillOpacity > 0) {
-        ctx.fillStyle = hexToRgba(style.fillColor, style.fillOpacity);
-        ctx.fillRect(rx, ry, rw, rh);
-      }
+      // v89: the fill is no longer painted here (it covered the candles) -
+      // see makeFillPrimitive(): it is drawn UNDER the candles by the chart.
       if (hasBorder) ctx.strokeRect(rx, ry, rw, rh);
       // v36 Fix 4: optional horizontal line through the vertical midpoint
       // of the box, spanning the box's own width — drawn with its own
@@ -1694,6 +1741,7 @@
     drawAxisDecorations(surface, ctx, selectedForChart, plot, cssW, cssH);
     ctx.restore();
     syncHlineAxisLabels(surface, selectedForChart);
+    syncFillPrimitive(surface);
     } finally {
       // The memo must never outlive the paint it belongs to: an interactive
       // call site (hit-testing mid-drag) reading a memoized value would be
@@ -2213,8 +2261,9 @@
 
     surface.container.addEventListener("contextmenu", function (evt) {
       evt.preventDefault();
-      // Right-click while mid-drag: treat it as "cancel", matching Escape.
-      if (App.dragStart) { cancelPendingObject(); returnToCursor(); return; }
+      // Right-click while a tool is armed / mid-placement: treat it as "cancel", matching Escape.
+      // v89 Update 1: also before the first click (the document-level handler below normally gets there first).
+      if (App.dragStart || App.currentTool !== "cursor") { cancelPendingObject(); returnToCursor(); requestRender(); return; }
 
       var pos = mousePos(surface, evt);
       // v33: locked objects are excluded from left-click hit testing (see
@@ -2239,6 +2288,49 @@
         if (App.DrawingContextMenu.closeGroup) App.DrawingContextMenu.closeGroup();
       }
     });
+  }
+
+  // v89 Update 1: with any drawing tool selected, a right-click ANYWHERE in
+  // the app (before the 1st click, or while a floating point is being
+  // placed) cancels the drawing and returns to the normal Cursor. Capture
+  // phase + stopPropagation so no context menu opens for that click.
+  document.addEventListener("contextmenu", function (evt) {
+    if (App.currentTool === "cursor" && !App.pendingObject) return;
+    evt.preventDefault();
+    evt.stopPropagation();
+    cancelPendingObject();
+    returnToCursor();
+    requestRender();
+  }, true);
+
+  // v89 Update 4/5 helpers (used by ruler.js and trade-lines.js).
+  function surfaceForEvent(evt) {
+    var t = evt.target;
+    for (var i = 0; i < surfaces.length; i++) if (surfaces[i].container.contains(t)) return surfaces[i];
+    return null;
+  }
+  function drawingBusy() {
+    return App.currentTool !== "cursor" || !!App.pendingObject || !!App.interaction || !!App.selectionBox;
+  }
+  function pointerHit(evt) {
+    var sf = surfaceForEvent(evt);
+    if (!sf) return null;
+    var pos = mousePos(sf, evt);
+    return computeCursorHit(sf, pos.x, pos.y);
+  }
+  // Update 4: true when Shift+click must NOT start the Ruler (a tool is
+  // armed, an object is being drawn/edited, or the click would grab a
+  // resize handle of the selected object).
+  function isDrawingBusy(evt) {
+    if (drawingBusy()) return true;
+    var h = pointerHit(evt);
+    return !!h && h.kind === "resize";
+  }
+  // Update 5: true when a left press here belongs to the drawing layer
+  // (tool armed / object being edited / pointer over an object or its
+  // handles) and therefore must not grab the Stoploss/TakeProfit lines.
+  function ownsPointer(evt) {
+    return drawingBusy() || !!pointerHit(evt);
   }
 
   // v51 Update 2: place a Horizontal/Vertical Line immediately at the
@@ -2379,6 +2471,9 @@
     // nothing) if the mouse isn't currently over any chart panel.
     placeAtLastMouse: placeAtLastMouse,
     hitTest: function (x, y, opts) { return primarySurface ? hitTest(primarySurface, x, y, opts) : null; },
+    // v89 Updates 4/5 (see isDrawingBusy / ownsPointer above).
+    isDrawingBusy: isDrawingBusy,
+    ownsPointer: ownsPointer,
     showHint: showHint,
     persistChange: persistChange,
     removeObject: removeObject,

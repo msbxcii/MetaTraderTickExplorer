@@ -744,7 +744,7 @@ class ChartBridge:
             self._logger.warning(f"get_drawings: failed: {e}")
             return {"objects": [], "folders": []}
 
-    def save_drawings(self, objects, folders=None):
+    def save_drawings(self, objects, folders=None, symbol=None):
         """Overwrite the on-disk store with the frontend's current full set
         of drawn objects and Object Tree folders. Called (debounced) after
         every create/move/resize/style/lock/hide/delete/rename/folder
@@ -752,7 +752,7 @@ class ChartBridge:
         if self._drawing_store is None:
             return False
         try:
-            return self._drawing_store.save(objects, folders)
+            return self._drawing_store.save(objects, folders, symbol)
         except Exception as e:
             self._logger.warning(f"save_drawings: failed: {e}")
             return False
