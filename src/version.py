@@ -23,7 +23,7 @@ tag and the version it reports always match.
 """
 
 APP_NAME = "mt-tick.explorer"
-VERSION = "v3.0.2"
+VERSION = "v3.0.3"
 
 
 # Official distribution notice. Shown in the startup log, the Get Started

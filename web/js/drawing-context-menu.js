@@ -167,7 +167,7 @@
     }
     // v70.3 Update 2.
     if (isHline && dom.dcmHlinePrice) {
-      dom.dcmHlinePrice.value = String(obj.points[0].price);
+      dom.dcmHlinePrice.value = String(Math.round(obj.points[0].price * 100) / 100); // V91: max 2 decimals
       dom.dcmHlinePrice.classList.remove("dcm-dt-invalid");
     }
     // v70.7 Update 1/2: Timeframes panel — refresh pill/checkbox state for
@@ -838,10 +838,19 @@
     var valid = isFinite(p);
     dom.dcmHlinePrice.classList.toggle("dcm-dt-invalid", !valid);
     if (!valid) return;
+    p = Math.round(p * 100) / 100; // V91: max 2 decimals
+    dom.dcmHlinePrice.value = String(p);
     App.activeMenuObject.points[0].price = p;
     persistChange();
   }
-  if (dom.dcmHlinePrice) dom.dcmHlinePrice.addEventListener("change", handleHlinePriceChange);
+  if (dom.dcmHlinePrice) {
+    // V91: extra decimals are cut while typing.
+    dom.dcmHlinePrice.addEventListener("input", function () {
+      var v = dom.dcmHlinePrice.value, m = /^(-?\d*\.\d{2})\d+$/.exec(v);
+      if (m) dom.dcmHlinePrice.value = m[1];
+    });
+    dom.dcmHlinePrice.addEventListener("change", handleHlinePriceChange);
+  }
 
   // v37 Fix 1: header Lock/Hide/Delete — same actions the Object Tree
   // panel's row buttons perform, now reachable from the style editor too.

@@ -410,10 +410,10 @@
   // V84: history P/L = net (profit + commission + swap + fee); the fee sits
   // in a small tag on its left. Open trades (Trade tab) stay gross, like MT5.
   function histNet(t) { return (Number(t.profit) || 0) + (Number(t.costs) || 0); }
-  function histItemHtml(t) {
+  function histItemHtml(t, i) {
     var isBuy = t.type === 0, p = histNet(t), fee = -(Number(t.costs) || 0);
     var feeTag = fee ? '<span class="tp-fee-tag">fee ' + (fee > 0 ? "$" : "+$") + Math.abs(fee).toFixed(2) + "</span>" : "";
-    return '<div class="tp-item" title="Gross: ' + money(t.profit) + '  ·  Fees: ' + money(t.costs) + '"><div class="tp-row1"><span><span class="tp-sym">' + esc(t.symbol) +
+    return '<div class="tp-item ' + (p >= 0 ? "tp-h-win" : "tp-h-loss") + '" data-i="' + i + '" title="Gross: ' + money(t.profit) + '  ·  Fees: ' + money(t.costs) + '"><div class="tp-row1"><span><span class="tp-sym">' + esc(t.symbol) +
       '</span><span class="tp-side ' + (isBuy ? "buy" : "sell") + '">' + (isBuy ? "BUY" : "SELL") +
       '</span></span><span>' + feeTag + '<span class="tp-pl ' + (p >= 0 ? "tp-pos" : "tp-neg") + '">' + money(p) + "</span></span></div>" +
       '<div class="tp-row2"><span>' + lots(t.volume) + " lot · " + px(t.price_open, t.digits) + " → " + px(t.price_close, t.digits) +
@@ -426,7 +426,7 @@
     for (var i = histRendered; i < end; i++) {
       var t = histData[i], lbl = dayLabel(t.time_close);
       if (lbl !== lastDay) { html.push('<div class="tp-day-label">' + esc(lbl) + "</div>"); lastDay = lbl; }
-      html.push(histItemHtml(t));
+      html.push(histItemHtml(t, i)); // V91: index -> histData[i]
     }
     histRendered = end;
     histList.insertAdjacentHTML("beforeend", html.join(""));
@@ -434,6 +434,28 @@
   histList.addEventListener("scroll", function () {
     if (histList.scrollTop + histList.clientHeight > histList.scrollHeight - 300) renderHistChunk();
   }, { passive: true });
+
+  // V91: hover a history card = draw that trade on every chart panel; click = jump
+  // to its mid-time. Gaps/day labels keep the current one; only leaving the list clears.
+  var histOn = null;
+  function histTrade(el) { return el && histData ? histData[+el.getAttribute("data-i")] : null; }
+  function histSet(el) {
+    if (el === histOn) return;
+    if (histOn) histOn.classList.remove("tp-h-on");
+    histOn = el;
+    var t = histTrade(el);
+    if (el) el.classList.add("tp-h-on");
+    if (App.TradeHover) { if (t) App.TradeHover.show(t, histNet(t)); else App.TradeHover.hide(); }
+  }
+  histList.addEventListener("mouseover", function (e) {
+    var el = e.target.closest ? e.target.closest(".tp-item") : null;
+    if (el && histList.contains(el)) histSet(el);
+  });
+  histList.addEventListener("mouseleave", function () { histSet(null); });
+  histList.addEventListener("click", function (e) {
+    var el = e.target.closest ? e.target.closest(".tp-item") : null, t = histTrade(el);
+    if (t && App.TradeHover) App.TradeHover.jump(t);
+  });
 
   // V90: minimal cumulative net P/L chart (one SVG path per fetch, hover = one point).
   var pnlBox = $("tp-pnl-box"), pnlSvg = $("tp-pnl-svg"), pnlTip = $("tp-pnl-tip"), pnlPts = [];
@@ -473,6 +495,7 @@
 
   window.onTradeHistory = function (data) {
     data = data || {};
+    histSet(null); // V91: rows are rebuilt
     brokerNow = Number(data.broker_now) || 0;
     var trades = Array.isArray(data.trades) ? data.trades : [];
     trades.sort(function (a, b) { return b.time_close - a.time_close; });
@@ -515,6 +538,7 @@
   });
   function showTab(name) {
     activeTab = name;
+    histSet(null); // V91
     panel.querySelectorAll(".tp-tab").forEach(function (t) { t.classList.toggle("active", t.getAttribute("data-tab") === name); });
     $("tp-tab-trade").style.display = name === "trade" ? "" : "none";
     $("tp-tab-history").style.display = name === "history" ? "" : "none";
@@ -607,6 +631,7 @@
     panel.classList.remove("open");
     toggleBtn.classList.remove("active");
     if (focusEl) focusTicket(null, focusEl);
+    histSet(null); // V91
     setFeed();
   }
 

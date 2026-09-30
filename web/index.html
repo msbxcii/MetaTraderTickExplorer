@@ -3852,6 +3852,12 @@
   .tl-box > div { position: absolute; left: 0; right: 0; }
   .tl-box-r { background: color-mix(in srgb, var(--down) 16%, transparent); }
   .tl-box-g { background: color-mix(in srgb, var(--up) 16%, transparent); }
+  /* V91: History card hover (as history.html) + chart overlay for the hovered trade */
+  #tp-hist-list .tp-item { cursor: pointer; transition: background .12s, border-color .12s, box-shadow .12s; }
+  #tp-hist-list .tp-item.tp-h-win { --hc: var(--up); }
+  #tp-hist-list .tp-item.tp-h-loss { --hc: var(--down); }
+  #tp-hist-list .tp-item.tp-h-on { background: color-mix(in srgb, var(--tp-panel2) 93%, var(--text)); border-color: var(--hc); box-shadow: inset 3px 0 0 var(--hc); }
+  .th-canvas { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 4; }
   .tp-muted { color: var(--muted); font-weight: 500; font-size: 11px; }
   .tl-armed, .tl-armed * { cursor: crosshair !important; }
   .tl-hover, .tl-hover * { cursor: ns-resize !important; }
@@ -4771,6 +4777,7 @@
 <script src="js/object-panel.js"></script>
 <script src="js/trade-panel.js"></script>
 <script src="js/trade-lines.js"></script>
+<script src="js/trade-hover.js"></script>
 <script src="js/free-crosshair.js"></script>
 <script src="js/chart-core.js"></script>
 <script src="js/candle-countdown.js"></script>
