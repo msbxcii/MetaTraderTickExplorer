@@ -239,14 +239,14 @@
     var lim = T().maxRiskLimit();
     if (lim > 0 && sp) {
       if (sp.unbounded && sp.unbounded.length) { T().toast("Max risk: a position has no stop loss", "err"); return; }
-      if ((Number(sp.open_risk) || 0) + lc.risk > lim + 1e-6) { T().toast("Max risk reached: trade blocked", "err"); return; }
+      if ((Number(sp.open_risk) || 0) + (st.maxBasis === "day" ? Number(sp.day_loss) || 0 : 0) + lc.risk > lim + 1e-6) { T().toast("Max risk reached: trade blocked", "err"); return; }
     }
     var comm = parseFloat(String(st.commission).replace(",", "."));
     var pendingOrder = mode === "pending";
     var id = T().send(pendingOrder ? "trade_pending" : "trade_open", {
       symbol: App.symbol || undefined, sl: c.sl, entry: pendingOrder ? c.entry : undefined, risk_mode: st.riskMode, risk: st.risk,
       commission: isFinite(comm) && comm >= 0 ? comm : null, commission_mode: st.commMode || "lot", tp_rr: st.rr,
-      max_risk_mode: st.maxMode, max_risk: st.maxRisk,
+      max_risk_mode: st.maxMode, max_risk: st.maxRisk, max_risk_basis: st.maxBasis || "open", // V90
     }, pendingOrder ? "Pending order" : "Market order");
     disarm();
     if (!id) return;
@@ -263,6 +263,7 @@
       var L = posLines[t]; rmLine(L.entry, linesSeries); rmLine(L.sl, linesSeries); rmLine(L.tp, linesSeries);
     });
     posLines = {};
+    if (beLine) { rmLine(beLine); beLine = null; } // V90
   }
   // V86: TP label = reward/initial-risk multiple, e.g. "TP#2.54".
   var PT = { 2: "BUY LIMIT", 3: "SELL LIMIT", 4: "BUY STOP", 5: "SELL STOP" }; // V88
@@ -301,6 +302,7 @@
     Object.keys(posLines).forEach(function (t) {
       if (!seen[t]) { var L = posLines[t]; rmLine(L.entry, linesSeries); rmLine(L.sl, linesSeries); rmLine(L.tp, linesSeries); delete posLines[t]; }
     });
+    syncBE(); // V90: BE follows partial closes / swap, gone with the trade
   }
 
   // V87: panel hover focus. Other trades fade (alpha) and lose labels.
@@ -319,11 +321,21 @@
       L[d[0]].applyOptions({ color: dim ? fade(d[1]) : d[1], title: dim ? "" : L.titles[d[0]], axisLabelVisible: !dim });
     });
   }
+  // V90: one shared BE line, shown only for the hovered open trade.
+  var beLine = null, BE_COL = "#f0a030";
+  function syncBE() {
+    var L = focusT != null ? posLines[focusT] : null, p = L && L.p;
+    var be = p && p.kind !== "pending" && !App.replayActive ? Number(p.be) || 0 : 0;
+    if (!(be > 0)) { if (beLine) { rmLine(beLine); beLine = null; } return; }
+    if (!beLine) beLine = mkLine(be, BE_COL, DASHED, "BE");
+    else if (Number(beLine.options().price) !== be) beLine.applyOptions({ price: be });
+  }
   function setFocus(t) {
     t = t == null ? null : String(t);
     if (t === focusT) return;
     focusT = t;
     Object.keys(posLines).forEach(styleLines);
+    syncBE();
   }
 
   function hitTest(clientY) {

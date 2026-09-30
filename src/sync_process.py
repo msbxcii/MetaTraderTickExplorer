@@ -520,6 +520,8 @@ def _collect_positions(mt5, comm=None):
             "volume": float(p.volume), "price_open": float(p.price_open),
             "sl": float(p.sl), "tp": float(p.tp),
             "profit": round(float(p.profit), 2),  # V83: same as MT5 Profit column
+            "swap": round(float(p.swap), 2), "price": float(p.price_current),
+            "realized": trade_engine.realized_partial(mt5, p),  # V90: net profit + bulk filters
             "digits": _trade_digits(mt5, p.symbol),
         })
     out.sort(key=lambda x: x["ticket"], reverse=True)

@@ -198,6 +198,43 @@ def open_risk(mt5):
     return round(total, 2), unbounded
 
 
+_DAY = {"t": 0.0, "v": 0.0}
+
+
+def day_loss(mt5, symbol=None):
+    """V90: today's realized net loss (broker day), 0 when the day is net positive. Cached 5 s."""
+    now = time.monotonic()
+    if now - _DAY["t"] < 5.0:
+        return _DAY["v"]
+    v = 0.0
+    try:
+        from datetime import datetime, timedelta, timezone
+        t = mt5.symbol_info_tick(symbol) if symbol else None
+        bn = int(t.time) if t is not None and t.time else 0
+        n = datetime.now(timezone.utc)
+        net, last = 0.0, 0
+        deals = mt5.history_deals_get(n - timedelta(days=2), n + timedelta(days=2)) or ()
+        if not bn:
+            bn = max([int(d.time) for d in deals] or [0])
+        ds = bn - bn % 86400
+        for d in deals:
+            if int(d.type) in (0, 1) and int(d.time) >= ds:
+                net += float(d.profit) + float(d.commission) + float(d.swap) + float(getattr(d, "fee", 0.0))
+        v = round(max(0.0, -net), 2)
+    except Exception:
+        v = _DAY["v"]
+    _DAY["t"], _DAY["v"] = now, v
+    return v
+
+
+def _margin_1lot(mt5, info, tick):
+    """V90: margin for 1 lot (buy side) so the UI can warn before sending."""
+    try:
+        return float(mt5.order_calc_margin(mt5.ORDER_TYPE_BUY, info.name, 1.0, float(tick.ask)) or 0.0)
+    except Exception:
+        return 0.0
+
+
 def specs(mt5, symbol):
     info = mt5.symbol_info(symbol)
     acc = mt5.account_info()
@@ -205,6 +242,7 @@ def specs(mt5, symbol):
     if info is None or acc is None:
         return {"symbol": symbol, "ok": False}
     risk, unbounded = open_risk(mt5)
+    tick = mt5.symbol_info_tick(symbol)
     return {
         "ok": True, "symbol": symbol, "digits": int(info.digits), "point": float(info.point),
         "tick_size": float(info.trade_tick_size), "tick_value_loss": float(info.trade_tick_value_loss or info.trade_tick_value),
@@ -214,6 +252,8 @@ def specs(mt5, symbol):
         "contract_size": float(getattr(info, "trade_contract_size", 0.0) or 0.0),
         "comm_model": learn_commission(mt5, symbol),
         "open_risk": risk, "unbounded": unbounded,
+        "day_loss": day_loss(mt5, symbol),  # V90
+        "margin_free": float(acc.margin_free), "margin_1lot": _margin_1lot(mt5, info, tick) if tick is not None else 0.0,
         "connected": bool(term.connected) if term is not None else False,
         "trade_allowed": bool(term is not None and term.trade_allowed and acc.trade_allowed and acc.trade_expert),
     }
@@ -310,15 +350,16 @@ def open_market(mt5, cmd, symbol):
         cur, unbounded = open_risk(mt5)
         if unbounded:
             return _err("Max risk: position #%d has no stop loss" % unbounded[0])
-        if cur + real_risk > limit + 1e-6:
-            return _err("Max risk reached: open %.2f + new %.2f > limit %.2f" % (cur, real_risk, limit))
+        dl = day_loss(mt5, sym) if cmd.get("max_risk_basis") == "day" else 0.0  # V90: Daily DD mode only
+        if cur + dl + real_risk > limit + 1e-6:
+            return _err("Limit reached: open %.2f + day loss %.2f + new %.2f > limit %.2f" % (cur, dl, real_risk, limit))
 
     try:
         margin = mt5.order_calc_margin(otype, sym, lots, entry)
     except Exception:
         margin = None
     if margin is not None and margin > float(acc.margin_free):
-        return _err("Not enough free margin (%.2f needed)" % margin)
+        return _err("Not enough free margin: %.2f lot needs %.2f, free %.2f (lower risk or widen SL)" % (lots, margin, float(acc.margin_free)))
 
     rr = max(0.0, float(cmd.get("tp_rr") or 0))
     comment = ("%s %s" % (ORDER_TAG, cmd.get("req_id", "")))[:31]
@@ -454,8 +495,9 @@ def open_pending(mt5, cmd, symbol):
         cur, unbounded = open_risk(mt5)
         if unbounded:
             return _err("Max risk: #%d has no stop loss" % unbounded[0])
-        if cur + real_risk > limit + 1e-6:
-            return _err("Max risk reached: open %.2f + new %.2f > limit %.2f" % (cur, real_risk, limit))
+        dl = day_loss(mt5, sym) if cmd.get("max_risk_basis") == "day" else 0.0  # V90: Daily DD mode only
+        if cur + dl + real_risk > limit + 1e-6:
+            return _err("Limit reached: open %.2f + day loss %.2f + new %.2f > limit %.2f" % (cur, dl, real_risk, limit))
     comment = ("CT88 %s" % cmd.get("req_id", ""))[:31]
     res = _send_pending(mt5, info, sym, otype, lots, entry, sl, tp, comment)
     if res is not None and res.retcode in _OK_CODES:
@@ -644,6 +686,35 @@ def _entry_paid(mt5, ticket):
     return r
 
 
+_REALIZED = {}     # (ticket, volume) -> net result of partial closes (V90)
+
+
+def _realized_out(mt5, ticket, vol):
+    k = (int(ticket), vol)
+    r = _REALIZED.get(k)
+    if r is None:
+        r = 0.0
+        try:
+            for d in (mt5.history_deals_get(position=int(ticket)) or ()):
+                if int(d.entry) != 0:
+                    r += float(d.profit) + float(d.commission) + float(d.swap) + float(getattr(d, "fee", 0.0))
+        except Exception:
+            pass
+        if len(_REALIZED) > 2000:
+            _REALIZED.clear()
+        _REALIZED[k] = r
+    return r
+
+
+def realized_partial(mt5, p):
+    """V90: net result already banked by partial closes of this position (0 if none)."""
+    paid, ev = _entry_paid(mt5, int(p.ticket))
+    vol = float(p.volume)
+    if ev <= vol + 1e-9:
+        return 0.0
+    return round(_realized_out(mt5, p.ticket, vol) - paid * (ev - vol) / ev, 2)
+
+
 def position_cost(mt5, p, commission=None, commission_mode="lot"):
     """(estimated round-trip commission, break-even price) for an open position.
     User value (round trip, $/lot or % of value) wins. Otherwise:
@@ -674,7 +745,13 @@ def position_cost(mt5, p, commission=None, commission_mode="lot"):
         fee = entry_side + exit_side
     fee = round(fee, 2)
     cost = fee + max(0.0, -float(p.swap))
-    if cost <= 1e-6 or info is None:
+    # V90: after a partial close, BE = price where the WHOLE position nets 0
+    # (entry commission of the closed part + realized result of the closed part).
+    paid, ev = _entry_paid(mt5, int(p.ticket))
+    partial = ev > vol + 1e-9
+    if partial:
+        cost += paid * (ev - vol) / ev - _realized_out(mt5, p.ticket, vol)
+    if (not partial and cost <= 1e-6) or info is None:
         return fee, op
     tsz, digits, is_buy = float(info.trade_tick_size), int(info.digits), int(p.type) == 0
     k = (p.symbol, int(p.type), vol, op)
@@ -690,7 +767,7 @@ def position_cost(mt5, p, commission=None, commission_mode="lot"):
         if len(_PPT) > 500:
             _PPT.clear()
         _PPT[k] = ppt
-    ticks = math.ceil(cost / ppt - 1e-9) if ppt > 0 else 2
+    ticks = math.ceil(cost / ppt - 1e-9) if ppt > 0 else 2  # V90: may be <0 after a profitable partial
     be = _round_tick(op + (ticks * tsz if is_buy else -ticks * tsz), tsz, digits)
     return fee, be
 

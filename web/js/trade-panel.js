@@ -23,6 +23,7 @@
   var openList = $("tp-open-list");
   var histList = $("tp-hist-list");
   var selectAll = $("tp-select-all");
+  var openBox = $("tp-open-box"), openNet = $("tp-open-net"); // V90
   var isOpen = false;
   var activeTab = "trade";
   var histPeriod = "week";
@@ -52,7 +53,7 @@
 
   // ---- V84: settings, symbol specs, lot math, toasts -----------------------
   var SKEY = "ct.trade.settings.v84";
-  var settings = { riskMode: "pct", risk: 1, commission: "", commMode: "lot", comm: {}, rr: 2, maxMode: "pct", maxRisk: 5 };
+  var settings = { riskMode: "pct", risk: 1, commission: "", commMode: "lot", comm: {}, rr: 2, maxMode: "pct", maxRisk: 5, maxBasis: "open" };
   try { Object.assign(settings, JSON.parse(localStorage.getItem(SKEY) || "{}")); } catch (e) {}
   // V85: settings also saved to disk; commission is remembered PER SYMBOL
   // (settings.comm = {SYMBOL: {v, mode}}), round trip, $/lot or % of value.
@@ -121,9 +122,14 @@
     var c = previewSL != null ? calcLots(previewEntry, previewSL) : null;
     if (c) {
       lotEl.textContent = c.tooSmall ? "< min " + specs.vol_min : c.lots.toFixed(stepDigits(specs.vol_step));
+      // V90: warn about free margin before the order is sent
+      var mg = (Number(specs.margin_1lot) || 0) * c.lots, noMg = !c.tooSmall && mg > 0 && mg > (Number(specs.margin_free) || 0);
+      if (noMg) lotEl.textContent += " · no margin";
+      lotEl.title = mg > 0 ? "Margin " + mg.toFixed(2) + " / free " + (Number(specs.margin_free) || 0).toFixed(2) : "";
+      lotEl.style.color = noMg ? "var(--down)" : "";
       amtEl.textContent = (c.tooSmall ? c.minRisk : c.risk).toFixed(2) + cur;
     } else {
-      lotEl.textContent = "—";
+      lotEl.textContent = "—"; lotEl.title = ""; lotEl.style.color = "";
       amtEl.textContent = isFinite(rm) ? rm.toFixed(2) + cur : "—";
     }
     if (hint && specs && specs.ok) {
@@ -134,10 +140,13 @@
         commissionPerLot().toFixed(2) + "/lot round trip" + auto;
     }
     // Max-risk gauge
-    var lim = maxRiskLimit(), open = specs ? Number(specs.open_risk) || 0 : 0;
-    $("tp-risk-limit").textContent = lim > 0 ? "Limit " + (settings.maxMode === "money" ? "$" + lim.toFixed(0) : Number(settings.maxRisk).toFixed(1) + "%") : "No limit";
-    $("tp-open-risk").textContent = specs ? "Open risk $" + open.toFixed(2) + (specs.unbounded && specs.unbounded.length ? " + no-SL!" : "") : "Open risk —";
-    var pct = lim > 0 ? Math.min(100, open * 100 / lim) : 0;
+    // V90: Open risk / Remaining in the Max-risk unit; Daily DD mode also counts today's realized loss.
+    var lim = maxRiskLimit(), open = specs ? Number(specs.open_risk) || 0 : 0, dl = specs && settings.maxBasis === "day" ? Number(specs.day_loss) || 0 : 0;
+    var used = open + dl, inPct = settings.maxMode !== "money", bal = specs ? Number(specs.balance) || 0 : 0;
+    var fmt = function (v) { return inPct ? (bal > 0 ? v * 100 / bal : 0).toFixed(2) + "%" : "$" + v.toFixed(2); };
+    $("tp-risk-limit").textContent = lim > 0 ? "Remaining " + fmt(Math.max(0, lim - used)) : "Off";
+    $("tp-open-risk").textContent = specs ? "Open risk " + fmt(open) + (dl > 0 ? " · day loss " + fmt(dl) : "") + (specs.unbounded && specs.unbounded.length ? " + no-SL!" : "") : "Open risk —";
+    var pct = lim > 0 ? Math.min(100, used * 100 / lim) : 0;
     var g = $("tp-gauge-fill");
     g.style.width = pct + "%";
     g.style.background = pct >= 100 || (specs && specs.unbounded && specs.unbounded.length) ? "var(--down)" : pct > 70 ? "var(--tp-accent)" : "var(--up)";
@@ -201,6 +210,20 @@
     if (!tickets.length) { toast("Select a trade first", "info"); return; }
     send("trade_close", { tickets: tickets, fraction: fraction }, fraction >= 1 ? "Close" : "Partial close");
   }
+  // V90: bulk actions only touch eligible trades (RF: past BE; partial: in profit).
+  function bulkPick(test, what) {
+    var all = selectedTickets();
+    if (!all.length) { toast("Select a trade first", "info"); return null; }
+    var ok = all.filter(function (t) { var r = rows["p" + t]; return r && r.p && test(r.p); });
+    if (!ok.length) { toast("No selected trade " + what, "info"); return null; }
+    if (ok.length < all.length) toast((all.length - ok.length) + " skipped (not " + what + ")", "info");
+    return ok;
+  }
+  function pastBE(p) {
+    var be = Number(p.be) || Number(p.price_open), pr = Number(p.price);
+    return (Number(p.profit) || 0) > 0 && pr > 0 && (p.type === 0 ? pr > be : pr < be);
+  }
+  function inProfit(p) { return (Number(p.profit) || 0) > 0; }
   function doRiskFree(tickets) {
     if (!tickets.length) { toast("Select a trade first", "info"); return; }
     send("trade_riskfree", { tickets: tickets, comm: settings.comm || {} }, "Risk-free");
@@ -221,7 +244,6 @@
     el.querySelector("button").addEventListener("click", function () { doCancel([p.ticket]); });
     var k = pkey(p);
     el.addEventListener("mouseenter", function () { focusTicket(k, el); });
-    el.addEventListener("mouseleave", function () { focusTicket(null, el); });
     return { el: el, pending: true, sym: el.querySelector(".tp-sym"), side: el.querySelector(".tp-side"),
       pl: el.querySelector(".tp-pl"), entry: el.querySelector(".tp-entry"), key: "" };
   }
@@ -250,8 +272,7 @@
     btns[2].addEventListener("click", function () { doClose([p.ticket], 0.5); });
     btns[3].addEventListener("click", function () { doClose([p.ticket], 1); });
     // V87: hover a trade = focus it in the list and on the chart
-    el.addEventListener("mouseenter", function () { focusTicket(pkey(p), el); });
-    el.addEventListener("mouseleave", function () { focusTicket(null, el); });
+    el.addEventListener("mouseenter", function () { focusTicket(pkey(p), el); }); // V90: gaps keep focus
     var cb = el.querySelector(".tp-cb");
     cb.addEventListener("change", function () {
       if (cb.checked) selected[p.ticket] = true; else delete selected[p.ticket];
@@ -271,7 +292,16 @@
     if (App.TradeLines && App.TradeLines.focus) App.TradeLines.focus(t);
   }
 
+  // V90: focus clears only when the mouse leaves the whole Open Positions box.
+  openBox.addEventListener("mouseleave", function () { if (focusEl) focusTicket(null, focusEl); });
+  var fadeF = -1;
+  openList.addEventListener("scroll", function () {
+    var f = Math.min(openList.scrollTop, 56);
+    if (f !== fadeF) { fadeF = f; openList.style.setProperty("--f", f + "px"); }
+  }, { passive: true });
+
   function updateRow(r, p) {
+    r.p = p;
     var d = p.digits;
     var isBuy = p.type === 0;
     var key = [p.symbol, p.type, p.volume, p.price_open, p.sl, p.tp, p.fee, p.be].join("|");
@@ -288,10 +318,12 @@
       var be = Number(p.be) || 0;
       r.be.textContent = "BE " + px(be > 0 ? be : p.price_open, d); // V86: row = lot @ entry | BE
     }
-    var pl = money(p.profit);
+    // V90: after a partial close, P/L = open part + already-banked part (whole trade)
+    var rz = Number(p.realized) || 0, tot = (Number(p.profit) || 0) + rz, pl = money(tot);
     if (r.pl.textContent !== pl) {
       r.pl.textContent = pl;
-      r.pl.className = "tp-pl " + ((Number(p.profit) || 0) >= 0 ? "tp-pos" : "tp-neg");
+      r.pl.className = "tp-pl " + (tot >= 0 ? "tp-pos" : "tp-neg");
+      r.pl.title = rz ? "Open " + money(p.profit) + " · banked by partial close " + money(rz) : "";
     }
     r.cb.checked = !!selected[p.ticket];
   }
@@ -320,6 +352,11 @@
     Object.keys(rows).forEach(function (t) {
       if (!seen[t]) { if (focusEl === rows[t].el) focusTicket(null, focusEl); rows[t].el.remove(); delete selected[rows[t].ticket]; delete rows[t]; }
     });
+    var net = 0, nLive = 0;
+    list.forEach(function (p) { if (p.kind !== "pending") { nLive++; net += (Number(p.profit) || 0) + (Number(p.realized) || 0) + (Number(p.swap) || 0) - (Number(p.fee) || 0); } });
+    var nt = nLive ? money(net) : "—";
+    if (openNet.textContent !== nt) { openNet.textContent = nt; openNet.className = "num " + (nLive ? (net >= 0 ? "tp-pos" : "tp-neg") : ""); }
+    openBox.classList.toggle("tp-none", !list.length);
     var empty = openList.querySelector(".tp-empty");
     if (!list.length && !empty) {
       empty = document.createElement("div"); empty.className = "tp-empty"; empty.textContent = "No open trades";
@@ -349,7 +386,9 @@
     if (isOpen) renderPositions(list);
   };
   $("tp-bulk-close").addEventListener("click", function () { doClose(selectedTickets(), 1); });
-  $("tp-bulk-rf").addEventListener("click", function () { doRiskFree(selectedTickets()); });
+  $("tp-bulk-rf").addEventListener("click", function () { var t = bulkPick(pastBE, "past break-even"); if (t) doRiskFree(t); });
+  $("tp-bulk-25").addEventListener("click", function () { var t = bulkPick(inProfit, "in profit"); if (t) doClose(t, 0.25); });
+  $("tp-bulk-50").addEventListener("click", function () { var t = bulkPick(inProfit, "in profit"); if (t) doClose(t, 0.5); });
 
   // ---- History tab ---------------------------------------------------------
   // V83 fix: timestamps are broker server time, so format them with UTC
@@ -396,6 +435,42 @@
     if (histList.scrollTop + histList.clientHeight > histList.scrollHeight - 300) renderHistChunk();
   }, { passive: true });
 
+  // V90: minimal cumulative net P/L chart (one SVG path per fetch, hover = one point).
+  var pnlBox = $("tp-pnl-box"), pnlSvg = $("tp-pnl-svg"), pnlTip = $("tp-pnl-tip"), pnlPts = [];
+  var pnlDot = pnlSvg.querySelector("circle");
+  function drawPnl(trades) {
+    var n = trades.length, cum = 0, vals = [0], i;
+    for (i = n - 1; i >= 0; i--) { cum += histNet(trades[i]); vals.push(cum); }
+    pnlBox.classList.toggle("empty", !n);
+    if (!n) { pnlPts = []; return; }
+    var step = Math.max(1, Math.ceil(vals.length / 300)), sv = [];
+    for (i = 0; i < vals.length; i += step) sv.push(vals[i]);
+    if (sv[sv.length - 1] !== cum) sv.push(cum);
+    var lo = Math.min(0, Math.min.apply(null, sv)), hi = Math.max(0, Math.max.apply(null, sv)); // V90: min range so small wins are visible
+    var rg = Math.max(hi - lo || 1, 2);
+    var W = 300, H = 90, P = 4, xs = sv.length > 1 ? W / (sv.length - 1) : 0;
+    var y = function (v) { return P + (hi - v) / rg * (H - 2 * P); };
+    pnlPts = sv.map(function (v, k) { return [k * xs, y(v), v]; });
+    var d = pnlPts.map(function (p, k) { return (k ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1); }).join("");
+    var z = y(0).toFixed(1);
+    pnlSvg.querySelector(".l").setAttribute("d", d);
+    pnlSvg.querySelector(".a").setAttribute("d", d + "L" + W + " " + z + "L0 " + z + "Z");
+    var zl = pnlSvg.querySelector(".z"); zl.setAttribute("y1", z); zl.setAttribute("y2", z);
+    pnlBox.classList.toggle("neg", cum < 0);
+    pnlTip.textContent = money(cum); pnlDot.style.display = "none";
+  }
+  pnlSvg.addEventListener("mousemove", function (e) {
+    if (!pnlPts.length) return;
+    var r = pnlSvg.getBoundingClientRect(), k = Math.round((e.clientX - r.left) / r.width * (pnlPts.length - 1));
+    var p = pnlPts[Math.max(0, Math.min(pnlPts.length - 1, k))];
+    pnlDot.setAttribute("cx", p[0]); pnlDot.setAttribute("cy", p[1]); pnlDot.style.display = "block";
+    pnlTip.textContent = money(p[2]);
+  });
+  pnlSvg.addEventListener("mouseleave", function () {
+    pnlDot.style.display = "none";
+    if (pnlPts.length) pnlTip.textContent = money(pnlPts[pnlPts.length - 1][2]);
+  });
+
   window.onTradeHistory = function (data) {
     data = data || {};
     brokerNow = Number(data.broker_now) || 0;
@@ -409,8 +484,10 @@
     netEl.className = "num " + (trades.length ? (net >= 0 ? "tp-pos" : "tp-neg") : "");
     $("tp-hist-count").textContent = String(trades.length);
     $("tp-hist-win").textContent = trades.length ? Math.round(wins * 100 / trades.length) + "%" : "—";
+    drawPnl(trades);
     histData = trades; histRendered = 0; lastDay = ""; histList.scrollTop = 0;
     if (!trades.length) {
+      drawPnl([]);
       histList.innerHTML = '<div class="tp-empty">' + (data.error ? esc(data.error) : "No closed trades in this period") + "</div>";
       return;
     }
@@ -479,7 +556,7 @@
         [["tp-risk-unit", "riskMode"], ["tp-maxrisk-unit", "maxMode"]].forEach(function (u) {
           $(u[0]).querySelectorAll("button").forEach(function (x) { x.classList.toggle("active", x.getAttribute("data-u") === settings[u[1]]); });
         });
-        syncCommUI(); setFeed();
+        syncBasis(); syncCommUI(); setFeed();
       });
     } catch (e) {}
   }
@@ -500,6 +577,14 @@
   bindNum("tp-risk-input", "risk");
   bindNum("tp-comm-input", "commission", true);
   bindNum("tp-maxrisk-input", "maxRisk");
+  // V90: Max-risk basis switch (open trades = default, Daily DD = + today's loss)
+  var basisRow = $("tp-maxrisk-basis");
+  function syncBasis() { basisRow.querySelectorAll(".tp-chip").forEach(function (x) { x.classList.toggle("selected", x.getAttribute("data-b") === (settings.maxBasis || "open")); }); }
+  syncBasis();
+  basisRow.addEventListener("click", function (e) {
+    var c = e.target.closest(".tp-chip"); if (!c) return;
+    settings.maxBasis = c.getAttribute("data-b"); syncBasis(); saveSettings(); refreshSummary();
+  });
   var chipRow = $("tp-chip-row");
   chipRow.querySelectorAll(".tp-chip").forEach(function (x) { x.classList.toggle("selected", Number(x.getAttribute("data-rr")) === Number(settings.rr)); });
   chipRow.addEventListener("click", function (e) {
