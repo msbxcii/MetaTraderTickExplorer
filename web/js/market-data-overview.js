@@ -98,7 +98,7 @@
   function monthKey(year, month) { return year + "-" + month; }
 
   function formatOldestLabel(unixSeconds) {
-    var d = new Date(unixSeconds * 1000);
+    var d = new Date((App.Tz ? App.Tz.toUser(unixSeconds) : unixSeconds) * 1000);  // v92
     function pad2(n) { return (n < 10 ? "0" : "") + n; }
     var datePart = d.getUTCFullYear() + "." + pad2(d.getUTCMonth() + 1) + "." + pad2(d.getUTCDate());
     var timePart = pad2(d.getUTCHours()) + ":" + pad2(d.getUTCMinutes()) + ":" + pad2(d.getUTCSeconds());

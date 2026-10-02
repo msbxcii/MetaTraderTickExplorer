@@ -80,7 +80,7 @@
           ctx.fillStyle = theme.color || "#8b95a5";
           ctx.fillRect(0, top, w, rowH * rows);
           ctx.fillStyle = theme.textColor || "#0a0e17";
-          ctx.font = fs + "px " + (lo.fontFamily || "-apple-system,BlinkMacSystemFont,'Trebuchet MS',Roboto,Ubuntu,sans-serif");
+          ctx.font = fs + "px " + App.FONT_FAMILY;
           ctx.textBaseline = "middle";
           ctx.textAlign = "left";
           ctx.fillText(priceText, LEFT_PAD, top + rowH / 2);

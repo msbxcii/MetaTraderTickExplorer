@@ -45,6 +45,7 @@
       layout: {
         background: { type: "solid", color: "#0a0e17" },
         textColor: "#8b95a5",
+        fontFamily: App.FONT_FAMILY,
         // v56.5 Update 2: Lightweight Charts' own bottom-left attribution
         // logo, on by default. Removed for the primary chart the same way
         // as every companion panel — see multi-panel.js's createCompanion-
@@ -63,6 +64,8 @@
       },
       crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
     });
+
+    if (App.Tz) App.Tz.attach(App.chart);  // v92: system-time axis labels
 
     // v27: lightweight-charts v5 removed the per-type helpers
     // (addCandlestickSeries/addLineSeries/...). Series are now created via
@@ -901,6 +904,8 @@
         var dot = document.createElement("span");
         dot.className = "symbol-option-db-dot";
         dot.title = "Already synced on this device";
+        // v97: Tabler-style pin icon (same one used in TF.html), colored via currentColor.
+        dot.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4.5l-4 4l-4 1.5l-1.5 1.5l7 7l1.5 -1.5l1.5 -4l4 -4"/><path d="M9 15l-4.5 4.5"/><path d="M14.5 4l5.5 5.5"/></svg>';
         symbolLabel.appendChild(dot);
       }
       btn.appendChild(symbolLabel);
@@ -989,14 +994,21 @@
       if (label) label.textContent = App.symbol || "\u2014";
     }
 
+    // v97: the magnifier hides while there is text (the clear button takes
+    // its place), see .symbol-search-wrap.has-text in index.html.
+    function syncSearchState() {
+      var has = !!searchInput.value;
+      clearBtn.classList.toggle("visible", has);
+      searchWrap.classList.toggle("has-text", has);
+    }
     searchInput.addEventListener("input", function () {
       renderRows(searchInput.value);
-      clearBtn.classList.toggle("visible", !!searchInput.value);
+      syncSearchState();
     });
     searchInput.addEventListener("keydown", function (e) {
       if (e.key === "Escape") {
         searchInput.value = "";
-        clearBtn.classList.remove("visible");
+        syncSearchState();
         renderRows("");
         searchInput.blur();
       } else if (e.key === "Enter") {
@@ -1010,7 +1022,7 @@
     clearBtn.addEventListener("click", function (e) {
       e.stopPropagation();
       searchInput.value = "";
-      clearBtn.classList.remove("visible");
+      syncSearchState();
       renderRows("");
       searchInput.focus();
     });
@@ -1029,12 +1041,22 @@
 
   function openSymbolDropdown() {
     if (dom.symbolDropdownEl) {
+      // v97: only one picker open at a time (the timeframe row collapses).
+      closeTfDropdown();
       dom.symbolDropdownEl.classList.add("open");
+      if (dom.symbolDropdownBtn) dom.symbolDropdownBtn.setAttribute("aria-expanded", "true");
       var input = dom.symbolDropdownEl.querySelector(".symbol-search-input");
       if (input) setTimeout(function () { input.focus(); }, 0);
+      // keep the current symbol visible in a long list
+      var activeRow = dom.symbolDropdownEl.querySelector(".symbol-option.active");
+      if (activeRow && activeRow.scrollIntoView) activeRow.scrollIntoView({ block: "nearest" });
     }
   }
-  function closeSymbolDropdown() { if (dom.symbolDropdownEl) dom.symbolDropdownEl.classList.remove("open"); }
+  function closeSymbolDropdown() {
+    if (!dom.symbolDropdownEl) return;
+    dom.symbolDropdownEl.classList.remove("open");
+    if (dom.symbolDropdownBtn) dom.symbolDropdownBtn.setAttribute("aria-expanded", "false");
+  }
 
   if (dom.symbolDropdownBtn) {
     dom.symbolDropdownBtn.addEventListener("click", function (e) {
@@ -1050,11 +1072,13 @@
   // config.py exposes, without crowding the header.
   function buildTfDropdown() {
     dom.tfDropdownList.innerHTML = "";
-    App.TIMEFRAMES.forEach(function (tf) {
+    App.TIMEFRAMES.forEach(function (tf, i) {
       var btn = document.createElement("button");
       btn.type = "button";
       btn.textContent = formatTfLabel(tf);
       btn.dataset.tf = tf;
+      // v97: per-item index drives the staggered slide-in of the inline row.
+      btn.style.setProperty("--i", i);
       btn.addEventListener("click", function () {
         // v40 Update 4: while Bar Replay is active, the reference timeframe
         // must stay changeable — even mid-Play — without ever falling back
@@ -1078,13 +1102,33 @@
     });
   }
 
-  function openTfDropdown() { dom.tfDropdownEl.classList.add("open"); }
-  function closeTfDropdown() { dom.tfDropdownEl.classList.remove("open"); }
+  // v97: the header timeframe picker is an inline segmented row (see the
+  // v97 Update 1 CSS block in index.html): "open" expands it in place and
+  // closes the symbol menu; selecting a value or the clock cell collapses it.
+  function openTfDropdown() {
+    closeSymbolDropdown();
+    dom.tfDropdownEl.classList.add("open");
+    dom.tfDropdownBtn.setAttribute("aria-expanded", "true");
+  }
+  function closeTfDropdown() {
+    dom.tfDropdownEl.classList.remove("open");
+    dom.tfDropdownBtn.setAttribute("aria-expanded", "false");
+  }
+
+  // clock icon inside the button (shared inline-SVG set)
+  (function () {
+    var ic = dom.tfDropdownBtn.querySelector(".tf-ic");
+    if (ic && App.Icons && App.Icons.clock) ic.innerHTML = App.Icons.clock();
+  })();
 
   dom.tfDropdownBtn.addEventListener("click", function (e) {
     e.stopPropagation();
     if (dom.tfDropdownEl.classList.contains("open")) closeTfDropdown();
     else openTfDropdown();
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { closeTfDropdown(); }
   });
 
   document.addEventListener("click", function (e) {
@@ -1114,6 +1158,17 @@
     }
     dom.liveDotEl.classList.remove("live", "syncing", "offline");
     dom.liveDotEl.classList.add(cls);
+    // Notifications follow the dot exactly: one per dot-state change
+    // (green / orange / red), using the same decision made above. The first
+    // call only records the baseline, and repeated calls with the same state
+    // stay silent.
+    var prevCls = updateStatusDot._prev;
+    updateStatusDot._prev = cls;
+    if (prevCls && prevCls !== cls && App.Trade && App.Trade.toast) {
+      if (cls === "live") App.Trade.toast("Connected to MT5 \u2014 live data is back", "ok");
+      else if (cls === "syncing") App.Trade.toast("Syncing with MT5 \u2014 updating data", "info");
+      else App.Trade.toast("MT5 connection lost \u2014 working offline", "err");
+    }
   }
 
   // Sent by the sync process (sync_process.py) any time its own view of

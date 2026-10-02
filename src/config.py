@@ -53,6 +53,13 @@ LOG_TO_DISK = True
 # the Configuration tab.
 SHOW_TOOL_HINTS = True
 
+# V99: on-screen notifications (toasts, bottom-left). ALERT_DISPLAY_SECONDS is how
+# long a notification stays visible once the user has moved the mouse (the timer
+# never starts while the user is away); ALERT_MAX_COUNT is how many notifications
+# can be stacked at once. Both apply immediately (frontend preference).
+ALERT_DISPLAY_SECONDS = 5.0
+ALERT_MAX_COUNT = 12
+
 # v67.3: Log panel initial in-memory window and browser poll cadence.
 # These values are retained in config.py because chart_bridge imports them
 # directly; keeping them here also preserves compatibility with earlier builds.

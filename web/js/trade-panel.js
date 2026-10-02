@@ -161,15 +161,84 @@
     if (App.TradeLines && App.TradeLines.onSpecs) App.TradeLines.onSpecs(d);
   };
 
+  // V99: notification stack (bottom-left). Newest toast enters at the bottom and
+  // older ones slide up; identical consecutive messages merge into one with a
+  // x2/x3 badge. The progress bar IS the timer, but it only starts running once
+  // the user moves the mouse after the alert appeared (so alerts shown while the
+  // user is away stay on screen until they are back). Hover also pauses it.
+  // Duration and max count come from Setting > Configuration (App.AppConfig).
   var toastBox = null;
+  var TOAST_ICONS = {
+    ok: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.4l2.3 2.3 4.7-5"/></svg>',
+    err: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 2.5v4.2M6 9.2v.1"/></svg>',
+    info: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 5.4v3.6M6 2.9v.1"/></svg>'
+  };
+  var TOAST_CLOSE = '<svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 2l6 6M8 2L2 8"/></svg>';
+
+  function alertSettings() {
+    return (App.AppConfig && App.AppConfig.getAlertSettings) ? App.AppConfig.getAlertSettings() : { seconds: 5, max: 12 };
+  }
+
+  // Real mouse movement (not a layout-triggered synthetic event: position must
+  // actually change) arms every alert that is still waiting for the user.
+  var lastMX = null, lastMY = null;
+  document.addEventListener("mousemove", function (e) {
+    var dx = lastMX === null ? 0 : e.clientX - lastMX;
+    var dy = lastMY === null ? 0 : e.clientY - lastMY;
+    lastMX = e.clientX; lastMY = e.clientY;
+    if (!toastBox || Math.abs(dx) + Math.abs(dy) < 3) return;
+    var waiting = toastBox.querySelectorAll(".tl-toast:not(.armed)");
+    for (var i = 0; i < waiting.length; i++) waiting[i].classList.add("armed");
+  }, true);
+
+  function toastDismiss(wrap) {
+    if (!wrap || wrap._leaving) return;
+    wrap._leaving = true;
+    wrap.classList.remove("in");
+    wrap.classList.add("out");
+    setTimeout(function () { if (wrap.parentNode) wrap.remove(); }, 260);
+  }
+  function toastRestartBar(el, ms) {
+    var old = el.querySelector(".tl-toast-bar");
+    if (old) old.remove();
+    el.classList.remove("armed");   // waits for the next real mouse movement
+    var bar = document.createElement("div");
+    bar.className = "tl-toast-bar";
+    bar.style.animationDuration = ms + "ms";
+    bar.addEventListener("animationend", function () { toastDismiss(el.parentNode.parentNode); });
+    el.appendChild(bar);
+  }
   function toast(msg, kind) {
+    var k = kind === "err" ? "err" : (kind === "info" ? "info" : "ok");
     if (!toastBox) { toastBox = document.createElement("div"); toastBox.id = "tl-toasts"; document.body.appendChild(toastBox); }
+    var cfg = alertSettings();
+    var ms = Math.round(cfg.seconds * 1000);
+    var last = toastBox.lastElementChild;
+    if (last && !last._leaving && last._msg === msg && last._kind === k) {
+      last._count++;
+      var badge = last.querySelector(".tl-toast-count");
+      badge.textContent = "\u00d7" + last._count; badge.hidden = false;
+      badge.classList.remove("bump"); void badge.offsetWidth; badge.classList.add("bump");
+      toastRestartBar(last.querySelector(".tl-toast"), ms);
+      return;
+    }
+    var wrap = document.createElement("div");
+    wrap.className = "tl-toast-wrap";
+    wrap._msg = msg; wrap._kind = k; wrap._count = 1;
+    var clip = document.createElement("div"); clip.className = "tl-toast-clip";
     var el = document.createElement("div");
-    el.className = "tl-toast" + (kind ? " " + kind : "");
-    el.textContent = msg;
-    toastBox.appendChild(el);
-    while (toastBox.children.length > 4) toastBox.firstChild.remove();
-    setTimeout(function () { el.remove(); }, kind === "err" ? 6000 : 3000);
+    el.className = "tl-toast " + k;
+    el.setAttribute("role", k === "err" ? "alert" : "status");
+    el.innerHTML = '<span class="tl-toast-icon">' + TOAST_ICONS[k] + '</span><span class="tl-toast-msg"></span>' +
+      '<span class="tl-toast-count" hidden></span><button type="button" class="tl-toast-close" aria-label="Dismiss">' + TOAST_CLOSE + '</button>';
+    el.querySelector(".tl-toast-msg").textContent = msg;
+    el.querySelector(".tl-toast-close").addEventListener("click", function () { toastDismiss(wrap); });
+    clip.appendChild(el); wrap.appendChild(clip);
+    toastBox.appendChild(wrap);
+    toastRestartBar(el, ms);
+    requestAnimationFrame(function () { requestAnimationFrame(function () { wrap.classList.add("in"); }); });
+    var live = [].filter.call(toastBox.children, function (c) { return !c._leaving; });
+    while (live.length > cfg.max) toastDismiss(live.shift());
   }
 
   // Request tracking: every action gets an id; no answer in 10 s = warn.
@@ -395,13 +464,15 @@
   // getters (no local-timezone shift) and compare days against broker "now".
   var brokerNow = 0;
   function dayLabel(ts) {
-    var day = Math.floor(ts / 86400), today = Math.floor((brokerNow || ts) / 86400);
+    var o = App.Tz ? App.Tz.offset() : 0;  // v92: system-time display
+    ts += o;
+    var day = Math.floor(ts / 86400), today = Math.floor((brokerNow ? brokerNow + o : ts) / 86400);
     if (day === today) return "TODAY";
     if (day === today - 1) return "YESTERDAY";
     return new Date(ts * 1000).toLocaleDateString("en-US", { timeZone: "UTC", year: "numeric", month: "short", day: "numeric" }).toUpperCase();
   }
   function hhmm(ts) {
-    var d = new Date(ts * 1000);
+    var d = new Date((App.Tz ? App.Tz.toUser(ts) : ts) * 1000);
     return String(d.getUTCHours()).padStart(2, "0") + ":" + String(d.getUTCMinutes()).padStart(2, "0");
   }
 

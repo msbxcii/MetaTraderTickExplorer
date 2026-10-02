@@ -458,6 +458,22 @@ class ChartBridge:
             self._logger.debug(f"ingest_live_ask failed: {e}")
             return None
 
+    def get_sessions_settings(self):
+        """v93: Sessions & Timezone tab {settings, presets}."""
+        st = getattr(self, "_sessions_store", None)
+        return st.load() if st is not None else {"settings": {}, "presets": []}
+
+    def save_sessions_settings(self, data):
+        st = getattr(self, "_sessions_store", None)
+        if st is None or not isinstance(data, dict):
+            return False
+        return st.save(data.get("settings") or {}, data.get("presets") or [])
+
+    def get_time_offset(self):
+        """v92: display offset in seconds (system - broker); 0 if unknown."""
+        tz = getattr(self, "_time_offset_store", None)
+        return tz.offset_seconds if tz is not None else 0
+
     def get_live_ask(self):
         """Newest known ASK for the selected symbol, or None (JS: page start-up)."""
         return self._live_ask

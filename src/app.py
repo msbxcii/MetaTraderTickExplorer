@@ -23,6 +23,8 @@ from style_store import StyleStore
 from canvas_settings_store import CanvasSettingsStore
 from keyboard_shortcuts_store import KeyboardShortcutsStore
 from config_store import ConfigStore
+from time_offset_store import TimeOffsetStore  # v92
+from sessions_store import SessionsStore  # v93
 import version as app_version
 from runtime_paths import PROJECT_ROOT as _PROJECT_ROOT, RESOURCE_ROOT as _RESOURCE_ROOT
 from config import (
@@ -51,6 +53,12 @@ def _handle_live_queue_message(window, bridge, message, logger, identity_callbac
             payload_json = json.dumps(message.get("data") or {})
             server_msc = json.dumps(message.get("server_msc"))  # V81: broker clock
             window.evaluate_js(f"window.onLiveCandles && window.onLiveCandles({payload_json}, {server_msc})")
+            # v92: daily broker/system offset check from a live tick.
+            tz = getattr(bridge, "_time_offset_store", None)
+            if tz is not None and message.get("server_msc") is not None:
+                new_off = tz.observe(message.get("server_msc"))
+                if new_off is not None:
+                    window.evaluate_js(f"window.onTimeOffset && window.onTimeOffset({int(new_off)})")
         elif kind == "ask":
             # V64: display-only live ASK. The bridge keeps the newest value in RAM
             # (for a page that loads while the market is quiet) and rejects a
@@ -417,6 +425,9 @@ def main():
     # previous run, before this line even executes.
     app_config_dir = os.path.join(_PROJECT_ROOT, APP_CONFIG_DIR)
     config_store = ConfigStore(app_config_dir, logger)
+    # v92: broker->system display offset (once-per-day check).
+    time_offset_store = TimeOffsetStore(app_config_dir, logger)
+    sessions_store = SessionsStore(os.path.join(_PROJECT_ROOT, "output", "settings", "sessions"), logger)  # v93
 
     # (v44) Window -> Sync process command channel, used only for Backfill
     # requests from the Market Data Overview panel.
@@ -469,6 +480,8 @@ def main():
         symbol_list=symbol_list, switch_symbol_callback=switch_runtime_symbol,
         log_path=log_filename,
     )
+    bridge._time_offset_store = time_offset_store  # v92
+    bridge._sessions_store = sessions_store  # v93
 
     # v55.4: frameless window with a custom, theme-matched title bar drawn in
     # the page itself. easy_drag=False is intentional: movement is handled

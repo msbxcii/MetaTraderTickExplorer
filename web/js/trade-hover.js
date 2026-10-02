@@ -65,7 +65,7 @@
     return lo + Math.min((t - arr[lo].time) / tf, 1) - 0.5;
   }
 
-  function fmtT(t) { return new Date(t * 1000).toISOString().substr(11, 8); } // broker time, UTC getters
+  function fmtT(t) { return new Date((window.App && App.Tz ? App.Tz.toUser(t) : t) * 1000).toISOString().substr(11, 8); } // broker time, UTC getters
 
   // ---- drawing (follows history.html) ---------------------------------------
   function killLines(v) {
@@ -155,7 +155,7 @@
     ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.stroke();
     ctx.restore();
     // time axis labels (price labels are the native price lines above)
-    ctx.font = "12px -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, Ubuntu, sans-serif";
+    ctx.font = "12px " + App.FONT_FAMILY;
     var items = [];
     if (x1 >= 0 && x1 <= pw) items.push({ x: x1, txt: fmtT(t.et) });
     if (x2 >= 0 && x2 <= pw) items.push({ x: x2, txt: fmtT(t.xt) });

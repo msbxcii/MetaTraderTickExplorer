@@ -30,6 +30,7 @@
   var TABS = {
     "market-data-overview": { title: "Market Data Overview", module: "MarketDataOverview" },
     "canvas": { title: "Canvas", module: "CanvasSettings" },
+    "sessions": { title: "Sessions & Timezone", module: "SessionsSettings" },  // v93
     "keyboard-shortcuts": { title: "Keyboard Shortcuts", module: "KeyboardShortcuts" },
     "configuration": { title: "Configuration", module: "AppConfig" },
     "about": { title: "About", module: "AboutPanel" },
@@ -46,6 +47,7 @@
     var map = {
       "market-data-overview": App.Icons.tabMarketData,
       "canvas": App.Icons.tabCanvas,
+      "sessions": App.Icons.tabSessions,
       "keyboard-shortcuts": App.Icons.tabKeyboard,
       "configuration": App.Icons.tabConfiguration,
       "about": App.Icons.tabAbout,
@@ -79,9 +81,21 @@
     if (module && module.activate) module.activate();
   }
 
+  // v98: measure the pane scrollbar/gutter width so the right inset of every
+  // tab equals its left inset (see "v98" in index.html).
+  function syncScrollbarWidth() {
+    var modal = document.querySelector(".settings-modal");
+    var panes = modal && modal.querySelector(".settings-panes");
+    if (!panes) return;
+    var w = Math.max(0, panes.offsetWidth - panes.clientWidth);
+    modal.style.setProperty("--sbw", w + "px");
+  }
+  window.addEventListener("resize", syncScrollbarWidth);
+
   function open(initialTab) {
     dom.settingsBackdrop.classList.add("open");
     isOpen = true;
+    syncScrollbarWidth();
     dom.settingsToggle.classList.add("active");
     showTab(initialTab || activeTab || "market-data-overview");
   }
@@ -120,6 +134,60 @@
       showTab(evt.currentTarget.getAttribute("data-tab"));
     });
   }
+
+  // v96: floating preset dropdown lists. The list used to be position:absolute
+  // inside .settings-panes (overflow-y:auto), so when it needed more room than
+  // was left below the button, the WHOLE tab started scrolling. It is now
+  // position:fixed (taken out of the pane's scroll flow), placed under the
+  // button (never above it) and its max-height is
+  // fitted to the free space inside the Setting modal, so only the list's own
+  // items scroll. Applies to every .canvas-preset-dropdown in the panel
+  // (Canvas, Sessions & Timezone, and any future one) with no per-tab code.
+  (function () {
+    var modal = document.querySelector(".settings-modal");
+    if (!modal) return;
+    var GAP = 5, EDGE = 14, MIN_H = 72, MAX_H = 400;
+
+    function place(wrap) {
+      var btn = wrap.querySelector(".canvas-preset-dropdown-btn");
+      var list = wrap.querySelector(".canvas-preset-dropdown-list");
+      if (!btn || !list) return;
+      var b = btn.getBoundingClientRect();
+      var m = modal.getBoundingClientRect();
+      var bottom = Math.min(m.bottom, window.innerHeight) - EDGE;
+      list.style.maxHeight = "none";
+      var natural = Math.min(list.scrollHeight + 2, MAX_H);
+      // Always opens DOWNWARD. If the free space below is smaller than the
+      // list, the list is cut to that space and scrolls inside itself.
+      var below = bottom - b.bottom - GAP;
+      var room = Math.max(MIN_H, Math.min(natural, below));
+      list.style.position = "fixed";
+      list.style.left = b.left + "px";
+      list.style.width = b.width + "px";
+      list.style.right = "auto";
+      list.style.bottom = "auto";
+      list.style.top = (b.bottom + GAP) + "px";
+      list.style.maxHeight = room + "px";
+    }
+
+    var wraps = modal.querySelectorAll(".canvas-preset-dropdown");
+    Array.prototype.forEach.call(wraps, function (wrap) {
+      new MutationObserver(function () {
+        if (wrap.classList.contains("open")) place(wrap);
+      }).observe(wrap, { attributes: true, attributeFilter: ["class"] });
+      // list contents change (preset added/deleted) while open -> refit
+      var list = wrap.querySelector(".canvas-preset-dropdown-list");
+      if (list) new MutationObserver(function () {
+        if (wrap.classList.contains("open")) place(wrap);
+      }).observe(list, { childList: true });
+    });
+    function refit() {
+      Array.prototype.forEach.call(wraps, function (w) { if (w.classList.contains("open")) place(w); });
+    }
+    window.addEventListener("resize", refit);
+    var panes = modal.querySelector(".settings-panes");
+    if (panes) panes.addEventListener("scroll", refit, { passive: true });
+  })();
 
   App.SettingsPanel = { open: open, close: close, showTab: showTab };
 })();

@@ -76,12 +76,17 @@
       ],
     },
     {
-      title: "Logging",
+      title: "Notifications",
       fields: [
         {
-          key: "LOG_TO_DISK", type: "bool",
-          title: "Save Logs to Disk",
-          description: "When enabled, non-DATABASE logs are appended to the daily log file. DATABASE logs stay available in the CMD window and all in-app log views but are kept out of the disk file to avoid unnecessary log-file growth. This setting applies on the next launch."
+          key: "ALERT_DISPLAY_SECONDS", type: "float", step: "0.5", unit: "sec",
+          title: "Notification Display Time",
+          description: "How long each notification (errors, trade confirmations, connection changes, notices) stays on screen. The countdown only starts once you move the mouse, so notifications that appeared while you were away stay until you are back and have read them. Allowed range 1 to 120 seconds. Takes effect immediately."
+        },
+        {
+          key: "ALERT_MAX_COUNT", type: "int", step: "1", unit: "items",
+          title: "Max Notifications Shown",
+          description: "Maximum number of notifications stacked on screen at the same time (bottom-left). When the limit is reached the oldest notification is dismissed first. Allowed range 1 to 30. Takes effect immediately."
         }
       ],
     },
@@ -92,6 +97,16 @@
           key: "SHOW_TOOL_HINTS", type: "bool",
           title: "Show Tool Guide Text",
           description: "Shows the small guide text at the bottom of the chart when a drawing tool is selected (e.g. \"Click on any chart panel to place the Trend Line\"). Unlike every other field on this tab, this takes effect immediately — no restart needed."
+        }
+      ],
+    },
+    {
+      title: "Logging",
+      fields: [
+        {
+          key: "LOG_TO_DISK", type: "bool",
+          title: "Save Logs to Disk",
+          description: "When enabled, non-DATABASE logs are appended to the daily log file. DATABASE logs stay available in the CMD window and all in-app log views but are kept out of the disk file to avoid unnecessary log-file growth. This setting applies on the next launch."
         }
       ],
     },
@@ -224,11 +239,8 @@
       var sectionEl = document.createElement("div");
       sectionEl.className = "appcfg-section";
 
-      var titleEl = document.createElement("div");
-      titleEl.className = "appcfg-section-title";
-      titleEl.textContent = section.title;
-      sectionEl.appendChild(titleEl);
-
+      // v99: no section heading/box any more — rows form one flat list
+      // (section.title stays in SECTIONS as grouping metadata only).
       visibleFields.forEach(function (field) {
         sectionEl.appendChild(renderRow(field));
       });
@@ -278,6 +290,7 @@
 
       input.type = "text";
       input.className = "appcfg-input";
+      if (field.type === "int" || field.type === "float") input.classList.add("appcfg-input-num");
       input.autocomplete = "off";
       input.spellcheck = false;
       input.value = valueToInputString(field, current[field.key]);
@@ -405,5 +418,25 @@
     return !(loaded && current.hasOwnProperty("SHOW_TOOL_HINTS") && current.SHOW_TOOL_HINTS === false);
   }
 
-  App.AppConfig = { activate: activate, deactivate: deactivate, isToolHintEnabled: isToolHintEnabled };
+  // V99: notification settings are read live by the toast system (trade-panel.js),
+  // so they apply immediately and are clamped to a sane range. Before the
+  // config has loaded (or if a value is invalid) the built-in defaults are used.
+  function getAlertSettings() {
+    var secs = Number(loaded ? current.ALERT_DISPLAY_SECONDS : NaN);
+    var count = Number(loaded ? current.ALERT_MAX_COUNT : NaN);
+    if (!(secs > 0)) secs = 5;
+    if (!(count > 0)) count = 12;
+    return {
+      seconds: Math.min(120, Math.max(1, secs)),
+      max: Math.min(30, Math.max(1, Math.round(count)))
+    };
+  }
+
+  // Load once at startup (not only when the tab is opened) so the saved notification
+  // settings are already in effect for the first notification of the session.
+  function preload() { if (!loaded) load(); }
+  if (hasBridge("get_app_config")) preload();
+  else window.addEventListener("pywebviewready", preload);
+
+  App.AppConfig = { activate: activate, deactivate: deactivate, isToolHintEnabled: isToolHintEnabled, getAlertSettings: getAlertSettings };
 })();

@@ -152,17 +152,18 @@
     header.className = "chart-panel-header";
 
     var tfWrap = document.createElement("div");
-    tfWrap.className = "tf-dropdown mini";
+    tfWrap.className = "tf-dropdown tfx mini";  // v97: inline segmented picker
     var tfBtn = document.createElement("button");
     tfBtn.type = "button";
     tfBtn.className = "tf-dropdown-btn";
+    var tfIc = document.createElement("span");
+    tfIc.className = "tf-ic";
+    tfIc.setAttribute("aria-hidden", "true");
+    if (App.Icons && App.Icons.clock) tfIc.innerHTML = App.Icons.clock();
     var tfLabel = document.createElement("span");
     tfLabel.textContent = "—";
-    var caret = document.createElement("span");
-    caret.className = "caret";
-    caret.textContent = "▼";
+    tfBtn.appendChild(tfIc);
     tfBtn.appendChild(tfLabel);
-    tfBtn.appendChild(caret);
     var tfList = document.createElement("div");
     tfList.className = "tf-dropdown-list";
     tfWrap.appendChild(tfBtn);
@@ -195,6 +196,7 @@
       layout: {
         background: { type: "solid", color: "#0a0e17" },
         textColor: "#8b95a5",
+        fontFamily: App.FONT_FAMILY,
         // v56.5 Update 2: same attribution-logo removal as the primary
         // chart (chart-core.js's createChart()) — no bottom-left logo on
         // companion panels 2/3 either.
@@ -215,6 +217,7 @@
       handleScroll: { mouseWheel: false },
       handleScale: { mouseWheel: true },
     });
+    if (App.Tz) App.Tz.attach(chart);  // v92
 
     var series = chart.addSeries(LightweightCharts.CandlestickSeries, {
       upColor: "#3fb68b",
@@ -390,11 +393,12 @@
 
     function buildTfList() {
       tfList.innerHTML = "";
-      (App.TIMEFRAMES || []).forEach(function (tf) {
+      (App.TIMEFRAMES || []).forEach(function (tf, i) {
         var btn = document.createElement("button");
         btn.type = "button";
         btn.textContent = formatTfLabel(tf);
         btn.dataset.tf = tf;
+        btn.style.setProperty("--i", i);  // v97: staggered slide-in
         btn.addEventListener("click", function () {
           closeList();
           setCompanionTf(panel, tf);

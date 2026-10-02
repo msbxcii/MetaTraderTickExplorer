@@ -34,13 +34,14 @@
   // UTC getters/Date.UTC(), same as before.
   function pad2(n) { return (n < 10 ? "0" : "") + n; }
 
+  // v92: fields show/accept system time; stored times stay broker time.
   function formatDatePart(ts) {
-    var d = new Date(ts * 1000);
+    var d = new Date((App.Tz ? App.Tz.toUser(ts) : ts) * 1000);
     return d.getUTCFullYear() + "-" + pad2(d.getUTCMonth() + 1) + "-" + pad2(d.getUTCDate());
   }
 
   function formatTimePart(ts) {
-    var d = new Date(ts * 1000);
+    var d = new Date((App.Tz ? App.Tz.toUser(ts) : ts) * 1000);
     return pad2(d.getUTCHours()) + ":" + pad2(d.getUTCMinutes()) + ":" + pad2(d.getUTCSeconds());
   }
 
@@ -56,7 +57,8 @@
     if (hh > 23 || mm > 59 || ss > 59) return null;
     var ms = Date.UTC(year, month - 1, day, hh, mm, ss);
     if (isNaN(ms)) return null;
-    return Math.round(ms / 1000);
+    var t = Math.round(ms / 1000);
+    return App.Tz ? App.Tz.toBroker(t) : t;
   }
 
   // A rectangle's two stored points aren't labeled "start"/"end" — this
@@ -118,16 +120,23 @@
     // v38 Fix 1: Fill now shares Border's row — only its own swatch
     // toggles per type, there's no separate wrapping row any more.
     dom.dcmFillColor.style.display = isRect ? "" : "none";
-    dom.dcmTimeFromRow.style.display = (isRect || isFib) ? "flex" : "none";
-    dom.dcmTimeToRow.style.display = (isRect || isFib) ? "flex" : "none";
-    dom.dcmVlineTimeRow.style.display = isVline ? "flex" : "none";
+    // v99: the panel was redesigned (Panel.html) — the Fill/Border row is
+    // labelled "Line" for every non-rectangle, since there is no fill there.
+    if (dom.dcmBorderLabel) dom.dcmBorderLabel.textContent = isRect ? "Fill / Border" : "Line";
+    // v99: time/price rows are CSS grids now (not flex), so "" falls back to
+    // the stylesheet's own display value; the whole time section is hidden
+    // when none of its rows applies (trend, fib expansion).
+    dom.dcmTimeFromRow.style.display = (isRect || isFib) ? "" : "none";
+    dom.dcmTimeToRow.style.display = (isRect || isFib) ? "" : "none";
+    dom.dcmVlineTimeRow.style.display = isVline ? "" : "none";
     // v70.3 Update 2.
-    if (dom.dcmHlinePriceRow) dom.dcmHlinePriceRow.style.display = isHline ? "flex" : "none";
+    if (dom.dcmHlinePriceRow) dom.dcmHlinePriceRow.style.display = isHline ? "" : "none";
+    if (dom.dcmTimeSection) dom.dcmTimeSection.style.display = (isRect || isFib || isVline || isHline) ? "" : "none";
     // v36 Fix 4: Middle Line row only applies to rectangles; its color/
     // width/type fields only make sense once it's actually enabled.
-    dom.dcmMiddleLineRow.style.display = isRect ? "flex" : "none";
+    dom.dcmMiddleLineRow.style.display = isRect ? "" : "none";
     // v47/v53: Level & Description table applies to the whole Fib family.
-    if (dom.dcmFibLevelsSection) dom.dcmFibLevelsSection.style.display = isFibFamily ? "block" : "none";
+    if (dom.dcmFibLevelsSection) dom.dcmFibLevelsSection.style.display = isFibFamily ? "flex" : "none";
     if (isRect) {
       var ml = obj.style.middleLine || { enabled: false, style: "dashed", color: obj.style.borderColor, width: 1, opacity: 100 };
       dom.dcmMiddleLineEnabled.checked = !!ml.enabled;
@@ -390,8 +399,15 @@
 
   // v36 Fix 4: shows/hides the Middle Line's color/width/type fields —
   // only relevant for a rectangle, and only once the checkbox is on.
+  // v99: with the single-row Middle Line layout from Panel.html the color/
+  // width/type controls stay in place and are dimmed + disabled while the
+  // box is unchecked, instead of the whole sub-row appearing/disappearing.
   function updateMiddleLineSubRows(isRect, enabled) {
-    dom.dcmMiddleLineFieldsRow.style.display = (isRect && enabled) ? "flex" : "none";
+    var on = !!(isRect && enabled);
+    if (dom.dcmMiddleLineRow) dom.dcmMiddleLineRow.classList.toggle("is-off", !on);
+    [dom.dcmMiddleLineColor, dom.dcmMiddleLineWidth, dom.dcmMiddleLineStyle].forEach(function (el) {
+      if (el) el.disabled = !on;
+    });
   }
 
   // ---- v47: Fib Retracement — Level & Description table (Update 3) ------
@@ -446,7 +462,7 @@
       // v47.1 Update 3: the trash-can glyph read as too small/indistinct at
       // this size — a plain "X" (same glyph the panel's own close buttons
       // already use) is clearer at a glance.
-      trashBtn.textContent = "\u2715";
+      trashBtn.innerHTML = '<svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
       trashBtn.addEventListener("click", function () {
         if (protectedRow || !App.activeMenuObject) return;
         var levels = App.activeMenuObject.style.levels;
@@ -900,6 +916,9 @@
   dom.dcmClose.addEventListener("click", closeContextMenu);
 
   document.addEventListener("mousedown", function (evt) {
+    // v99: clicks inside the color picker popover (a body-level element) are
+    // not "outside" the panel that opened it.
+    if (App.ColorField && App.ColorField.isPickerTarget(evt.target)) return;
     if (dom.contextMenuEl.classList.contains("open") && !dom.contextMenuEl.contains(evt.target)) {
       closeContextMenu();
     }

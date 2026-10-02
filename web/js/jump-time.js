@@ -55,6 +55,7 @@
   function isoWeekday(d) { return (d.getUTCDay() + 6) % 7; }
 
   function dayBoundsOk(ts) {
+    if (App.Tz) ts = App.Tz.toBroker(ts);  // v92: calendar is in system time
     var bounds = App.jumpTimeBounds;
     if (!bounds || bounds.first_time === null || bounds.last_time === null) return true;
     return ts >= Number(bounds.first_time) && ts <= Number(bounds.last_time);
@@ -156,6 +157,7 @@
     var current = App.candlesByTf[App.currentTf] || [];
     if (current.length) ts = current[current.length - 1].time;
     if (ts === null) ts = Math.floor(Date.now() / 1000);
+    if (App.Tz) ts = App.Tz.toUser(ts);  // v92: show system time
     dom.jumpTimeDate.value = formatDatePart(ts);
     dom.jumpTimeTime.value = formatTimePart(ts);
     dom.jumpTimeDate.focus();
@@ -183,6 +185,7 @@
 
   function validate() {
     var ts = parseParts(dom.jumpTimeDate.value, dom.jumpTimeTime.value);
+    if (ts !== null && App.Tz) ts = App.Tz.toBroker(ts);  // v92: typed system time -> broker
     if (ts === null) {
       setInvalid(true);
       setGoEnabled(false);
@@ -455,6 +458,7 @@
   }
 
   document.addEventListener("mousedown", function (evt) {
+    if (App.ColorField && App.ColorField.isPickerTarget(evt.target)) return; // v99
     if (App.jumpTimeOpen && !dom.jumpTimePanel.contains(evt.target)) close();
   });
 

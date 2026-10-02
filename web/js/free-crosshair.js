@@ -10,7 +10,7 @@
   var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   function pad(n) { return n < 10 ? "0" + n : "" + n; }
   function fmt(sec, tf) {
-    var d = new Date(Math.floor(sec) * 1000);
+    var d = new Date((Math.floor(sec) + (window.App && App.Tz && tf < 86400 ? App.Tz.offset() : 0)) * 1000);  // v92
     var s = d.getUTCDate() + " " + MONTHS[d.getUTCMonth()] + " '" + pad(d.getUTCFullYear() % 100);
     if (tf < 86400) {
       s += "  " + pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()) + ":" + pad(d.getUTCSeconds());
@@ -83,7 +83,7 @@
       label.textContent = fmt(t, data.tf);
       label.style.background = v.labelBackgroundColor || "#131722";
       label.style.font = (o.layout && o.layout.fontSize ? o.layout.fontSize : 12) + "px " +
-        ((o.layout && o.layout.fontFamily) || "sans-serif");
+        App.FONT_FAMILY;
       label.style.top = (paneH + 1) + "px";
       label.style.lineHeight = Math.max(16, axisH - 6) + "px";
       label.style.display = "block";

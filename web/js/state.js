@@ -143,7 +143,8 @@ window.App = {
   HIT_TOLERANCE: 6,        // px tolerance for hitting a line/border
   HANDLE_HIT: 8,           // px tolerance for grabbing a handle
   HANDLE_R: 5,             // px radius of a trend-line endpoint handle
-  HANDLE_S: 8,             // px size of a rectangle corner handle
+  FONT_FAMILY: "Inter, 'Segoe UI', system-ui, sans-serif",  // V99: single UI/canvas font
+  HANDLE_S: 6,             // px size of the square selection handle (all object types)
 
   dpr: window.devicePixelRatio || 1,
 
@@ -235,11 +236,13 @@ window.App = {
     // color picker opened from this swatch — no separate opacity slider
     // or wrapping row of its own any more (see dcmFillColor.opacity).
     dcmFillColor: document.getElementById("dcm-fill-color"),
+    // v99: "Fill / Border" row label (becomes "Line" for non-rectangles) and
+    // the section wrapping the time/price rows.
+    dcmBorderLabel: document.getElementById("dcm-border-label"),
+    dcmTimeSection: document.getElementById("dcm-time-section"),
     // v36 Fix 4: rectangle-only "Middle Line" section.
     dcmMiddleLineRow: document.getElementById("dcm-middle-line-row"),
     dcmMiddleLineEnabled: document.getElementById("dcm-middle-line-enabled"),
-    // v37 Fix 3: color/width/type now share one compact row.
-    dcmMiddleLineFieldsRow: document.getElementById("dcm-middle-line-fields-row"),
     dcmMiddleLineColor: document.getElementById("dcm-middle-line-color"),
     dcmMiddleLineWidth: document.getElementById("dcm-middle-line-width"),
     dcmMiddleLineStyle: document.getElementById("dcm-middle-line-style"),

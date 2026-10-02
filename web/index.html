@@ -10,6 +10,17 @@
      locally instead of CDN" for the full rationale and download link. -->
 <script src="vendor/lightweight-charts.standalone.production.js"></script>
 <style>
+  :root { --font-ui: "Inter", "Segoe UI", system-ui, sans-serif; }
+  button, input, select, textarea { font-family: inherit; }
+  /* v98: Inter is now bundled locally (web/vendor/fonts, SIL OFL) instead of being
+     fetched from Google Fonts with font-display:swap. The web font used to arrive a
+     moment AFTER first paint, so the header symbol (and every Inter-styled control)
+     rendered in the fallback font first and visibly re-sized/re-flowed once Inter
+     loaded. A local file loads immediately and font-display:block hides text for
+     those few milliseconds instead of showing a different font. */
+  @font-face { font-family: "Inter"; font-style: normal; font-weight: 400; font-display: block; src: url("vendor/fonts/inter-latin-400-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-style: normal; font-weight: 500; font-display: block; src: url("vendor/fonts/inter-latin-500-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-style: normal; font-weight: 600; font-display: block; src: url("vendor/fonts/inter-latin-600-normal.woff2") format("woff2"); }
   :root {
     --bg: #0a0e17;
     --panel: #11161f;
@@ -18,7 +29,7 @@
     --muted: #6b7686;
     --up: #3fb68b;
     --down: #e5484d;
-    --gold: #c9a227;
+    --gold: #e6e9ef;
     /* v50.1: shared hover/active "state layer" overlays used throughout
        the app's buttons/rows/list-items. Defined once here (instead of
        each rule hardcoding rgba(255,255,255,X)) so v50.2's Light Theme
@@ -30,6 +41,14 @@
     --ov5: rgba(255, 255, 255, 0.05);
     --ov6: rgba(255, 255, 255, 0.06);
     --ov8: rgba(255, 255, 255, 0.08);
+    /* v99: surface tokens for the object settings panel (see #draw-context-menu). */
+    --dcm-ctl: #1a212d;
+    --dcm-ctl-hover: #212a38;
+    --dcm-ctl-text: #c5ccd8;
+    --dcm-pill-on: #2b3444;
+    --dcm-chk-a: #3a3f4a;
+    --dcm-chk-b: #262b34;
+    --dcm-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   }
 
   /* =========================================================================
@@ -66,6 +85,13 @@
     --ov5: rgba(0, 0, 0, 0.05);
     --ov6: rgba(0, 0, 0, 0.06);
     --ov8: rgba(0, 0, 0, 0.08);
+    --dcm-ctl: #f1f2f5;
+    --dcm-ctl-hover: #e7e9ee;
+    --dcm-ctl-text: #3a4150;
+    --dcm-pill-on: #d7dbe2;
+    --dcm-chk-a: #c9cdd4;
+    --dcm-chk-b: #ffffff;
+    --dcm-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
   }
 
   * { box-sizing: border-box; }
@@ -113,7 +139,7 @@
     -webkit-user-select: text;
     user-select: text;
   }
-  ::selection { background: rgba(201, 162, 39, 0.35); }
+  ::selection { background: rgba(128, 134, 145, 0.38); color: inherit; }  /* V99: neutral grey, readable on dark + light themes */
 
   /* 3. Keyboard focus. Nearly every input in this app sets `outline: none`
         on :focus (so a mouse click doesn't leave a browser-default ring on a
@@ -131,7 +157,7 @@
     height: 100%;
     background: var(--bg);
     color: var(--text);
-    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     overflow: hidden;
   }
 
@@ -358,7 +384,7 @@
     border: none;
     background: transparent;
     color: var(--muted);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 13px;
     padding: 4px 9px;
     border-radius: 4px;
@@ -494,7 +520,7 @@
     outline: none;
     background: transparent;
     color: var(--text);
-    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 12px;
     font-weight: 500;
   }
@@ -511,7 +537,7 @@
     border-radius: 50% !important;
     background: transparent !important;
     color: var(--muted) !important;
-    font-family: sans-serif !important;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif !important;
     font-size: 18px !important;
     font-weight: 400 !important;
     line-height: 1 !important;
@@ -534,7 +560,7 @@
     color: var(--text);
     padding: 8px 10px 9px !important;
     margin: 0 !important;
-    font-family: -apple-system, "Segoe UI", system-ui, sans-serif !important;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif !important;
     font-size: 12px !important;
     font-weight: 500 !important;
     line-height: 1.25;
@@ -615,7 +641,7 @@
     border: 1px solid var(--border);
     background: var(--bg);
     color: var(--text);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 13px;
     font-weight: 600;
     padding: 5px 10px 5px 14px;
@@ -665,7 +691,7 @@
     border: none;
     background: transparent;
     color: var(--text);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 13px;
     text-align: left;
     padding: 7px 10px;
@@ -837,7 +863,7 @@
     border-radius: 3px;
     background: var(--bg);
     color: var(--text);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 12px;
     font-weight: 700;
     line-height: 1;
@@ -870,7 +896,7 @@
     border-radius: 3px;
     background: var(--bg);
     color: var(--text);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 11px;
     font-weight: 700;
     line-height: 1;
@@ -963,9 +989,9 @@
   }
   .jump-time-actions button:hover { border-color: var(--muted); }
   .jump-time-actions #jump-time-go {
-    background: var(--gold);
-    color: #111;
-    border-color: var(--gold);
+    background: var(--text);
+    color: var(--bg);
+    border-color: var(--text);
     font-weight: 700;
   }
   .jump-time-actions #jump-time-go.disabled,
@@ -988,210 +1014,541 @@
   .draw-context-menu .dcm-title .dcm-close {
     cursor: pointer;
     color: var(--muted);
-    font-family: monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 14px;
     line-height: 1;
   }
 
   .draw-context-menu .dcm-title .dcm-close:hover { color: var(--text); }
 
-  /* v37 Fix 1: Lock/Hide/Delete header icons — same minimal look and
-     icon set as the Object Tree panel's own row buttons, placed to the
-     left of the ✕ close icon at the top-right of the panel. */
-  .draw-context-menu .dcm-header-actions {
+  /* =========================================================================
+     v99 — Object settings panel redesign (matches Panel.html).
+
+     Scoped to #draw-context-menu only, so the Jump Time dialog and the
+     multi-select group menu (which share the plain .draw-context-menu
+     shell) are untouched. Everything is built from the app's theme tokens
+     (--panel / --border / --text / --muted / --gold / --ov*), so it follows
+     "Default Dark", "Default Light" and every other canvas preset with no
+     per-theme code. The few extra surface tokens it needs (control fill,
+     active pill, swatch checkerboard, shadow) are defined once per theme in
+     :root / body.light-theme above.
+     ========================================================================= */
+  #draw-context-menu {
+    width: 300px;
+    padding: 8px;
+    gap: 8px;
+    border-radius: 8px;
+    box-shadow: var(--dcm-shadow);
+    font: 12px/1.25 "Inter", "Segoe UI", system-ui, sans-serif;
+    color: var(--text);
+  }
+  #draw-context-menu button,
+  #draw-context-menu input,
+  #draw-context-menu select { font: inherit; }
+
+  /* ---- shared grid rows (label column + controls) ---------------------- */
+  #draw-context-menu .dcm-g { display: grid; gap: 6px; align-items: center; }
+  #draw-context-menu .dcm-g3 { grid-template-columns: 80px 1fr 72px; }
+  #draw-context-menu .dcm-g5 { grid-template-columns: 80px 24px 24px 56px 1fr; }
+  #draw-context-menu .dcm-gp { grid-template-columns: 80px 1fr 28px; }
+  #draw-context-menu .dcm-gn { grid-template-columns: 80px 1fr 28px 28px; }
+  #draw-context-menu .dcm-col2 { grid-column: 2; }
+  #draw-context-menu .dcm-col3 { grid-column: 3; }
+  #draw-context-menu .dcm-col4 { grid-column: 4; }
+  #draw-context-menu .dcm-col5 { grid-column: 5; }
+  #draw-context-menu .dcm-span2 { grid-column: 2 / -1; }
+  #draw-context-menu .dcm-lab {
+    color: var(--muted);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  #draw-context-menu .dcm-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 7px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ---- header: name field + lock / hide / delete / close ----------------- */
+  #draw-context-menu .dcm-title {
     display: flex;
     align-items: center;
-    gap: 2px;
+    justify-content: flex-start;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text);
   }
-  .dcm-header-btn {
+  #draw-context-menu .dcm-name-wrap { flex: 1 1 auto; min-width: 0; }
+  #draw-context-menu .dcm-name-wrap .dcm-name-input { font-weight: 600; color: var(--text); }
+  /* Locked objects show a static title instead of the editable name. */
+  #draw-context-menu #dcm-title-text {
+    display: none;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 28px;
+    align-items: center;
+    padding: 0 7px;
+    background: var(--dcm-ctl);
+    border-radius: 5px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #draw-context-menu.locked-mode #dcm-title-text { display: flex; }
+  #draw-context-menu.locked-mode #dcm-name-row { display: none !important; }
+  #draw-context-menu .dcm-header-actions { display: flex; flex: none; align-items: center; }
+  #draw-context-menu .dcm-header-btn {
     appearance: none;
-    border: none;
+    border: 0;
     background: transparent;
     color: var(--muted);
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
+    padding: 0;
     border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    padding: 0;
+    transition: color 0.12s ease, background-color 0.12s ease;
   }
-  .dcm-header-btn svg { width: 13px; height: 13px; display: block; }
-  .dcm-header-btn:hover { color: var(--text); background: var(--ov8); }
-  .dcm-header-btn.active { color: var(--gold); }
-  .dcm-header-btn-danger:hover { color: var(--down); background: rgba(229, 72, 77, 0.15); }
+  #draw-context-menu .dcm-header-btn svg,
+  #draw-context-menu .dcm-btn svg {
+    width: 13px;
+    height: 13px;
+    display: block;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  #draw-context-menu .dcm-header-btn:hover { color: var(--text); background: var(--ov8); }
+  #draw-context-menu .dcm-header-btn.active { color: var(--gold); }
+  #draw-context-menu .dcm-header-btn-danger:hover { color: var(--down); background: rgba(229, 72, 77, 0.15); }
 
-  /* v70.7 Update 3: Timeframes panel restyle — smaller/tighter to match
-     the compact height of the rest of this menu, square (not pill)
-     buttons matching the Preset dropdown's own 4px-radius look, and a
-     selected timeframe now just swaps background/text (var(--text)/
-     var(--bg) — the same two tokens that already flip correctly between
-     Light and Dark) instead of a separate accent color. Only the row
-     checkbox still uses var(--gold), the app's own Selector accent. */
-  .draw-context-menu .dcm-tf-section {
+  /* ---- text inputs ------------------------------------------------------- */
+  #draw-context-menu .dcm-in {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    height: 28px;
+    padding: 0 7px;
+    background: var(--dcm-ctl);
+    color: var(--dcm-ctl-text);
+    border: 1px solid transparent;
+    border-radius: 5px;
+    outline: none;
+    transition: border-color 0.12s ease, background-color 0.12s ease;
+  }
+  #draw-context-menu .dcm-in::placeholder { color: var(--muted); opacity: 1; }
+  #draw-context-menu .dcm-in:hover { border-color: var(--ov8); }
+  #draw-context-menu .dcm-in:focus { border-color: var(--gold); background: var(--panel); }
+  #draw-context-menu .dcm-in.dcm-dt-invalid { border-color: var(--down); }
+  #draw-context-menu .dcm-num { font-variant-numeric: tabular-nums; }
+
+  /* ---- selects (native <select>, restyled; chevron is a sibling SVG) ----- */
+  #draw-context-menu .dcm-sel { position: relative; display: block; min-width: 0; }
+  #draw-context-menu .dcm-sel select {
+    appearance: none;
+    -webkit-appearance: none;
+    display: block;
+    width: 100%;
+    height: 28px;
+    padding: 0 22px 0 7px;
+    background: var(--dcm-ctl);
+    color: var(--dcm-ctl-text);
+    border: 1px solid transparent;
+    border-radius: 5px;
+    outline: none;
+    cursor: pointer;
+    text-overflow: ellipsis;
+    transition: border-color 0.12s ease, background-color 0.12s ease;
+  }
+  #draw-context-menu .dcm-sel select:hover { border-color: var(--ov8); }
+  #draw-context-menu .dcm-sel select:focus { border-color: var(--gold); background: var(--panel); }
+  #draw-context-menu .dcm-sel select option { background: var(--panel); color: var(--text); }
+  #draw-context-menu .dcm-cv {
+    width: 9px;
+    height: 9px;
+    flex: none;
+    fill: none;
+    stroke: var(--muted);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    pointer-events: none;
+  }
+  #draw-context-menu .dcm-sel .dcm-cv { position: absolute; right: 7px; top: 50%; margin-top: -4.5px; }
+
+  /* ---- 28px icon buttons ------------------------------------------------- */
+  #draw-context-menu .dcm-btn {
+    appearance: none;
+    flex: none;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
+    background: var(--dcm-ctl);
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: color 0.12s ease, background-color 0.12s ease;
+  }
+  #draw-context-menu .dcm-btn:hover { color: var(--text); background: var(--dcm-ctl-hover); }
+  #draw-context-menu .dcm-btn-danger:hover { color: var(--down); }
+  #draw-context-menu .dcm-btn-sm { width: 22px; height: 22px; }
+  #draw-context-menu .dcm-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  /* ---- checkboxes -------------------------------------------------------- */
+  #draw-context-menu input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    flex: none;
+    margin: 0;
+    width: 13px;
+    height: 13px;
+    display: grid;
+    place-items: center;
+    border: 1.5px solid var(--gold);
+    border-radius: 3px;
+    background: transparent;
+    cursor: pointer;
+  }
+  #draw-context-menu input[type="checkbox"]::after {
+    content: "";
+    display: none;
+    width: 3px;
+    height: 6px;
+    border-right: 1.6px solid var(--panel);
+    border-bottom: 1.6px solid var(--panel);
+    transform: rotate(40deg) translate(-0.5px, -0.5px);
+  }
+  #draw-context-menu input[type="checkbox"]:checked { background: var(--gold); }
+  #draw-context-menu input[type="checkbox"]:checked::after { display: block; }
+  /* Timeframe group boxes use the quieter muted tone. */
+  #draw-context-menu input.dcm-tf-group-checkbox { width: 12px; height: 12px; border-color: var(--muted); }
+  #draw-context-menu input.dcm-tf-group-checkbox:checked { background: var(--muted); }
+  #draw-context-menu input.dcm-tf-group-checkbox::after { width: 3px; height: 5px; border-width: 0 1.5px 1.5px 0; }
+  #draw-context-menu .dcm-cbl {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    color: var(--text);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  #draw-context-menu .dcm-ml-label { grid-column: 1 / 3; }
+
+  /* ---- Timeframes -------------------------------------------------------- */
+  #draw-context-menu .dcm-tf-section {
     display: flex;
     flex-direction: column;
     border: 1px solid var(--border);
     border-radius: 5px;
     overflow: hidden;
-    background: var(--ov3, rgba(127, 127, 127, 0.03));
+    background: var(--ov3);
   }
-  .draw-context-menu .dcm-tf-header {
+  #draw-context-menu .dcm-tf-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 5px 8px;
+    height: 28px;
+    padding: 0 8px;
     cursor: pointer;
     user-select: none;
   }
-  .draw-context-menu .dcm-tf-header-left { display: flex; align-items: center; gap: 5px; }
-  .draw-context-menu .dcm-tf-clock-icon { width: 12px; height: 12px; display: flex; color: var(--muted); }
-  .draw-context-menu .dcm-tf-clock-icon svg { width: 12px; height: 12px; display: block; }
-  .draw-context-menu .dcm-tf-title { font-size: 11px; font-weight: 600; color: var(--text); }
-  .draw-context-menu .dcm-tf-caret {
-    font-size: 8.5px;
-    color: var(--muted);
-    transition: transform 0.15s ease;
-  }
-  .draw-context-menu .dcm-tf-section.collapsed .dcm-tf-caret { transform: rotate(180deg); }
-  .draw-context-menu .dcm-tf-section.collapsed .dcm-tf-body { display: none; }
-  .draw-context-menu .dcm-tf-body {
-    display: flex;
-    flex-direction: column;
-    border-top: 1px solid var(--border);
-  }
-  .draw-context-menu .dcm-tf-row {
+  #draw-context-menu .dcm-tf-header-left { display: flex; align-items: center; gap: 6px; }
+  #draw-context-menu .dcm-tf-clock-icon { display: flex; width: 12px; height: 12px; color: var(--muted); }
+  #draw-context-menu .dcm-tf-clock-icon svg { width: 12px; height: 12px; display: block; }
+  #draw-context-menu .dcm-tf-title { font-size: 11.5px; font-weight: 600; color: var(--text); }
+  #draw-context-menu .dcm-tf-caret { font-size: 8px; color: var(--muted); transition: transform 0.15s ease; }
+  #draw-context-menu .dcm-tf-section.collapsed .dcm-tf-caret { transform: rotate(180deg); }
+  #draw-context-menu .dcm-tf-section.collapsed .dcm-tf-body { display: none; }
+  #draw-context-menu .dcm-tf-body { display: flex; flex-direction: column; }
+  #draw-context-menu .dcm-tf-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 6px;
-    padding: 4px 8px;
+    height: 28px;
+    padding: 0 8px;
+    border-top: 1px solid var(--border);
   }
-  .draw-context-menu .dcm-tf-row + .dcm-tf-row { border-top: 1px solid var(--border); }
-  .draw-context-menu .dcm-tf-row-check {
+  #draw-context-menu .dcm-tf-row-check {
     display: flex;
     align-items: center;
-    gap: 5px;
-    font-size: 11px;
+    gap: 6px;
+    font-size: 11.5px;
     color: var(--text);
     cursor: pointer;
-    flex: 0 0 auto;
-    min-width: 54px;
   }
-  .draw-context-menu .dcm-tf-row-check input[type="checkbox"] {
-    width: 12px;
-    height: 12px;
-    accent-color: var(--muted);
-    cursor: pointer;
-    margin: 0;
-  }
-  .draw-context-menu .dcm-tf-pills { display: flex; gap: 4px; flex: 1 1 auto; justify-content: flex-end; }
-  .draw-context-menu .dcm-tf-pill {
+  #draw-context-menu .dcm-tf-pills { display: flex; gap: 4px; }
+  #draw-context-menu .dcm-tf-pill {
     appearance: none;
-    border: 1px solid var(--border);
-    background: var(--ov6, rgba(127, 127, 127, 0.06));
-    color: var(--muted);
-    font-size: 10px;
-    line-height: 1;
+    width: 32px;
     padding: 4px 0;
-    width: 34px;
+    border: 1px solid var(--border);
     border-radius: 4px;
+    background: var(--ov6);
+    color: var(--muted);
+    font-size: 10.5px;
+    line-height: 1;
+    text-align: center;
     cursor: pointer;
-    transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+    transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
   }
-  .draw-context-menu .dcm-tf-pill:hover { color: var(--text); border-color: var(--muted); }
-  .draw-context-menu .dcm-tf-pill.active {
-    background: var(--border);
+  #draw-context-menu .dcm-tf-pill:hover { color: var(--text); border-color: var(--muted); }
+  #draw-context-menu .dcm-tf-pill.active {
+    background: var(--dcm-pill-on);
     border-color: var(--muted);
     color: var(--text);
     font-weight: 600;
   }
-  /* v71 Update 1: Auto pill — sits inline with the "Timeframes" title
-     (per Auto.png), sized down to fit that row and using the same
-     active/inactive look as the timeframe pills so on/off reads exactly
-     the same way. Hidden (not just inactive) for hline/vline, which have
-     no time span and therefore no Auto concept at all. */
-  .draw-context-menu .dcm-tf-auto-btn {
-    width: auto;
-    padding: 2px 7px;
-    font-size: 9.5px;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-  }
-  .draw-context-menu .dcm-tf-auto-btn.dcm-tf-auto-hidden { display: none; }
+  #draw-context-menu .dcm-tf-auto-btn { width: auto; padding: 2px 6px; font-size: 9.5px; text-transform: uppercase; }
+  #draw-context-menu .dcm-tf-auto-btn.dcm-tf-auto-hidden { display: none; }
 
-  /* v37 Fix 3: grouped, labeled sections (Border / Fill / Middle Line)
-     with their variables sharing one compact row each, instead of a long
-     stack of one-field-per-row lines. */
-  .draw-context-menu .dcm-section {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding-top: 6px;
-    border-top: 1px solid var(--border);
-  }
-  .draw-context-menu .dcm-section-title {
-    color: var(--muted);
-    font-size: 10.5px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-  .draw-context-menu .dcm-row-compact {
-    justify-content: flex-start;
-  }
-  .draw-context-menu .dcm-row-compact > * { flex: 1 1 0; min-width: 0; }
-  .draw-context-menu .dcm-row-compact .dcm-color-swatch { flex: 0 0 24px; }
-  .draw-context-menu .dcm-row-compact input[type="range"] { flex: 1 1 auto; width: auto; }
-  .draw-context-menu .dcm-checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--text);
-    cursor: pointer;
-  }
-
-  .draw-context-menu .dcm-row {
+  /* ---- preset row -------------------------------------------------------- */
+  #draw-context-menu #dcm-preset-row { display: flex; flex-direction: column; gap: 8px; }
+  #draw-context-menu .dcm-preset-dropdown { position: relative; min-width: 0; }
+  #draw-context-menu .dcm-preset-dropdown-btn {
+    appearance: none;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: 6px;
+    width: 100%;
+    height: 28px;
+    padding: 0 7px;
+    background: var(--dcm-ctl);
+    color: var(--dcm-ctl-text);
+    border: 1px solid transparent;
+    border-radius: 5px;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.12s ease, background-color 0.12s ease;
   }
-
-  .draw-context-menu label {
-    color: var(--muted);
-    flex: 0 0 auto;
+  #draw-context-menu .dcm-preset-dropdown-btn span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-
-  /* v38 Fix 1: themed color+opacity swatch buttons, replacing native
-     <input type="color"> everywhere a style color is picked. A native
-     color input opens the OS/browser's own unstyleable popup — this
-     button instead opens color-picker.js's dark, panel-matching popover,
-     which folds an opacity slider and a small pasteable hex box into the
-     same place the color itself is picked. */
-  .draw-context-menu .dcm-color-swatch {
-    -webkit-appearance: none;
-    appearance: none;
-    position: relative;
-    width: 24px;
-    height: 22px;
+  #draw-context-menu .dcm-preset-dropdown-btn .dcm-cv { transition: transform 0.15s ease; }
+  #draw-context-menu .dcm-preset-dropdown.open .dcm-preset-dropdown-btn .dcm-cv { transform: rotate(180deg); }
+  #draw-context-menu .dcm-preset-dropdown-btn:hover { border-color: var(--ov8); }
+  #draw-context-menu .dcm-preset-dropdown.open .dcm-preset-dropdown-btn { border-color: var(--gold); background: var(--panel); }
+  #draw-context-menu .dcm-preset-dropdown-list {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 130;
+    display: none;
+    flex-direction: column;
+    gap: 1px;
+    max-height: 160px;
+    overflow-y: auto;
+    padding: 3px;
+    background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: 6px;
+    box-shadow: var(--dcm-shadow);
+  }
+  #draw-context-menu .dcm-preset-dropdown.open .dcm-preset-dropdown-list { display: flex; }
+  #draw-context-menu .dcm-preset-dropdown-item { display: flex; align-items: center; gap: 2px; border-radius: 4px; }
+  #draw-context-menu .dcm-preset-dropdown-item:hover { background: var(--ov6); }
+  #draw-context-menu .dcm-preset-dropdown-item-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 26px;
+    padding: 0 7px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     background: transparent;
-    padding: 0;
+    border: 0;
+    color: var(--text);
+    text-align: left;
     cursor: pointer;
   }
-  .draw-context-menu .dcm-color-swatch:hover { border-color: var(--gold); }
-  .draw-context-menu .dcm-color-swatch-fill {
+  #draw-context-menu .dcm-preset-dropdown-item-modify,
+  #draw-context-menu .dcm-preset-dropdown-item-trash {
+    flex: none;
+    appearance: none;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: color 0.12s ease, background-color 0.12s ease;
+  }
+  #draw-context-menu .dcm-preset-dropdown-item-modify svg { width: 11px; height: 11px; display: block; }
+  #draw-context-menu .dcm-preset-dropdown-item-trash svg { width: 12px; height: 12px; display: block; }
+  #draw-context-menu .dcm-preset-dropdown-item-modify:hover { color: var(--text); background: var(--ov8); }
+  #draw-context-menu .dcm-preset-dropdown-item-trash:hover { color: var(--down); background: rgba(229, 72, 77, 0.15); }
+  #draw-context-menu .dcm-preset-dropdown-empty { padding: 6px 8px; color: var(--muted); font-size: 11.5px; }
+  /* Inline "save preset" row — hidden until opened (keyframes defined below). */
+  #draw-context-menu .dcm-preset-save-box { display: none; }
+  #draw-context-menu .dcm-preset-save-box.open { display: grid; animation: dcm-preset-savebox-in 0.15s ease forwards; }
+  #draw-context-menu .dcm-preset-save-box .dcm-in { border-color: var(--gold); background: var(--panel); grid-column: 2; }
+
+  /* ---- color swatches (ColorField) --------------------------------------- */
+  #draw-context-menu .dcm-color-swatch {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    display: block;
+    flex: none;
+    width: 24px;
+    height: 24px;
+    margin: 0;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--panel);
+    overflow: hidden;
+    background-clip: padding-box;
+    cursor: pointer;
+    transition: border-color 0.12s ease, opacity 0.12s ease;
+  }
+  #draw-context-menu .dcm-color-swatch:hover { border-color: var(--muted); }
+  #draw-context-menu .dcm-color-swatch-fill {
     position: absolute;
     inset: 2px;
     border-radius: 3px;
+    overflow: hidden;
     background-image:
       linear-gradient(var(--sw-color, #c9a227), var(--sw-color, #c9a227)),
-      repeating-conic-gradient(#3a3f4a 0% 25%, #262b34 0% 50%);
+      repeating-conic-gradient(var(--dcm-chk-a) 0% 25%, var(--dcm-chk-b) 0% 50%);
     background-size: auto, 8px 8px;
+    background-clip: padding-box;
   }
+  /* Middle Line: stays in the layout when off, just dimmed and inert. */
+  #draw-context-menu .dcm-ml.is-off .dcm-color-swatch,
+  #draw-context-menu .dcm-ml.is-off .dcm-sel { opacity: 0.4; }
+  #draw-context-menu .dcm-color-swatch:disabled,
+  #draw-context-menu .dcm-sel select:disabled { cursor: default; }
+  #draw-context-menu .dcm-color-swatch:disabled:hover { border-color: var(--border); }
+
+  /* ---- Fib Level & Description table ------------------------------------- */
+  #draw-context-menu #dcm-fib-levels-section { display: none; }
+  #draw-context-menu .dcm-fib-table {
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    overflow: hidden;
+    background: var(--ov3);
+  }
+  #draw-context-menu .dcm-fib-table-head {
+    display: grid;
+    grid-template-columns: 44px 1fr 22px;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 8px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  #draw-context-menu .dcm-fib-table-head .dcm-fib-col-level { text-align: center; }
+  #draw-context-menu .dcm-fib-table-body {
+    max-height: 136px;
+    overflow-y: auto;
+    border-top: 1px solid var(--border);
+  }
+  #draw-context-menu .dcm-fib-row {
+    display: grid;
+    grid-template-columns: 44px 1fr 22px;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  #draw-context-menu .dcm-fib-row:last-child { border-bottom: 0; }
+  #draw-context-menu .dcm-fib-row:hover { background: var(--ov4); }
+  #draw-context-menu .dcm-fib-level-input,
+  #draw-context-menu .dcm-fib-desc-input {
+    width: 100%;
+    min-width: 0;
+    height: 24px;
+    padding: 0 6px;
+    background: var(--dcm-ctl);
+    color: var(--dcm-ctl-text);
+    border: 1px solid transparent;
+    border-radius: 4px;
+    outline: none;
+    font-variant-numeric: tabular-nums;
+    transition: border-color 0.12s ease, background-color 0.12s ease;
+  }
+  #draw-context-menu .dcm-fib-level-input { padding: 0 2px; text-align: center; }
+  #draw-context-menu .dcm-fib-level-input:disabled { color: var(--muted); background: transparent; }
+  #draw-context-menu .dcm-fib-level-input::-webkit-outer-spin-button,
+  #draw-context-menu .dcm-fib-level-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  #draw-context-menu .dcm-fib-level-input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+  #draw-context-menu .dcm-fib-level-input:not(:disabled):hover,
+  #draw-context-menu .dcm-fib-desc-input:hover { border-color: var(--ov8); }
+  #draw-context-menu .dcm-fib-level-input:not(:disabled):focus,
+  #draw-context-menu .dcm-fib-desc-input:focus { border-color: var(--gold); background: var(--panel); }
+  #draw-context-menu .dcm-fib-row-trash {
+    appearance: none;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: color 0.12s ease, background-color 0.12s ease;
+  }
+  #draw-context-menu .dcm-fib-row-trash svg {
+    width: 11px;
+    height: 11px;
+    display: block;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+  }
+  #draw-context-menu .dcm-fib-row-trash:hover { color: var(--down); background: rgba(229, 72, 77, 0.15); }
+  #draw-context-menu .dcm-fib-row-trash:disabled { visibility: hidden; cursor: default; }
+
+  /* ---- locked mode: only the title bar, Timeframes and Unlock remain ----- */
+  #draw-context-menu .dcm-unlock {
+    display: none;
+    appearance: none;
+    width: 100%;
+    height: 28px;
+    border: 0;
+    border-radius: 5px;
+    background: var(--dcm-ctl);
+    color: var(--text);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+  }
+  #draw-context-menu .dcm-unlock:hover { background: var(--dcm-ctl-hover); }
+  #draw-context-menu.locked-mode .dcm-unlock { display: block; }
+  #draw-context-menu.locked-mode .dcm-section,
+  #draw-context-menu.locked-mode #dcm-preset-row { display: none !important; }
 
   /* Shared popover the swatches above open — see color-picker.js. Its
      background uses --bg (a shade darker than the panel's own --panel)
@@ -1252,7 +1609,7 @@
     background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
   }
   .dcm-cp-alpha {
-    background-image: repeating-conic-gradient(#3a3f4a 0% 25%, #262b34 0% 50%);
+    background-image: repeating-conic-gradient(var(--dcm-chk-a) 0% 25%, var(--dcm-chk-b) 0% 50%);
     background-size: 8px 8px;
     overflow: hidden;
   }
@@ -1279,8 +1636,9 @@
     border: 1px solid var(--border);
     background-image:
       linear-gradient(var(--sw-color, #c9a227), var(--sw-color, #c9a227)),
-      repeating-conic-gradient(#3a3f4a 0% 25%, #262b34 0% 50%);
-    background-size: auto, 8px 8px;
+      repeating-conic-gradient(var(--dcm-chk-a) 0% 25%, var(--dcm-chk-b) 0% 50%);
+    background-size: auto, 8px 8px;    overflow: hidden;
+    background-clip: padding-box;
   }
   .dcm-cp-hex {
     flex: 1 1 auto;
@@ -1291,185 +1649,11 @@
     border-radius: 4px;
     padding: 3px 6px;
     font-size: 12px;
-    font-family: "SFMono-Regular", Consolas, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     text-transform: uppercase;
   }
   .dcm-cp-hex:focus { outline: none; border-color: var(--gold); }
-  .dcm-cp-eyedrop {
-    flex: 0 0 22px;
-    width: 22px;
-    height: 22px;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--muted);
-    cursor: pointer;
-  }
-  .dcm-cp-eyedrop:hover { color: var(--text); border-color: var(--gold); }
-  .dcm-cp-eyedrop svg { width: 13px; height: 13px; display: block; }
 
-  .draw-context-menu select {
-    background: var(--bg);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    font-size: 12px;
-    padding: 3px 4px;
-  }
-
-  .draw-context-menu input[type="range"] {
-    width: 100px;
-    accent-color: var(--gold);
-  }
-
-  /* v33.2 fix 2: object name field, same style as the panel's own inline
-     rename input so renaming looks/feels identical from either place. */
-  .draw-context-menu .dcm-name-input {
-    flex: 1 1 auto;
-    min-width: 0;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text);
-    font-size: 12px;
-    font-family: inherit;
-    padding: 4px 6px;
-  }
-  .draw-context-menu .dcm-name-input:focus { outline: none; border-color: var(--gold); }
-  .draw-context-menu.locked-mode #dcm-name-row { display: none !important; }
-
-  /* v37 Fix 2: preset picker row (dropdown + save icon button). */
-  .draw-context-menu .dcm-preset-line {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-  }
-  .draw-context-menu .dcm-preset-dropdown { position: relative; flex: 1 1 auto; min-width: 0; }
-  .draw-context-menu .dcm-preset-dropdown-btn {
-    appearance: none;
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 6px;
-    background: var(--bg);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    font-size: 12px;
-    font-family: inherit;
-    padding: 4px 6px;
-    cursor: pointer;
-  }
-  .draw-context-menu .dcm-preset-dropdown-btn span:first-child {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .draw-context-menu .dcm-preset-dropdown-btn .caret { color: var(--muted); font-size: 9px; transition: transform 0.15s ease; }
-  .draw-context-menu .dcm-preset-dropdown.open .dcm-preset-dropdown-btn .caret { transform: rotate(180deg); }
-  .draw-context-menu .dcm-preset-dropdown-btn:hover { border-color: var(--muted); }
-  .draw-context-menu .dcm-preset-dropdown.open .dcm-preset-dropdown-btn { border-color: var(--gold); }
-  .draw-context-menu .dcm-preset-dropdown-list {
-    position: absolute;
-    top: calc(100% + 5px);
-    left: 0;
-    right: 0;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 7px;
-    padding: 3px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
-    display: none;
-    flex-direction: column;
-    gap: 1px;
-    z-index: 130;
-    max-height: 160px;
-    overflow-y: auto;
-  }
-  .draw-context-menu .dcm-preset-dropdown.open .dcm-preset-dropdown-list { display: flex; }
-  .draw-context-menu .dcm-preset-dropdown-item {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    border-radius: 5px;
-    padding: 1px;
-  }
-  .draw-context-menu .dcm-preset-dropdown-item:hover { background: var(--ov6); }
-  .draw-context-menu .dcm-preset-dropdown-item-name {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    background: transparent;
-    border: none;
-    color: var(--text);
-    font-size: 12px;
-    font-family: inherit;
-    text-align: left;
-    padding: 6px 6px;
-    cursor: pointer;
-  }
-  .draw-context-menu .dcm-preset-dropdown-item-trash {
-    flex: 0 0 auto;
-    appearance: none;
-    border: none;
-    background: transparent;
-    color: var(--muted);
-    width: 22px;
-    height: 22px;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    padding: 0;
-  }
-  .draw-context-menu .dcm-preset-dropdown-item-trash svg { width: 12px; height: 12px; display: block; }
-  .draw-context-menu .dcm-preset-dropdown-item-trash:hover { color: var(--down); background: rgba(229, 72, 77, 0.15); }
-  /* V70.1 Update 3: Modify icon — sits just left of each preset row's
-     trash icon; opens that row's name pre-filled in the same inline
-     "save preset" box instead of applying the preset. Same sizing as
-     the trash button, themed with the app's gold accent (edit, not
-     delete) rather than red. */
-  .draw-context-menu .dcm-preset-dropdown-item-modify {
-    flex: 0 0 auto;
-    appearance: none;
-    border: none;
-    background: transparent;
-    color: var(--muted);
-    width: 22px;
-    height: 22px;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    padding: 0;
-    transition: color 0.15s ease, background 0.15s ease;
-  }
-  .draw-context-menu .dcm-preset-dropdown-item-modify svg { width: 11px; height: 11px; display: block; }
-  .draw-context-menu .dcm-preset-dropdown-item-modify:hover { color: var(--gold); background: rgba(201, 162, 39, 0.15); }
-  .draw-context-menu .dcm-preset-dropdown-item-trash { transition: color 0.15s ease, background 0.15s ease; }
-  .draw-context-menu .dcm-preset-dropdown-empty {
-    color: var(--muted);
-    font-size: 11.5px;
-    padding: 6px 8px;
-  }
-  /* v37 Fix 2: inline "save preset" box — replaces the native
-     window.prompt() with a minimal themed row inside the panel itself. */
-  .draw-context-menu .dcm-preset-save-box {
-    display: none;
-    align-items: center;
-    gap: 5px;
-  }
-  .draw-context-menu .dcm-preset-save-box.open { display: flex; animation: dcm-preset-savebox-in 0.15s ease forwards; }
-  .draw-context-menu .dcm-preset-save-box .dcm-name-input { flex: 1 1 auto; }
   /* V70.1: small themed fade+slide-in, matching the rest of the app's
      minimal open transitions (e.g. About panel's update progress bar),
      used whether the box was opened via "+" or via a row's new Modify
@@ -1478,204 +1662,6 @@
     from { opacity: 0; transform: translateY(-3px); }
     to { opacity: 1; transform: translateY(0); }
   }
-  .draw-context-menu .dcm-icon-btn {
-    appearance: none;
-    flex: 0 0 auto;
-    width: 22px;
-    height: 22px;
-    border: 1px solid var(--border);
-    background: var(--bg);
-    color: var(--text);
-    border-radius: 4px;
-    font-size: 12px;
-    line-height: 1;
-    cursor: pointer;
-    padding: 0;
-  }
-  .draw-context-menu .dcm-icon-btn:hover { border-color: var(--gold); color: var(--gold); }
-  .draw-context-menu .dcm-icon-btn-danger:hover { border-color: var(--down); color: var(--down); }
-  .draw-context-menu .dcm-icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-  .draw-context-menu .dcm-icon-btn:disabled:hover { border-color: var(--border); color: var(--text); }
-
-  /* v36 Fix 4: Middle Line checkbox row + its dependent sub-rows. */
-  .draw-context-menu input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    accent-color: var(--gold);
-    cursor: pointer;
-  }
-
-  /* v14: rectangle box start/end time editor — stacked (label above
-     input) since a datetime-local picker doesn't fit next to a label in
-     this popup's narrow width. */
-  .draw-context-menu .dcm-row.dcm-row-stacked {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 4px;
-  }
-  /* v15: minimal custom 24h date/time fields (replaces native
-     datetime-local, which silently renders AM/PM on some locales/OSes
-     with no reliable way to force 24h format via CSS). Two plain text
-     inputs, validated/formatted in JS, styled to look like one control. */
-  .draw-context-menu .dcm-dt {
-    display: flex;
-    gap: 5px;
-  }
-  .draw-context-menu .dcm-dt input {
-    background: var(--bg);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    font-size: 11px;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0.02em;
-    padding: 5px 7px;
-    box-sizing: border-box;
-    outline: none;
-    transition: border-color 0.12s ease, background 0.12s ease;
-  }
-  .draw-context-menu .dcm-dt input::placeholder { color: var(--muted); opacity: 0.6; }
-  .draw-context-menu .dcm-dt input:hover { border-color: var(--muted); }
-  .draw-context-menu .dcm-dt input:focus {
-    border-color: var(--gold);
-    background: rgba(255, 255, 255, 0.03);
-  }
-  .draw-context-menu .dcm-dt input.dcm-dt-invalid { border-color: var(--down); }
-  .draw-context-menu .dcm-dt-date { flex: 1.3; min-width: 0; }
-  .draw-context-menu .dcm-dt-time { flex: 1; min-width: 0; }
-
-  /* v47: Fib Retracement Level & Description table (Update 3 / Set.png).
-     Hidden by default; drawing-context-menu.js shows it only for a
-     selected fib object. The body scrolls internally at a fixed height so
-     adding levels never widens or grows the panel itself. */
-  #dcm-fib-levels-section { display: none; }
-  .dcm-fib-table {
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    overflow: hidden;
-  }
-  .dcm-fib-table-head {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 6px;
-    background: var(--ov3);
-    border-bottom: 1px solid var(--border);
-    font-size: 11px;
-    color: var(--muted);
-  }
-  .dcm-fib-table-head .dcm-fib-col-level { width: 44px; flex: 0 0 auto; }
-  .dcm-fib-table-head .dcm-fib-col-desc { flex: 1 1 auto; }
-  .dcm-fib-table-head .dcm-icon-btn { width: 18px; height: 18px; font-size: 12px; padding: 0; flex: 0 0 auto; }
-  .dcm-fib-table-body {
-    max-height: 132px;
-    overflow-y: auto;
-  }
-  /* v47.1 Update 2: match the Object Tree panel's own minimal scrollbar
-     instead of the browser default (which rendered white/bulky and out of
-     theme here). */
-  .dcm-fib-table-body {
-    scrollbar-width: thin;
-    scrollbar-color: var(--border) var(--panel);
-  }
-  .dcm-fib-table-body::-webkit-scrollbar {
-    width: 6px;
-  }
-  .dcm-fib-table-body::-webkit-scrollbar-track {
-    background: var(--panel);
-  }
-  .dcm-fib-table-body::-webkit-scrollbar-thumb {
-    background: var(--border);
-    border-radius: 3px;
-  }
-  .dcm-fib-table-body::-webkit-scrollbar-thumb:hover {
-    background: var(--muted);
-  }
-  .dcm-fib-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 6px;
-    border-bottom: 1px solid var(--border);
-  }
-  .dcm-fib-row:last-child { border-bottom: none; }
-  .dcm-fib-row:hover { background: var(--ov4); }
-  .dcm-fib-level-input {
-    width: 44px;
-    flex: 0 0 auto;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-size: 12px;
-    border-radius: 4px;
-    padding: 3px 4px;
-    text-align: center;
-  }
-  .dcm-fib-level-input:disabled { color: var(--muted); background: transparent; border-color: transparent; }
-  /* v47.2 Update 1: the native up/down spinner arrows served no purpose
-     here (levels are typed, not stepped) and crowded this already-narrow
-     44px box. */
-  .dcm-fib-level-input::-webkit-outer-spin-button,
-  .dcm-fib-level-input::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-  }
-  .dcm-fib-level-input[type="number"] {
-    -moz-appearance: textfield;
-    appearance: textfield;
-  }
-  .dcm-fib-desc-input {
-    flex: 1 1 auto;
-    min-width: 0;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-size: 12px;
-    border-radius: 4px;
-    padding: 3px 6px;
-  }
-  .dcm-fib-level-input:focus, .dcm-fib-desc-input:focus { outline: none; border-color: var(--gold); }
-  .dcm-fib-row-trash {
-    flex: 0 0 auto;
-    width: 18px;
-    height: 18px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: none;
-    border: none;
-    color: var(--muted);
-    cursor: pointer;
-    border-radius: 4px;
-    font-size: 13px;
-    line-height: 1;
-    font-family: monospace;
-  }
-  .dcm-fib-row-trash:hover { color: var(--down); background: rgba(229, 72, 77, 0.15); }
-  .dcm-fib-row-trash:disabled { visibility: hidden; cursor: default; }
-  #dcm-fib-desc-toggle-row { margin-top: 8px; }
-
-  /* v33: locked-object right-click menu — only the Unlock action shows;
-     everything else (style/time rows, Delete) is hidden while an object
-     is locked, so a locked object truly can't be edited/removed except
-     by explicitly unlocking it first (here, or from the Object Tree). */
-  .draw-context-menu .dcm-unlock {
-    display: none;
-    margin-top: 2px;
-    appearance: none;
-    border: 1px solid rgba(201, 162, 39, 0.4);
-    background: rgba(201, 162, 39, 0.12);
-    color: var(--gold);
-    font-size: 12px;
-    padding: 6px 8px;
-    border-radius: 5px;
-    cursor: pointer;
-  }
-  .draw-context-menu .dcm-unlock:hover { background: rgba(201, 162, 39, 0.22); }
-  .draw-context-menu.locked-mode .dcm-row,
-  .draw-context-menu.locked-mode .dcm-section { display: none !important; }
-  .draw-context-menu.locked-mode #dcm-preset-row { display: none !important; }
-  .draw-context-menu.locked-mode .dcm-unlock { display: block; }
 
   /* ---- v33: Object Tree panel — modeled after TradingView's own Object
      Tree. v38 layout refresh: its toggle button moved out of the chart
@@ -1812,7 +1798,7 @@
      window on Windows), so no @font-face/web-font is needed — it falls
      back to a generic sans-serif on any platform that lacks it. */
   .mdo-title {
-    font-family: Bahnschrift, "Segoe UI", sans-serif;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-weight: 400;
     font-size: 22.5px;
     color: var(--text);
@@ -1830,7 +1816,7 @@
   /* Every other label/value in the modal — spec: Consolas Regular, 12px,
      #606a79. */
   .mdo-body {
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-weight: 400;
     font-size: 12px;
     color: var(--muted);
@@ -1850,7 +1836,7 @@
   .mdo-control select {
     background: var(--bg);
     color: var(--muted);
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 12px;
     border: 1px solid var(--border);
     border-radius: 4px;
@@ -1905,7 +1891,7 @@
        way, so the layout never shifts based on hover content. */
     height: 30px;
     margin-bottom: 6px;
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 11px;
     line-height: 15px;
     color: var(--text);
@@ -2185,7 +2171,7 @@
     appearance: none;
     background: transparent;
     color: var(--muted);
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 13px;
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -2236,7 +2222,7 @@
     border: none;
     outline: none;
     color: var(--text);
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 13px;
     color-scheme: dark; /* keeps the native calendar-picker glyph visible on the dark box */
     white-space: nowrap;
@@ -2271,7 +2257,7 @@
       left-aligned, especially as it grows longer with per-chunk Extend
       progress ("Extend Processing... (49/71 days checked, 42 added)"). */
     margin-top: 10px;
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 12px;
     color: var(--muted);
     min-height: 14px;
@@ -2308,7 +2294,7 @@
     flex-direction: column;
   }
   .settings-sidebar-title {
-    font-family: Bahnschrift, "Segoe UI", sans-serif;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-weight: 400;
     font-size: 22.5px;
     color: var(--text);
@@ -2341,7 +2327,7 @@
     border: none;
     background: transparent;
     padding: 0;
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 13.5px;
     color: inherit;
     cursor: pointer;
@@ -2372,7 +2358,7 @@
     flex: 0 0 auto;
   }
   .settings-content-title {
-    font-family: Bahnschrift, "Segoe UI", sans-serif;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-weight: 400;
     font-size: 22.5px;
     color: var(--text);
@@ -2425,7 +2411,7 @@
      created per spec as empty shells to be filled in later; this note is
      the only content they show for now. */
   .settings-placeholder {
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 12px;
     color: var(--muted);
     padding-top: 4px;
@@ -2436,7 +2422,7 @@
      listing every shortcut action with its current binding and an inline
      assign/change control. See keyboard-shortcuts.js. */
   .kbd-shortcuts-intro {
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 11.5px;
     color: var(--muted);
     margin-bottom: 16px;
@@ -2447,7 +2433,7 @@
     width: 100%;
     max-width: 560px;
     border-collapse: collapse;
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 12.5px;
     color: var(--text);
   }
@@ -2531,7 +2517,7 @@
      never overlaps anything else. Freed width is taken from the input
      fields, which didn't need to be as wide as they were. */
   .appcfg-intro {
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 11.5px;
     color: var(--muted);
     margin-bottom: 20px;
@@ -2587,7 +2573,7 @@
     border: 1px solid var(--border);
     border-radius: 6px;
     padding: 12px 14px;
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 11px;
     line-height: 1.6;
     color: var(--muted);
@@ -2602,7 +2588,7 @@
   .appcfg-desc-panel.has-selection .appcfg-desc-title { display: block; }
   .appcfg-section { margin-bottom: 24px; }
   .appcfg-section-title {
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 11px;
     color: var(--muted);
     text-transform: uppercase;
@@ -2624,10 +2610,9 @@
   }
   /* The whole row highlights + drives the description panel on hover —
      no separate icon to hover, per spec (minimal). */
-  .appcfg-row:hover { background: var(--bg); }
   .appcfg-label-wrap { flex: 0 0 190px; min-width: 0; }
   .appcfg-label {
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 12.5px;
     color: var(--text);
     overflow: hidden;
@@ -2643,7 +2628,7 @@
     color: var(--text);
     border: 1px solid var(--border);
     border-radius: 4px;
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 12px;
     padding: 6px 8px;
   }
@@ -2655,7 +2640,7 @@
      keep the existing appcfg row geometry intact while matching only the
      checkbox label typography. */
   #settings-pane-configuration .appcfg-row > .canvas-grid-checkbox-label {
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 13px;
     color: var(--text);
   }
@@ -2696,7 +2681,7 @@
     border-radius: 4px;
     background: var(--bg);
     color: var(--text);
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 12px;
     cursor: not-allowed;
   }
@@ -2727,7 +2712,7 @@
   .about-text-box::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
   .about-text-content {
-    font-family: "Segoe UI", sans-serif;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 13px;
     line-height: 1.65;
     color: var(--text);
@@ -2742,7 +2727,7 @@
   .about-text-content h4,
   .about-text-content h5,
   .about-text-content h6 {
-    font-family: Bahnschrift, "Segoe UI", sans-serif;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-weight: 400;
     color: var(--text);
     margin: 18px 0 8px;
@@ -2759,7 +2744,7 @@
   .about-text-content ol { margin: 0 0 10px; padding-left: 22px; }
   .about-text-content li { margin-bottom: 4px; }
   .about-text-content code {
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 12px;
     background: var(--ov6);
     border: 1px solid var(--border);
@@ -2793,7 +2778,7 @@
   }
   .about-version-icon {
     flex: 0 0 auto;
-    width: 30px;
+    width: 20px;
     height: 30px;
     display: flex;
     align-items: center;
@@ -2801,11 +2786,12 @@
     /* Update 2: no longer follows the user-editable Selector (--gold)
        accent — a fixed theme-neutral color instead. */
     color: var(--text);
-    background: var(--ov5);
-    border: 1px solid var(--border);
-    border-radius: 50%;
+    /* v97 Update 3: bare "i" icon only - the surrounding circle is gone. */
+    background: none;
+    border: 0;
+    border-radius: 0;
   }
-  .about-version-icon svg { width: 16px; height: 16px; display: block; }
+  .about-version-icon svg { width: 18px; height: 18px; display: block; }
   .about-version-info {
     flex: 1 1 auto;
     min-width: 0;
@@ -2814,14 +2800,14 @@
     gap: 2px;
   }
   .about-version-label {
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 10.5px;
     color: var(--muted);
     text-transform: uppercase;
     letter-spacing: 0.06em;
   }
   .about-version-value {
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 15px;
     font-weight: 600;
     /* Update 2: no longer follows the user-editable Selector (--gold)
@@ -2840,7 +2826,7 @@
     border-radius: 6px;
     background: var(--bg);
     color: var(--muted);
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 12px;
     cursor: pointer;
   }
@@ -2851,7 +2837,7 @@
     min-height: 32px;      /* reserves space for 1-2 wrapped lines so the
                                progress bar below never jumps around based
                                on how long the status text happens to be */
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 12px;
     line-height: 1.5;
     color: var(--muted);
@@ -2897,7 +2883,7 @@
     min-width: 128px;      /* fits "999.9 MB / 999.9 MB (100%)" without
                                the row's width jittering as digits change */
     text-align: right;
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 11px;
     color: var(--muted);
     white-space: nowrap;
@@ -2905,7 +2891,7 @@
 
   .appcfg-unit {
     flex: 0 0 auto;
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 11px;
     color: var(--muted);
   }
@@ -2929,13 +2915,62 @@
   }
   .appcfg-reset-btn:hover { border-color: var(--gold); color: var(--text); }
   .appcfg-saved-note {
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 11px;
     color: var(--muted);
     opacity: 0;
     transition: opacity 0.2s ease;
   }
   .appcfg-saved-note.visible { opacity: 1; }
+
+  /* ---- v93: Sessions & Timezone tab ---------------------------------- */
+  .sess-title { margin-top: 10px; }
+  .sess-head, .sess-row {
+    display: grid;
+    grid-template-columns: 22px minmax(120px, 1fr) 78px 78px 40px 26px;
+    align-items: center;
+    gap: 8px;
+    max-width: 560px;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+    font-size: 12px;
+  }
+  .sess-head { color: var(--muted); padding: 0 6px 6px; }
+  .sess-scroller {
+    max-height: 260px;
+    overflow-y: auto;
+    max-width: 572px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px;
+  }
+  .sess-row { padding: 4px 2px; border-radius: 5px; color: var(--text); }
+  .sess-row input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--text); cursor: pointer; margin: 0; }
+  .sess-row input[type="text"] {
+    min-width: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 5px 6px;
+  }
+  .sess-row input[type="text"]:focus { outline: none; border-color: var(--gold); }
+  .sess-row input.sess-invalid { border-color: var(--down); }
+  .sess-row .canvas-preset-dropdown-item-trash { width: 22px; height: 22px; }
+  .sess-empty { color: var(--muted); font-size: 11.5px; padding: 8px; font-family: "Inter", "Segoe UI", system-ui, sans-serif; }
+  .sess-add-btn {
+    margin-top: 8px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .sess-add-btn:hover { border-color: var(--gold); color: var(--gold); }
 
   /* ---- Canvas tab ------------------------------------------------------ */
   .canvas-settings-columns {
@@ -2945,7 +2980,7 @@
   }
   .canvas-settings-col { flex: 0 0 auto; min-width: 220px; }
   .canvas-settings-col-title {
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 12px;
     color: var(--muted);
     margin-bottom: 14px;
@@ -2955,7 +2990,7 @@
     align-items: center;
     gap: 10px;
     margin-bottom: 14px;
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 13px;
     color: var(--text);
   }
@@ -2966,7 +3001,7 @@
   .canvas-row select {
     background: var(--bg);
     color: var(--muted);
-    font-family: Consolas, ui-monospace, SFMono-Regular, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 12px;
     border: 1px solid var(--border);
     border-radius: 4px;
@@ -2997,7 +3032,8 @@
     background-image:
       linear-gradient(var(--sw-color, #c9a227), var(--sw-color, #c9a227)),
       repeating-conic-gradient(#3a3f4a 0% 25%, #262b34 0% 50%);
-    background-size: auto, 8px 8px;
+    background-size: auto, 8px 8px;    overflow: hidden;
+    background-clip: padding-box;
   }
 
   /* v50.1 Update 1: Horizontal/Vertical grid-line rows — checkbox label on
@@ -3210,7 +3246,7 @@
     letter-spacing: 0.04em;
     flex: 0 0 auto;
   }
-  .objects-panel-header .dcm-close { cursor: pointer; color: var(--muted); font-family: monospace; font-size: 14px; }
+  .objects-panel-header .dcm-close { cursor: pointer; color: var(--muted); font-family: "Inter", "Segoe UI", system-ui, sans-serif; font-size: 14px; }
   .objects-panel-header .dcm-close:hover { color: var(--text); }
   .objects-panel-header-actions { display: flex; align-items: center; gap: 10px; }
   .obj-panel-icon-btn {
@@ -3482,7 +3518,7 @@
     top: 50%;
     transform: translateY(-50%);
     color: var(--muted);
-    font-family: monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
   }
   .replay-close-btn:hover { color: var(--down); background: rgba(229, 72, 77, 0.12); }
 
@@ -3598,7 +3634,7 @@
   /* Replay Speed — a themed dropdown opening UPWARD (the bar sits at the
      very bottom of the window, so there is no room to open it downward). */
   .replay-speed-wrap { position: relative; display: flex; align-items: center; }
-  .replay-speed-btn { width: auto; padding: 0 8px; gap: 5px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .replay-speed-btn { width: auto; padding: 0 8px; gap: 5px; font-family: "Inter", "Segoe UI", system-ui, sans-serif; }
   .replay-speed-list {
     display: none;
     position: absolute;
@@ -3621,7 +3657,7 @@
     border: none;
     background: transparent;
     color: var(--text);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     font-size: 12px;
     text-align: center;
     padding: 6px 8px;
@@ -3678,7 +3714,7 @@
     color: var(--text);
     border-radius: 6px;
     font-size: 12px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     padding: 8px 26px 8px 9px;
     box-sizing: border-box;
     outline: none;
@@ -3704,7 +3740,7 @@
   .rbd-cal-dow { text-align: center; font-size: 11px; color: var(--muted); padding: 4px 0 6px; }
   .rbd-cal-day {
     appearance: none; border: none; background: transparent; color: var(--text);
-    font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px; font-family: "Inter", "Segoe UI", system-ui, sans-serif;
     padding: 6px 0; border-radius: 5px; cursor: pointer; text-align: center;
   }
   .rbd-cal-day:hover { background: var(--ov6); }
@@ -3801,7 +3837,9 @@
   .tp-gauge-track { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; margin-top: 8px; }
   .tp-gauge-fill { height: 100%; width: 0; background: var(--up); border-radius: 3px; transition: width .2s; }
   .tp-gauge-labels { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); margin-top: 4px; }
-  .tp-hint { font-size: 10.5px; color: var(--muted); margin-top: 4px; line-height: 1.45; }
+  .tp-hint { font-size: 10.5px; color: var(--muted); margin-top: 4px; line-height: 1.45; text-align: justify; }
+  /* V99: Calculated-lot hint wraps over as many lines as needed (no ellipsis), same size as the Max risk hint. */
+  #tp-lot-hint { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
   .tp-open-box { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; border-top: 1px solid var(--border); padding-top: 8px; }
   .tp-select-all { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); margin-bottom: 8px; cursor: pointer; }
   .trade-panel input[type=checkbox] { accent-color: var(--tp-accent); margin: 0; }
@@ -3843,10 +3881,66 @@
   #tp-open-list .tp-item { transition: opacity .12s; }
   #tp-open-list.tp-focus .tp-item:not(.tp-focused) { opacity: .35; }
   /* V84: trade toasts + fast-order cursor */
-  #tl-toasts { position: fixed; left: 50%; top: 56px; /* V90: toasts on top */ transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 6px; pointer-events: none; align-items: center; }
-  .tl-toast { background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--up); color: var(--text); font-size: 12px; padding: 7px 12px; border-radius: 5px; box-shadow: 0 6px 18px rgba(0,0,0,.35); max-width: 460px; }
-  .tl-toast.err { border-left-color: var(--down); }
-  .tl-toast.info { border-left-color: var(--gold); }
+  /* V99: notification system - bottom-left, newest at the bottom, older ones glide up. */
+  #tl-toasts {
+    position: fixed; left: 14px; bottom: 48px; z-index: 9999;
+    display: flex; flex-direction: column; align-items: flex-start;
+    width: 400px; max-width: calc(100vw - 28px);
+    max-height: calc(100vh - 110px); overflow: hidden; justify-content: flex-end;
+    pointer-events: none;
+  }
+  .tl-toast-wrap {
+    display: grid; grid-template-rows: 0fr; width: 100%;
+    opacity: 0; transform: translateX(-16px);
+    transition: grid-template-rows .28s cubic-bezier(.2,.8,.2,1), opacity .22s ease, transform .28s cubic-bezier(.2,.8,.2,1);
+  }
+  .tl-toast-wrap.in { grid-template-rows: 1fr; opacity: 1; transform: none; }
+  .tl-toast-wrap.out { grid-template-rows: 0fr; opacity: 0; transform: translateX(-16px); transition-duration: .22s; }
+  .tl-toast-clip { min-height: 0; overflow: hidden; padding: 3px 4px; }
+  .tl-toast {
+    --tl-accent: var(--up);
+    position: relative; overflow: hidden; pointer-events: auto; cursor: default;
+    display: flex; align-items: center; gap: 10px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); font-size: 12.5px; line-height: 1.4;
+    padding: 9px 12px 11px 10px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.28);
+  }
+  .tl-toast.err { --tl-accent: var(--down); }
+  .tl-toast.info { --tl-accent: var(--muted); }
+  .tl-toast-icon {
+    flex: none; width: 20px; height: 20px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--tl-accent); background: color-mix(in srgb, var(--tl-accent) 16%, transparent);
+  }
+  .tl-toast-icon svg { width: 12px; height: 12px; display: block; }
+  .tl-toast-msg { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+  .tl-toast-count {
+    flex: none; font-size: 10.5px; padding: 1px 6px; border-radius: 9px;
+    color: var(--tl-accent); background: color-mix(in srgb, var(--tl-accent) 16%, transparent);
+  }
+  .tl-toast-count[hidden] { display: none; }
+  .tl-toast-count.bump { animation: tl-bump .25s ease; }
+  .tl-toast-close {
+    flex: none; appearance: none; border: 0; background: transparent; color: var(--muted);
+    width: 18px; height: 18px; padding: 0; border-radius: 4px; cursor: pointer;
+    display: none; align-items: center; justify-content: center;
+  }
+  .tl-toast-close svg { width: 10px; height: 10px; }
+  .tl-toast-close:hover { color: var(--text); background: var(--ov6); }
+  .tl-toast:hover .tl-toast-close { display: flex; }
+  .tl-toast:hover .tl-toast-count { display: none; }
+  .tl-toast-bar {
+    position: absolute; left: 0; bottom: 0; height: 2px; width: 100%;
+    background: var(--tl-accent); opacity: .55; transform-origin: left center;
+    animation: tl-bar linear forwards;
+  }
+  .tl-toast:not(.armed) .tl-toast-bar, .tl-toast:hover .tl-toast-bar { animation-play-state: paused; }
+  @keyframes tl-bar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+  @keyframes tl-bump { 50% { transform: scale(1.25); } }
+  @media (prefers-reduced-motion: reduce) {
+    .tl-toast-wrap, .tl-toast-wrap.out { transition: opacity .15s ease; transform: none; }
+  }
   /* V88: order preview risk/reward boxes */
   .tl-box { position: absolute; left: 0; top: 0; bottom: 0; pointer-events: none; z-index: 3; }
   .tl-box > div { position: absolute; left: 0; right: 0; }
@@ -3897,6 +3991,775 @@
   .tp-open-head b { margin-left: 6px; font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; }
   .tp-open-box.tp-none .tp-sel-row, .tp-open-box.tp-none .tp-open-head { display: none; }
   #tp-open-list { -webkit-mask-image: linear-gradient(to bottom, transparent 0, rgba(0,0,0,.25) calc(var(--f,0px)*.4), rgba(0,0,0,.7) calc(var(--f,0px)*.75), #000 var(--f,0px)); mask-image: linear-gradient(to bottom, transparent 0, rgba(0,0,0,.25) calc(var(--f,0px)*.4), rgba(0,0,0,.7) calc(var(--f,0px)*.75), #000 var(--f,0px)); overscroll-behavior: contain; }
+
+  /* =========================================================================
+     v94 — Setting panel redesign (matches Setting.html: Inter 13px, 28px/500
+     titles, bordered tables with a header row, 31px rows, flat controls).
+     Uses only the app's theme variables, so Default Dark / Default Light (and
+     the other Canvas presets) re-theme it automatically. Placed last so it
+     overrides the older per-tab rules above.
+     ========================================================================= */
+  .settings-modal {
+    --fb: "Inter", "Segoe UI", system-ui, sans-serif;
+    --ctl: #1a2130;
+    --ctl-text: #b4bccb;
+    font-family: var(--fb);
+    font-size: 13px;
+    color: var(--text);
+  }
+  body.light-theme .settings-modal { --ctl: #f1f2f5; --ctl-text: #3a4150; }
+  .settings-modal :not(code):not(pre) { font-family: var(--fb); }
+
+  .settings-sidebar { flex: 0 0 260px; padding: 26px 28px 36px 30px; }
+  .settings-sidebar-title, .settings-content-title { font-size: 28px; font-weight: 500; line-height: 1.15; }
+  .settings-sidebar-title { margin-bottom: 22px; }
+  .settings-content { padding: 26px 30px 36px 40px; }
+  .settings-content-header { margin-bottom: 22px; }
+  .settings-tab { height: 42px; margin-bottom: 0; }
+  .settings-tab-label { font-size: 13px; }
+  .settings-divider { margin: 26px 0; }
+  .settings-modal { height: 712px; }
+  /* v95: Keyboard Shortcuts — intro and Reset button stay fixed; only the table scrolls
+     (its header row stays pinned) when it is taller than the available space. */
+  #settings-pane-keyboard-shortcuts.active { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+  .kbd-shortcuts-intro { flex: 0 0 auto; }
+  .kbd-table-scroll {
+    flex: 0 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden;
+    border: 1px solid var(--border); border-radius: 8px;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  .kbd-table-scroll .kbd-shortcuts-table { width: 100%; border: 0; border-radius: 0; overflow: visible; }
+  .kbd-table-scroll .kbd-shortcuts-table thead th { position: sticky; top: 0; z-index: 1; }
+  .kbd-reset-all-btn { flex: 0 0 auto; align-self: flex-start; }
+
+  /* shared bits */
+  .settings-modal .hint, .kbd-shortcuts-intro, .appcfg-intro { font-size: 12px; line-height: 1.5; color: var(--muted); margin: 0 0 12px; max-width: none; }
+  .settings-modal input[type="checkbox"] {
+    -webkit-appearance: none; appearance: none; position: relative; flex: none;
+    width: 15px; height: 15px; margin: 0; border: 1.6px solid var(--text); border-radius: 4px;
+    background: transparent; cursor: pointer; display: block;
+  }
+  .settings-modal input[type="checkbox"]:checked { background: var(--text); }
+  .settings-modal input[type="checkbox"]:checked::after {
+    content: ""; position: absolute; left: 3.5px; top: 0; width: 4px; height: 8px;
+    border-right: 2px solid var(--panel); border-bottom: 2px solid var(--panel); transform: rotate(40deg);
+  }
+  .settings-modal select {
+    -webkit-appearance: none; appearance: none; width: 100%; min-width: 0;
+    background: var(--ctl) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M1 1l4 4 4-4' fill='none' stroke='%238b93a1' stroke-width='1.6'/></svg>") no-repeat right 8px center;
+    color: var(--ctl-text); border: 0; border-radius: 6px; padding: 3px 24px 3px 8px; font-size: 13px; cursor: pointer;
+  }
+  .settings-modal select:focus { outline: none; box-shadow: 0 0 0 1px var(--gold); }
+  .settings-modal select option { background: var(--panel); color: var(--text); }
+  .settings-pane .dcm-color-swatch { width: 20px; height: 20px; border-radius: 5px; background: var(--panel); display: block; }
+  .settings-pane .dcm-color-swatch-fill { inset: 2px; border-radius: 3px; }
+  .settings-modal .btn, .sess-add-btn, .kbd-reset-all-btn, .appcfg-reset-btn, .mdo-backfill-btn, .about-update-btn {
+    background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 6px;
+    padding: 5px 12px; font-size: 13px; cursor: pointer; margin: 0;
+  }
+  .sess-add-btn:hover, .kbd-reset-all-btn:hover, .appcfg-reset-btn:hover, .mdo-backfill-btn:hover:not(:disabled) { border-color: var(--gold); color: var(--text); }
+  .mdo-backfill-btn:disabled { color: var(--muted); opacity: .6; }
+  .btns { display: flex; gap: 8px; margin-top: 12px; }
+  .sec { color: var(--muted); margin: 14px 0 0; font-size: 13px; }
+  .frow { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .frow label { cursor: pointer; }
+
+  /* tables (Canvas / Sessions) */
+  .tbl { width: 100%; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .tr { display: grid; align-items: center; column-gap: 10px; padding: 0 12px; height: 31px; border-bottom: 1px solid var(--border); }
+  .tr > * { min-width: 0; }
+  .tr:last-child, .tbl-scroll .tr:last-child { border-bottom: 0; }
+  .tr.head { height: 28px; background: var(--ctl); color: var(--muted); font-size: 12px; position: sticky; top: 0; z-index: 1; }
+  .tr.chart { grid-template-columns: 22px minmax(0, 1fr) 56px 120px 84px; }
+  .tr.sess { grid-template-columns: 22px minmax(0, 1fr) 64px 64px 52px 24px; }
+  .tbl-scroll.sc { max-height: 360px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; scrollbar-gutter: stable; }
+  /* v95: the Sessions header reserves the exact same (invisible) scrollbar gutter as the
+     rows below it, so Name / Start / End / Color columns line up with their titles whether
+     or not the list is long enough to scroll. */
+  .tr.sess.head { overflow-y: scroll; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: transparent transparent; scrollbar-gutter: stable; }
+  .tr .lb { white-space: nowrap; }
+  .tr .cs { display: flex; gap: 4px; }
+  .sess-empty { padding: 8px 12px; color: var(--muted); font-size: 12px; }
+  .tr.sess input[type="text"], .canvas-preset-name-input {
+    min-width: 0; width: 100%; background: var(--ctl); color: var(--ctl-text); border: 1px solid transparent;
+    border-radius: 6px; padding: 3px 8px; min-height: 22px; line-height: 16px; font-size: 13px;
+  }
+  .tr.sess input[type="text"]:focus, .canvas-preset-name-input:focus { outline: none; border-color: var(--gold); }
+  .tr.sess input.sess-invalid { border-color: var(--down); }
+  .sess-row { padding: 0 12px; background: transparent; }
+  /* v95: the legacy v93 .sess-head/.sess-row rule capped rows at max-width:560px (and 8px gap),
+     which made rows end before the header titles. Rows now fill the whole table width. */
+  .tr.sess.sess-row, .tr.sess.head { max-width: none; width: auto; column-gap: 10px; box-sizing: border-box; }
+  .sess-row .canvas-preset-dropdown-item-trash, .sess-row .canvas-preset-dropdown-item-trash:hover { width: 24px; height: 24px; border: 1px solid var(--border); border-radius: 6px; background: transparent; }
+
+  /* preset picker */
+  .canvas-preset-block { margin-top: 14px; max-width: none; }
+  .canvas-preset-line, .canvas-preset-save-box { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+  .canvas-preset-save-box:not(.open) { display: none; }
+  .canvas-preset-dropdown-btn { background: var(--ctl); color: var(--ctl-text); border: 0; border-radius: 6px; padding: 5px 8px; font-size: 13px; }
+  .canvas-preset-dropdown-list { border-radius: 8px; max-width: none; }
+  .canvas-preset-dropdown-item-name { font-size: 13px; }
+  .canvas-icon-btn { width: 28px; height: 28px; background: var(--ctl); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 0; font-size: 14px; display: flex; align-items: center; justify-content: center; flex: none; }
+  .canvas-preset-line .canvas-icon-btn { border-color: transparent; }
+
+
+  /* v96 Update 1: a little more air between the Sessions & Timezone table rows. */
+  .tr.sess.sess-row { height: 40px; }
+  .tr.sess.head { height: 30px; }
+  .tbl-scroll.sc { max-height: 400px; }
+
+  /* v96 Update 2: preset dropdown lists float (position:fixed, placed + sized by
+     settings-panel.js) so a long list scrolls inside itself and never makes the
+     whole tab scroll. Fallback sizing below applies if the script hasn't run. */
+  .settings-modal .canvas-preset-dropdown-list {
+    position: fixed; max-height: 160px; overflow-y: auto; overscroll-behavior: contain;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent; z-index: 600;
+  }
+  .settings-modal .canvas-preset-dropdown-list::-webkit-scrollbar { width: 6px; }
+  .settings-modal .canvas-preset-dropdown-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Keyboard Shortcuts */
+  .kbd-shortcuts-table { max-width: none; border-collapse: separate; border-spacing: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 13px; }
+  .kbd-shortcuts-table thead th { background: var(--ctl); font-size: 12px; text-transform: none; letter-spacing: 0; padding: 6px 12px; height: 28px; border-bottom: 1px solid var(--border); }
+  .kbd-shortcuts-table td { padding: 4px 12px; height: 31px; border-bottom: 1px solid var(--border); }
+  .kbd-shortcuts-table tbody tr { border-bottom: 0; }
+  .kbd-shortcuts-table tbody tr:last-child td { border-bottom: 0; }
+  .kbd-shortcut-badge { background: var(--ctl); color: var(--ctl-text); border-radius: 5px; padding: 1px 7px; font-size: 12px; letter-spacing: 0; }
+  .kbd-icon-btn { width: 24px; height: 24px; border-radius: 6px; }
+  .kbd-reset-all-btn { margin-top: 12px; }
+
+  /* Configuration */
+  .appcfg-section { margin-bottom: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+  .appcfg-section-title { background: var(--ctl); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; padding: 6px 12px; margin: 0; }
+  .appcfg-row { min-height: 38px; padding: 5px 12px; margin: 0; border-bottom: 1px solid var(--border); border-radius: 0; box-sizing: border-box; }
+  .appcfg-row:last-child { border-bottom: 0; }
+  .appcfg-input { background: var(--ctl); color: var(--ctl-text); border: 1px solid transparent; border-radius: 6px; font-size: 13px; padding: 3px 8px; height: 26px; box-sizing: border-box; }
+  .appcfg-label-wrap { flex: 1 1 auto; }
+  .appcfg-unit { flex: 0 0 auto; min-width: 30px; margin-left: -2px; }
+  .appcfg-input.appcfg-input-num { flex: 0 0 auto; width: 72px; max-width: 72px; text-align: center; }
+  .appcfg-input:focus { border-color: var(--gold); }
+  .appcfg-desc-panel { border-radius: 8px; font-size: 12px; }
+  .appcfg-footer { margin-top: 12px; }
+
+  /* About */
+  .about-version-card { border-radius: 8px; }
+  .about-text-box { border-radius: 8px; }
+
+  /* Market Data Overview */
+  .mdo-control select { width: auto; }
+  .mdo-chart-box { border-radius: 8px; }
+  .mdo-view-btn, .mdo-refresh-btn { background: var(--ctl); border: 1px solid var(--border); border-radius: 6px; }
+  .mdo-view-btn.active, .mdo-view-btn.active:hover { background: #5b6472; color: #fff; border-color: #5b6472; }
+
+  /* =========================================================================
+     Toolbar redesign — minimal, borderless, single flat bar.
+     Overrides only the look of the header; every icon, id and handler is the
+     app's own. Groups are separated by thin dividers instead of boxes; buttons
+     have no frame and only gain a soft background on hover. Active = gold icon
+     + faint gold wash + a small underline that animates in.
+     ========================================================================= */
+  header {
+    --tb-accent: var(--gold);
+    --tb-sel: color-mix(in srgb, var(--gold) 16%, transparent);
+    --tb-hov: var(--ov8);
+  }
+  /* --gold is the user's Canvas "Selector" color (see canvas-settings.js
+     applySelector), so the active icon, wash and underline follow it live. */
+  body.light-theme header {
+    --tb-sel: color-mix(in srgb, var(--gold) 20%, transparent);
+  }
+
+  /* symbol + timeframe: same size as before, but no visible border/box.
+     A transparent 1px border keeps the exact old dimensions. */
+  header .title-block .tf-dropdown-btn {
+    border: 1px solid transparent;
+    background: transparent;
+    transition: background .14s ease;
+  }
+  header .title-block .tf-dropdown-btn:hover,
+  header .title-block .symbol-dropdown.open .tf-dropdown-btn {
+    background: var(--tb-hov);
+    border-color: transparent;
+  }
+  header .title-block .tf-dropdown-btn:disabled:hover { background: transparent; }
+  .header-right { gap: 2px; }
+
+  .tb-sep {
+    flex: none;
+    box-sizing: content-box;
+    width: 0;
+    height: 16px;
+    margin: 0 6px;
+    /* v97 Update 2: dividers use the Selector color (--gold).
+       v97 Update 5: drawn as a BORDER, not a 1px background. A background
+       box that lands on a fractional x position (125%/150% display scaling)
+       is anti-aliased, so some dividers came out blurry/thicker than others.
+       Borders are snapped to whole device pixels, so every divider now has
+       exactly the same crisp thickness. */
+    background: none;
+    border-left: 1.5px solid var(--gold);
+  }
+  header .pill-group,
+  header .pill-group.objects-toggle-wrap {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    gap: 2px;
+  }
+
+  /* icon buttons (drawing tools, layout, panel toggles) */
+  header :is(.pill-btn, #replay-bar-toggle, #trade-panel-toggle,
+             #objects-panel-toggle, #settings-toggle, #log-toggle) {
+    position: relative;
+    appearance: none;
+    border: 0;
+    margin: 0;
+    padding: 0;
+    width: 28px;
+    height: 26px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background .14s ease, color .14s ease, transform .1s ease;
+  }
+  header :is(.pill-btn, #replay-bar-toggle, #trade-panel-toggle,
+             #objects-panel-toggle, #settings-toggle, #log-toggle) svg {
+    width: 16px;
+    height: 16px;
+    display: block;
+    transition: transform .14s ease;
+  }
+  header .layout-switcher .pill-btn { padding: 0; }
+  header .layout-switcher .pill-btn svg { width: 16px; height: 12px; }
+  header :is(.pill-btn, #replay-bar-toggle, #trade-panel-toggle,
+             #objects-panel-toggle, #settings-toggle, #log-toggle):hover {
+    background: var(--tb-hov);
+    color: var(--text);
+  }
+  header :is(.pill-btn, #replay-bar-toggle, #trade-panel-toggle,
+             #objects-panel-toggle, #settings-toggle, #log-toggle):hover svg {
+    transform: scale(1.08);
+  }
+  header :is(.pill-btn, #replay-bar-toggle, #trade-panel-toggle,
+             #objects-panel-toggle, #settings-toggle, #log-toggle):active {
+    transform: scale(.92);
+  }
+  header :is(.pill-btn, #replay-bar-toggle, #trade-panel-toggle,
+             #objects-panel-toggle, #settings-toggle, #log-toggle).active {
+    background: var(--tb-sel);
+    color: var(--tb-accent);
+    font-weight: inherit;
+  }
+  header :is(.pill-btn, #replay-bar-toggle, #trade-panel-toggle,
+             #objects-panel-toggle, #settings-toggle, #log-toggle)::after {
+    content: "";
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: 1px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--tb-accent);
+    transform: scaleX(0);
+    opacity: 0;
+    transition: transform .18s ease, opacity .18s ease;
+  }
+  header :is(.pill-btn, #replay-bar-toggle, #trade-panel-toggle,
+             #objects-panel-toggle, #settings-toggle, #log-toggle).active::after {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+
+  /* custom tooltip (replaces the native title bubble in the header) */
+  #tb-tip {
+    position: fixed;
+    z-index: 600;
+    pointer-events: none;
+    white-space: nowrap;
+    padding: 4px 8px;
+    border-radius: 5px;
+    background: var(--text);
+    color: var(--panel);
+    font: 500 11.5px/1.2 "Inter", "Segoe UI", system-ui, sans-serif;
+    opacity: 0;
+    transform: translateY(-2px);
+    transition: opacity .12s ease, transform .12s ease;
+  }
+  #tb-tip.show { opacity: 1; transform: none; }
+
+  /* =========================================================================
+     v97 Update 1 — Timeframe + Symbol pickers redesigned (see TF.html).
+       * Timeframe: no vertical dropdown any more. The button (clock + label)
+         expands INLINE into a horizontal segmented row; picking a value (or
+         clicking the clock) collapses it again. Companion-panel pickers use
+         the same control (.tfx.mini).
+       * Symbol: still a vertical, searchable menu, restyled - fixed search
+         field on top, only the rows scroll, "All symbols" section label,
+         roomy two-line rows, hairline separators.
+     Colors come only from the theme tokens (--bg/--panel/--border/--text/
+     --muted/--ov*), so Default Dark and Default Light both follow. The
+     selected symbol / timeframe is a neutral gray (text color mixed in) and
+     does NOT use the Selector color.
+     ========================================================================= */
+  .tf-dropdown {
+    --tfx-ease: cubic-bezier(0.32, 0.72, 0, 1);
+    /* v97 Update 2: selection is neutral gray (theme text color mixed in),
+       NOT the Selector color - so it fits Default Dark and Default Light. */
+    --tfx-sel: color-mix(in srgb, var(--text) 13%, transparent);
+  }
+  body.light-theme .tf-dropdown {
+    --tfx-sel: color-mix(in srgb, var(--text) 11%, transparent);
+  }
+
+  @keyframes tfxPop {
+    from { opacity: 0; transform: translateX(-6px); }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes symMenuIn {
+    from { opacity: 0; transform: translateY(-6px) scale(0.985); }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes symBarIn {
+    from { transform: scaleY(0.3); opacity: 0; }
+    to   { transform: scaleY(1); opacity: 1; }
+  }
+
+  /* ---- Timeframe: inline segmented control ------------------------------ */
+  .tf-dropdown.tfx {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px;
+    border-radius: 10px;
+    background: transparent;
+    transition: background 0.16s ease;
+  }
+  .tf-dropdown.tfx.open { background: var(--bg); }
+
+  .tf-dropdown.tfx > .tf-dropdown-btn {
+    height: 22px;
+    padding: 0 9px;
+    gap: 6px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 22px;
+    transition: background 0.14s ease;
+  }
+  .tf-dropdown.tfx > .tf-dropdown-btn:hover:not(:disabled) { background: var(--ov8); }
+  .tf-dropdown.tfx > .tf-dropdown-btn:disabled:hover { background: transparent; }
+  .tf-dropdown.tfx > .tf-dropdown-btn .caret { display: none; }
+  .tf-dropdown.tfx .tf-ic {
+    display: inline-flex;
+    flex: none;
+    width: 15px;
+    height: 15px;
+    color: var(--muted);
+    transition: color 0.14s ease;
+  }
+  .tf-dropdown.tfx .tf-ic svg { width: 15px; height: 15px; display: block; }
+  .tf-dropdown.tfx > .tf-dropdown-btn:hover .tf-ic { color: var(--text); }
+
+  /* open: the button shrinks to just the clock (the "collapse" cell) */
+  .tf-dropdown.tfx.open > .tf-dropdown-btn { width: 30px; padding: 0; justify-content: center; }
+  .tf-dropdown.tfx.open > .tf-dropdown-btn > :not(.tf-ic) { display: none; }
+
+  .tf-dropdown.tfx > .tf-dropdown-list {
+    position: static;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+    max-width: 0;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: max-width 0.24s var(--tfx-ease), opacity 0.16s ease, margin 0.24s var(--tfx-ease), visibility 0s linear 0.24s;
+  }
+  .tf-dropdown.tfx > .tf-dropdown-list::-webkit-scrollbar { display: none; }
+  .tf-dropdown.tfx.open > .tf-dropdown-list {
+    max-width: min(520px, 45vw);
+    margin-left: 2px;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition-delay: 0s;
+  }
+
+  .tf-dropdown.tfx > .tf-dropdown-list > button {
+    position: relative;
+    flex: none;
+    height: 22px;
+    min-width: 36px;
+    padding: 0 6px;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--muted);
+    text-align: center;
+    font-size: 13px;
+    line-height: 22px;
+    white-space: nowrap;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .tf-dropdown.tfx.open > .tf-dropdown-list > button {
+    animation: tfxPop 0.18s ease both;
+    animation-delay: calc(var(--i, 0) * 16ms);
+  }
+  .tf-dropdown.tfx > .tf-dropdown-list > button:hover { background: var(--ov8); color: var(--text); }
+  /* selected = neutral gray fill */
+  .tf-dropdown.tfx > .tf-dropdown-list > button.active {
+    background: var(--tfx-sel);
+    color: var(--text);
+    font-weight: 600;
+  }
+  /* companion-panel picker (floats over the chart): same control, smaller */
+  .tf-dropdown.tfx.mini {
+    padding: 2px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--panel) 88%, transparent);
+    box-shadow: inset 0 0 0 1px var(--border);
+  }
+  .tf-dropdown.tfx.mini.open { background: var(--panel); }
+  .tf-dropdown.tfx.mini > .tf-dropdown-btn { height: 20px; padding: 0 7px; font-size: 11px; line-height: 20px; border-radius: 6px; }
+  .tf-dropdown.tfx.mini.open > .tf-dropdown-btn { width: 26px; padding: 0; }
+  .tf-dropdown.tfx.mini .tf-ic, .tf-dropdown.tfx.mini .tf-ic svg { width: 13px; height: 13px; }
+  .tf-dropdown.tfx.mini > .tf-dropdown-list > button { height: 20px; min-width: 30px; padding: 0 4px; font-size: 11px; line-height: 20px; border-radius: 6px; }
+  .tf-dropdown.tfx.mini.open > .tf-dropdown-list { max-width: 340px; }
+
+  /* ---- Symbol: vertical searchable menu ---------------------------------- */
+  .symbol-dropdown > .tf-dropdown-btn .caret { display: none; }
+  .symbol-dropdown > .tf-dropdown-btn { min-width: 0; padding-left: 10px; padding-right: 10px; }
+
+  /* v97 Update 3: the menu is square and anchored to the HEADER (not the
+     symbol button), so it opens flush against the app's left edge and
+     directly under the header, with no gap on either side. */
+  header { position: relative; }
+  .symbol-dropdown { position: static; }
+  .symbol-dropdown > .tf-dropdown-list {
+    top: 100%;
+    left: 0;
+    padding: 0;
+    gap: 0;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 0;
+    border-top: 0;
+    border-radius: 0;
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    max-height: none;
+    scrollbar-gutter: auto;
+    transform-origin: top left;
+  }
+  body.light-theme .symbol-dropdown > .tf-dropdown-list { box-shadow: 0 14px 34px rgba(26, 36, 56, 0.18); }
+  .symbol-dropdown.open > .tf-dropdown-list { animation: symMenuIn 0.2s var(--tfx-ease) both; }
+
+  /* fixed search field: sits above the scrolling rows, not inside them */
+  .symbol-dropdown .symbol-search-wrap {
+    position: relative;
+    display: block;
+    flex: none;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    height: auto;
+    margin: 0;
+    padding: 10px;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .symbol-dropdown .symbol-search-wrap:focus-within { border-color: transparent; }
+  .symbol-dropdown .symbol-search-input {
+    display: block;
+    width: 100%;
+    height: 36px;
+    padding: 0 38px 0 12px;
+    border-radius: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    transition: box-shadow 0.15s ease;
+  }
+  .symbol-dropdown .symbol-search-input:focus {
+    box-shadow: inset 0 0 0 1px var(--border);
+  }
+  .symbol-dropdown .symbol-search-icon {
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    margin-top: -10px;
+  }
+  .symbol-dropdown .symbol-search-wrap.has-text .symbol-search-icon { display: none; }
+  .symbol-dropdown .symbol-search-wrap .symbol-search-clear {
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    margin-top: -13px;
+    width: 26px;
+    height: 26px;
+    border-radius: 0 !important;
+  }
+  .symbol-dropdown .symbol-search-wrap .symbol-search-clear:hover { background: var(--ov8) !important; }
+
+  /* only this block scrolls */
+  .symbol-dropdown .symbol-options {
+    display: block;
+    max-height: min(320px, calc(100vh - 160px));
+    padding: 0 0 6px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .symbol-dropdown .symbol-options::-webkit-scrollbar { width: 6px; }
+  .symbol-dropdown .symbol-options::-webkit-scrollbar-track { background: transparent; }
+  .symbol-dropdown .symbol-options::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .symbol-dropdown .symbol-options::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  .symbol-dropdown .symbol-options .symbol-pin-divider {
+    padding: 10px 18px 6px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    border-bottom: 0;
+    color: var(--muted);
+  }
+
+  .symbol-dropdown .symbol-options .symbol-option {
+    position: relative;
+    min-height: 0;
+    padding: 10px 12px 10px 18px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    overflow: visible;
+    transition: background 0.12s ease;
+  }
+  .symbol-dropdown .symbol-options .symbol-option::after {
+    content: "";
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 0;
+    height: 1px;
+    background: var(--border);
+    opacity: 0.7;
+  }
+  .symbol-dropdown .symbol-options .symbol-option:last-child::after,
+  .symbol-dropdown .symbol-options .symbol-option.active::after,
+  .symbol-dropdown .symbol-options .symbol-option:hover::after { display: none; }
+  .symbol-dropdown .symbol-options .symbol-option:hover { background: var(--bg) !important; }
+  /* selected = neutral gray fill + gray bar */
+  .symbol-dropdown .symbol-options .symbol-option.active {
+    background: var(--tfx-sel) !important;
+    box-shadow: none !important;
+  }
+  .symbol-dropdown .symbol-options .symbol-option.active::before {
+    content: "";
+    position: absolute;
+    left: 6px;
+    top: 9px;
+    bottom: 9px;
+    width: 3px;
+    border-radius: 0;
+    background: var(--text);
+    transform-origin: center;
+    animation: symBarIn 0.22s var(--tfx-ease) both;
+  }
+  .symbol-dropdown .symbol-option-symbol { font-size: 14px; font-weight: 500; line-height: 20px; }
+  .symbol-dropdown .symbol-option-description {
+    margin-top: 1px;
+    font-size: 13px;
+    line-height: 18px;
+    color: color-mix(in srgb, var(--text) 55%, var(--muted));
+  }
+  /* "already synced" marker: a small pin instead of the old dot */
+  .symbol-dropdown .symbol-option-db-dot {
+    display: inline-flex;
+    width: auto;
+    height: auto;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    color: var(--muted);
+  }
+  .symbol-dropdown .symbol-option-db-dot svg { width: 13px; height: 13px; display: block; }
+  .symbol-dropdown .symbol-search-empty { padding: 18px; text-align: left; font-size: 13px; }
+
+  /* v97 Update 4: smaller, more minimal type + tighter spacing. */
+  header .title-block { gap: 2px; }
+  header .symbol-dropdown > .tf-dropdown-btn { height: 28px; padding: 0 9px; }
+  header .symbol-dropdown .symbol { font-size: 13px; font-weight: 600; }
+  header .symbol-dropdown .symbol .dot { width: 6px; height: 6px; }
+  .tf-dropdown.tfx { padding: 2px; }
+  .tf-dropdown.tfx > .tf-dropdown-btn { font-size: 12px; height: 24px; line-height: 24px; padding: 0 8px; }
+  .tf-dropdown.tfx.open > .tf-dropdown-btn { width: 28px; padding: 0; }
+  .tf-dropdown.tfx .tf-ic, .tf-dropdown.tfx .tf-ic svg { width: 14px; height: 14px; }
+  .tf-dropdown.tfx > .tf-dropdown-list > button { font-size: 12px; height: 24px; line-height: 24px; min-width: 32px; }
+  .tf-dropdown.tfx.mini > .tf-dropdown-btn { font-size: 11px; }
+  .tf-dropdown.tfx.mini > .tf-dropdown-list > button { font-size: 11px; height: 20px; line-height: 20px; min-width: 28px; }
+  .symbol-dropdown > .tf-dropdown-list { width: min(300px, calc(100vw - 28px)); min-width: 0; max-width: min(300px, calc(100vw - 28px)); }
+  .symbol-dropdown .symbol-search-wrap { padding: 8px; }
+  .symbol-dropdown .symbol-search-input { height: 30px; font-size: 12px; padding: 0 32px 0 10px; }
+  .symbol-dropdown .symbol-search-icon { right: 14px; transform: scale(.85); }
+  .symbol-dropdown .symbol-search-wrap .symbol-search-clear { right: 11px; margin-top: -11px; width: 22px; height: 22px; font-size: 16px !important; }
+  .symbol-dropdown .symbol-options .symbol-pin-divider { padding: 8px 16px 4px; font-size: 10px; }
+  .symbol-dropdown .symbol-options .symbol-option { padding: 7px 12px 7px 16px !important; }
+  .symbol-dropdown .symbol-options .symbol-option::after { left: 10px; right: 10px; }
+  .symbol-dropdown .symbol-options .symbol-option.active::before { left: 5px; top: 7px; bottom: 7px; width: 2px; }
+  .symbol-dropdown .symbol-option-symbol { font-size: 12px; line-height: 17px; }
+  .symbol-dropdown .symbol-option-description { font-size: 11px; line-height: 15px; margin-top: 0; }
+  .symbol-dropdown .symbol-option-db-dot svg { width: 11px; height: 11px; }
+  .symbol-dropdown .symbol-search-empty { padding: 14px 16px; font-size: 12px; }
+
+  /* v97 Update 6: slightly larger icons beside the Setting sidebar titles. */
+  .settings-tab { gap: 12px; }
+  .settings-tab-icon { width: 19px; height: 19px; }
+  /* The traced glyphs (Sessions, Keyboard, About ...) touch the exact edge of
+     their viewBox, so the outermost anti-aliased pixel of the stroke was being
+     clipped by the SVG's own overflow:hidden - visible on the right edge. */
+  .settings-tab-icon svg { overflow: visible; }
+
+  /* font = the Canvas tab's font (Inter, Segoe UI, system-ui) for both pickers */
+  .tf-dropdown.tfx, .tf-dropdown.tfx *,
+  .symbol-dropdown, .symbol-dropdown *,
+  .symbol-dropdown .symbol-search-input,
+  .symbol-dropdown .symbol-option,
+  .symbol-dropdown .symbol-option * {
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif !important;
+  }
+
+
+  /* =========================================================================
+     v98 — Setting panel alignment fix (all tabs).
+     - Equal horizontal margins: the content column now has the SAME inset on
+       its left (divider -> content) and right (content -> modal edge) side.
+       The pane scrollbar sits in a reserved gutter that is subtracted from the
+       right inset (--sbw is measured by settings-panel.js), so the visible
+       margins stay identical whether or not a tab scrolls.
+     - More air between the titles ("Setting" / tab title) and the first row:
+       the sidebar list and the content body now start on the same line.
+     ========================================================================= */
+  .settings-modal { --set-pad: 36px; --sbw: 0px; }
+  .settings-sidebar { padding: 26px 24px 36px 30px; }
+  .settings-sidebar-title { margin-bottom: 42px; }
+  .settings-content { padding: 26px 0 36px var(--set-pad); }
+  .settings-content-header { margin-bottom: 52px; padding-right: var(--set-pad); }
+  .settings-close { padding: 4px; margin-right: -4px; }
+  .settings-panes { scrollbar-gutter: stable; }
+  .settings-pane { box-sizing: border-box; padding-right: calc(var(--set-pad) - var(--sbw)); }
+  .settings-pane > * { max-width: 100%; box-sizing: border-box; }
+  .tbl, .kbd-table-scroll, .appcfg-layout, .about-text-box, .about-version-card { width: 100%; max-width: none; box-sizing: border-box; }
+
+  /* v98: Configuration — the description is no longer a bordered box. A single
+     vertical divider separates the field list (left) from the description text
+     (right); the text starts at the very top, level with the first section. */
+  .appcfg-layout { gap: 0; }
+  .appcfg-fields { padding-right: 30px; }
+  .appcfg-desc-panel {
+    flex: 0 0 280px; background: transparent; border: 0; border-radius: 0;
+    border-left: 1px solid var(--border); padding: 0 0 0 20px; box-shadow: none;
+  }
+  /* title sits flush with the top edge of the first section (divider's top) */
+  .appcfg-desc-panel .appcfg-desc-title { line-height: 1.2; margin: 0 0 8px; }
+  .appcfg-desc-panel { padding-top: 0; }
+
+  /* v99: Configuration redesign — flat list, no section cards/headings/row
+     borders. Rows are label (left) + control (right); a single vertical
+     divider separates the list from the description text. Only theme tokens
+     (--text/--muted/--border/--ctl/--ctl-text/--gold) are used, so Default
+     Dark, Default Light and the other Canvas presets re-theme it as-is. */
+  .appcfg-fields { padding-right: 30px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+  .appcfg-section { border: 0; border-radius: 0; background: transparent; overflow: visible; margin: 0; }
+  .appcfg-section-title { display: none; }
+  .appcfg-row {
+    min-height: 40px; height: 40px; padding: 0; margin: 0; gap: 10px;
+    border: 0; border-radius: 0; background: transparent;
+  }
+  .appcfg-row:last-child { border: 0; }
+  .appcfg-label-wrap { flex: 1 1 auto; }
+  .appcfg-label { font-size: 13px; color: var(--text); }
+  #settings-pane-configuration .appcfg-row > .canvas-grid-checkbox-label { font-size: 13px; color: var(--text); gap: 12px; }
+  .appcfg-input { height: 26px; font-size: 13px; color: var(--ctl-text); }
+  .appcfg-input.appcfg-input-num { width: 64px; max-width: 64px; }
+  .appcfg-input.appcfg-input-invalid { border-color: var(--down); }
+  .appcfg-unit { font-size: 13px; color: var(--muted); flex: 0 0 34px; width: 34px; min-width: 34px; margin-left: 0; text-align: left; white-space: nowrap; }
+  .appcfg-desc-panel { flex: 0 0 280px; font-size: 13px; line-height: 1.55; color: var(--muted); }
+  .appcfg-desc-panel .appcfg-desc-title { font-size: 12px; margin: 0 0 8px; }
+  .appcfg-footer { margin-top: 18px; }
+  .appcfg-reset-btn { height: 28px; padding: 0 14px; font-size: 13px; line-height: 1; border-radius: 6px; }
+
+  /* v98: About — the text is no longer a boxed card with its own background.
+     A single vertical divider runs down its left side and the text sits beside
+     it (starting flush with the top of the divider); the text still scrolls. */
+  .about-text-box {
+    background: transparent; border: 0; border-radius: 0;
+    border-left: 1px solid var(--border); padding: 0 14px 0 22px; box-shadow: none;
+    scrollbar-color: var(--border) transparent;
+  }
+  .about-text-box::-webkit-scrollbar-track { background: transparent; }
+  .about-text-content { font-family: var(--fb, "Inter", "Segoe UI", system-ui, sans-serif); }
+  .about-text-content > *:first-child { margin-top: 0; }
+  /* V99: About typography - clear title/body hierarchy, no bold in body text. */
+  .about-text-content { font-size: 13px; line-height: 1.7; }
+  .about-text-content strong, .about-text-content b { font-weight: 400; }
+  .about-text-content h1, .about-text-content h2, .about-text-content h3 { font-weight: 600; letter-spacing: -0.01em; }
+  .about-text-content h1 { font-size: 22px; margin: 0 0 14px; }
+  .about-text-content h2 {
+    font-size: 15px;
+    margin: 28px 0 12px;
+    padding-bottom: 7px;
+    border-bottom: 1px solid var(--border);
+  }
+  .about-text-content p { margin: 0 0 12px; }
+  .about-text-content ul, .about-text-content ol { margin: 0 0 12px; padding-left: 30px; }
+  .about-text-content li { margin-bottom: 9px; padding-left: 4px; }
+  .about-text-content li::marker { color: var(--muted); font-size: 0.9em; }
+  /* justified body text (headings stay left-aligned) */
+  .about-text-content p, .about-text-content li, .about-text-content blockquote { text-align: justify; text-justify: inter-word; }
+  /* taller text area: pushes the Version / Check for Updates card lower */
+  .about-text-box { max-height: 430px; }
+  /* update status + download progress must fit under the Version card without
+     making the tab scroll: single-line status slot, tighter gaps. */
+  .about-update-status { margin-top: 8px; min-height: 18px; }
+  .about-update-progress:not([hidden]) { margin-top: 6px; }
+  /* minimal About scrollbar: 4px, no arrow buttons, faint thumb that only
+     firms up on hover. (scrollbar-width/-color are reset to auto because when
+     they are set Chromium ignores ::-webkit-scrollbar and draws arrows.) */
+  .about-text-box { scrollbar-width: auto; scrollbar-color: auto; }
+  .about-text-box::-webkit-scrollbar { width: 4px; }
+  .about-text-box::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+  .about-text-box::-webkit-scrollbar-track { background: transparent; }
+  .about-text-box::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .about-text-box::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--muted) 65%, transparent); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tf-dropdown.tfx > .tf-dropdown-list,
+    .tf-dropdown.tfx.open > .tf-dropdown-list > button,
+    .symbol-dropdown.open > .tf-dropdown-list,
+    .symbol-dropdown .symbol-options .symbol-option.active::before { animation: none; transition: none; }
+  }
 </style>
 </head>
 <body>
@@ -3946,53 +4809,31 @@
         <!-- v38 layout refresh: the primary chart's own timeframe picker now
              lives next to the symbol name instead of the far right, so the
              header reads "what am I looking at" (left) vs. "tools" (right). -->
-        <div id="tf-dropdown" class="tf-dropdown">
-          <button id="tf-dropdown-btn" class="tf-dropdown-btn" type="button">
+        <div id="tf-dropdown" class="tf-dropdown tfx">
+          <button id="tf-dropdown-btn" class="tf-dropdown-btn" type="button" aria-expanded="false">
+            <span class="tf-ic" aria-hidden="true"></span>
             <span id="tf-dropdown-label">—</span>
-            <span class="caret">▼</span>
           </button>
           <div id="tf-dropdown-list" class="tf-dropdown-list"></div>
         </div>
       </div>
       <div class="header-right">
-        <div id="draw-toolbar" class="pill-group"></div>
+        <div id="draw-toolbar" class="pill-group tb-group"></div>
+        <span class="tb-sep" aria-hidden="true"></span>
         <!-- v37: chart-layout switcher (1 / 2 / 3 side-by-side panels).
-             Populated by multi-panel.js; see that file for the sync design
-             notes. -->
-        <div id="layout-switcher" class="pill-group layout-switcher" title="Chart layout"></div>
-        <!-- v40: Bar Replay toggle — sits between the layout switcher and
-             the Object Tree toggle, per the Bar Replay spec image. Clicking
-             it enters/exits Replay mode (see js/replay-bar.js); while
-             active it gets the same gold "active" look as Object Tree. -->
-        <div class="pill-group objects-toggle-wrap">
+             Populated by multi-panel.js. -->
+        <div id="layout-switcher" class="pill-group tb-group layout-switcher" role="group" aria-label="Chart layout"></div>
+        <span class="tb-sep" aria-hidden="true"></span>
+        <!-- Panels: Bar Replay (v40), Trade (V83), Object Tree (v33/v38). -->
+        <div class="pill-group tb-group objects-toggle-wrap">
           <button id="replay-bar-toggle" type="button" title="Bar Replay"></button>
-        </div>
-        <!-- v38 layout refresh: Object Tree toggle moved out of the chart
-             surface's top-right corner and into the header's tool cluster,
-             as its own single-icon pill matching the layout switcher's box
-             style, right after it. -->
-        <!-- V83: Trade panel toggle, left of Object Tree. -->
-        <div class="pill-group objects-toggle-wrap">
           <button id="trade-panel-toggle" type="button" title="Trade"></button>
-        </div>
-        <div class="pill-group objects-toggle-wrap">
           <button id="objects-panel-toggle" type="button" title="Object Tree"></button>
         </div>
-        <!-- v50: Setting trigger — sits right after the Object Tree toggle,
-             same single-icon pill styling/sizing, so it reads as the next
-             tool in the same cluster. Replaces the old v38.1 direct
-             Market-Data-Overview icon/modal: this now opens the tabbed
-             Setting panel (see settings-panel.js), of which Market Data
-             Overview is just one tab. -->
-        <div class="pill-group objects-toggle-wrap">
+        <span class="tb-sep" aria-hidden="true"></span>
+        <!-- Setting (v50) and Log (v59). -->
+        <div class="pill-group tb-group objects-toggle-wrap">
           <button id="settings-toggle" type="button" title="Setting"></button>
-        </div>
-        <!-- v59: Log toggle — sits right after Setting, same single-icon
-             pill styling/sizing, so it reads as the next tool in the same
-             cluster. Opens/closes the Log panel (see web/js/log-panel.js),
-             which now shows the run_chart.cmd console's output in-app
-             since that console window is hidden in the background. -->
-        <div class="pill-group objects-toggle-wrap">
           <button id="log-toggle" type="button" title="Log"></button>
         </div>
       </div>
@@ -4259,6 +5100,10 @@
             <span class="settings-tab-icon" id="settings-tab-icon-canvas"></span>
             <button type="button" class="settings-tab-label" data-tab="canvas">Canvas</button>
           </div>
+          <div class="settings-tab" data-tab="sessions">
+            <span class="settings-tab-icon" id="settings-tab-icon-sessions"></span>
+            <button type="button" class="settings-tab-label" data-tab="sessions">Sessions &amp; Timezone</button>
+          </div>
           <div class="settings-tab" data-tab="keyboard-shortcuts">
             <span class="settings-tab-icon" id="settings-tab-icon-keyboard-shortcuts"></span>
             <button type="button" class="settings-tab-label" data-tab="keyboard-shortcuts">Keyboard Shortcuts</button>
@@ -4341,132 +5186,37 @@
           <!-- v50: Canvas — chart theme (background/crosshair/text/candle
                colors) — see canvas-settings.js. -->
           <div class="settings-pane" id="settings-pane-canvas">
-            <div class="canvas-settings-columns">
-              <div class="canvas-settings-col">
-                <div class="canvas-settings-col-title">Chart</div>
-                <div class="canvas-row">
-                  <span class="canvas-row-label">Background:</span>
-                  <button type="button" id="canvas-bg-swatch"></button>
-                </div>
-                <div class="canvas-row">
-                  <span class="canvas-row-label">Crosshair:</span>
-                  <button type="button" id="canvas-crosshair-swatch"></button>
-                  <select id="canvas-crosshair-style">
-                    <option value="dotted">Dotted</option>
-                    <option value="solid">Solid</option>
-                    <option value="dashed">Dashed</option>
-                  </select>
-                  <!-- v50.3 Update 2: minimal thickness picker, shared style
-                       with Price Line's own thickness picker below. -->
-                  <select id="canvas-crosshair-width" class="canvas-thickness-select" title="Thickness"></select>
-                </div>
-                <!-- v50.3 Update 2: Price Line — the dashed live-price line
-                     + its price box on the axis. Same color/style/width
-                     controls as Crosshair; the price box's own text color
-                     always equals Background (see canvas-settings.js) so
-                     there's no separate text-color swatch here. -->
-                <div class="canvas-row">
-                  <span class="canvas-row-label">Price Line:</span>
-                  <button type="button" id="canvas-price-line-swatch"></button>
-                  <select id="canvas-price-line-style">
-                    <option value="dashed">Dashed</option>
-                    <option value="dotted">Dotted</option>
-                    <option value="solid">Solid</option>
-                  </select>
-                  <select id="canvas-price-line-width" class="canvas-thickness-select" title="Thickness"></select>
-                </div>
-                <div class="canvas-row">
-                  <span class="canvas-row-label">Text:</span>
-                  <button type="button" id="canvas-text-swatch"></button>
-                  <select id="canvas-text-size"></select>
-                </div>
-                <!-- v50.3 Update 4: Selector — the app-wide "selected"
-                     accent color (var(--gold), default #C9A227). -->
-                <div class="canvas-row">
-                  <span class="canvas-row-label">Selector:</span>
-                  <button type="button" id="canvas-selector-swatch"></button>
-                </div>
-                <!-- v50.1: Update 1 — Horizontal/Vertical grid line toggles,
-                     each checked by default with its own color swatch
-                     (default color = the chart's existing grid-line color)
-                     that only appears while its checkbox is checked. -->
-                <div class="canvas-row canvas-grid-row">
-                  <label class="canvas-grid-checkbox-label">
-                    <input type="checkbox" id="canvas-grid-horz-checkbox" />
-                    <span>Enable Horizontal Grid Line</span>
-                  </label>
-                  <button type="button" id="canvas-grid-horz-swatch" class="canvas-grid-swatch"></button>
-                </div>
-                <div class="canvas-row canvas-grid-row">
-                  <label class="canvas-grid-checkbox-label">
-                    <input type="checkbox" id="canvas-grid-vert-checkbox" />
-                    <span>Enable Vertical Grid Line</span>
-                  </label>
-                  <button type="button" id="canvas-grid-vert-swatch" class="canvas-grid-swatch"></button>
-                </div>
-                <!-- V70.8: "Enable Dark Theme" checkbox removed — dark/light
-                     app theme now travels with the Canvas preset itself (see
-                     the built-in Default Dark / Default Light / Ivory White /
-                     Emerald Black presets in canvas-settings.js). -->
-                <!-- V64.1 Update 2: Enable Ask Price — unchecked by default;
-                     while unchecked no ASK line is drawn on any chart. Color /
-                     line type / width are the same controls (and the same
-                     defaults) as Price Line's, applied to the ASK line only.
-                     The row may be wider than the column; it is allowed to
-                     overflow to the right so the column (and the grid-swatch
-                     alignment above) keeps its width. -->
-                <div class="canvas-row canvas-ask-row">
-                  <label class="canvas-grid-checkbox-label">
-                    <input type="checkbox" id="canvas-ask-checkbox" />
-                    <span>Enable Ask Price</span>
-                  </label>
-                  <button type="button" id="canvas-ask-swatch"></button>
-                  <select id="canvas-ask-style">
-                    <option value="dashed">Dashed</option>
-                    <option value="dotted">Dotted</option>
-                    <option value="solid">Solid</option>
-                  </select>
-                  <select id="canvas-ask-width" class="canvas-thickness-select" title="Thickness"></select>
-                </div>
-                <!-- V64.2: Daily Break — unchecked by default. While checked, a
-                     vertical line is painted at the first candle of every
-                     trading day (broker 00:00:00), on the primary chart and on
-                     every companion panel. Always a solid line: only Color and
-                     Width can be set (defaults: the Crosshair's color, 1px). Same row layout as Enable Ask Price. -->
-                <div class="canvas-row canvas-ask-row">
-                  <label class="canvas-grid-checkbox-label">
-                    <input type="checkbox" id="canvas-daily-break-checkbox" />
-                    <span>Daily Break</span>
-                  </label>
-                  <button type="button" id="canvas-daily-break-swatch"></button>
-                  <select id="canvas-daily-break-width" class="canvas-thickness-select" title="Thickness"></select>
-                </div>
-              </div>
-              <div class="canvas-settings-col">
-                <div class="canvas-settings-col-title">Candles</div>
-                <div class="canvas-row">
-                  <span class="canvas-row-label">Body:</span>
-                  <button type="button" id="canvas-body-up-swatch"></button>
-                  <button type="button" id="canvas-body-down-swatch"></button>
-                </div>
-                <div class="canvas-row">
-                  <span class="canvas-row-label">Borders:</span>
-                  <button type="button" id="canvas-border-up-swatch"></button>
-                  <button type="button" id="canvas-border-down-swatch"></button>
-                </div>
-                <div class="canvas-row">
-                  <span class="canvas-row-label">wick:</span>
-                  <button type="button" id="canvas-wick-up-swatch"></button>
-                  <button type="button" id="canvas-wick-down-swatch"></button>
-                </div>
-              </div>
+            <!-- v94: table layout (Item / Color / Style / Size) matching Setting.html; all element ids unchanged. -->
+            <div class="tbl">
+              <div class="tr chart head"><span></span><span>Item</span><span>Color</span><span>Style</span><span>Size</span></div>
+              <div class="tr chart"><span></span><span class="lb">Background</span><span><button type="button" id="canvas-bg-swatch"></button></span><span></span><span></span></div>
+              <div class="tr chart"><span></span><span class="lb">Crosshair</span><span><button type="button" id="canvas-crosshair-swatch"></button></span>
+                <span><select id="canvas-crosshair-style"><option value="dotted">Dotted</option><option value="solid">Solid</option><option value="dashed">Dashed</option></select></span>
+                <span><select id="canvas-crosshair-width" class="canvas-thickness-select" title="Thickness"></select></span></div>
+              <div class="tr chart"><span></span><span class="lb">Price Line</span><span><button type="button" id="canvas-price-line-swatch"></button></span>
+                <span><select id="canvas-price-line-style"><option value="dashed">Dashed</option><option value="dotted">Dotted</option><option value="solid">Solid</option></select></span>
+                <span><select id="canvas-price-line-width" class="canvas-thickness-select" title="Thickness"></select></span></div>
+              <div class="tr chart"><span></span><span class="lb">Text</span><span><button type="button" id="canvas-text-swatch"></button></span><span></span>
+                <span><select id="canvas-text-size"></select></span></div>
+              <div class="tr chart"><span></span><span class="lb">Selector</span><span><button type="button" id="canvas-selector-swatch"></button></span><span></span><span></span></div>
+              <!-- v94: labels are "Horizontal GridLine"/"Vertical GridLine"; swatch is always visible. -->
+              <div class="tr chart"><span><input type="checkbox" id="canvas-grid-horz-checkbox" /></span><span class="lb">Horizontal GridLine</span><span><button type="button" id="canvas-grid-horz-swatch" class="canvas-grid-swatch"></button></span><span></span><span></span></div>
+              <div class="tr chart"><span><input type="checkbox" id="canvas-grid-vert-checkbox" /></span><span class="lb">Vertical GridLine</span><span><button type="button" id="canvas-grid-vert-swatch" class="canvas-grid-swatch"></button></span><span></span><span></span></div>
+              <div class="tr chart"><span><input type="checkbox" id="canvas-ask-checkbox" /></span><span class="lb">Ask Price</span><span><button type="button" id="canvas-ask-swatch"></button></span>
+                <span><select id="canvas-ask-style"><option value="dashed">Dashed</option><option value="dotted">Dotted</option><option value="solid">Solid</option></select></span>
+                <span><select id="canvas-ask-width" class="canvas-thickness-select" title="Thickness"></select></span></div>
+              <div class="tr chart"><span><input type="checkbox" id="canvas-daily-break-checkbox" /></span><span class="lb">Daily Break</span><span><button type="button" id="canvas-daily-break-swatch"></button></span><span></span>
+                <span><select id="canvas-daily-break-width" class="canvas-thickness-select" title="Thickness"></select></span></div>
+              <div class="tr chart"><span></span><span class="lb">Body</span><span class="cs"><button type="button" id="canvas-body-up-swatch"></button><button type="button" id="canvas-body-down-swatch"></button></span><span></span><span></span></div>
+              <div class="tr chart"><span></span><span class="lb">Borders</span><span class="cs"><button type="button" id="canvas-border-up-swatch"></button><button type="button" id="canvas-border-down-swatch"></button></span><span></span><span></span></div>
+              <div class="tr chart"><span></span><span class="lb">Wick</span><span class="cs"><button type="button" id="canvas-wick-up-swatch"></button><button type="button" id="canvas-wick-down-swatch"></button></span><span></span><span></span></div>
             </div>
 
             <!-- v50.1: Update 3 — Canvas Presets. Save/recall the whole
                  Canvas tab's current settings as a named preset; "Default"
                  is always present and resets to the factory Canvas theme. -->
             <div class="canvas-preset-block">
-              <div class="canvas-settings-col-title">Preset</div>
+              <div class="sec">Preset</div>
               <div class="canvas-preset-line">
                 <div class="canvas-preset-dropdown" id="canvas-preset-dropdown">
                   <button type="button" class="canvas-preset-dropdown-btn" id="canvas-preset-dropdown-btn">
@@ -4485,16 +5235,42 @@
             </div>
           </div>
 
+          <!-- v93: Sessions & Timezone (see sessions.js). -->
+          <div class="settings-pane" id="settings-pane-sessions">
+            <div class="frow">
+              <input type="checkbox" id="sess-local-tz" checked />
+              <label for="sess-local-tz">Enable Local Timezone</label>
+            </div>
+            <div class="tbl">
+              <div class="tr sess head"><span></span><span>Name</span><span>Start</span><span>End</span><span>Color</span><span></span></div>
+              <div class="tbl-scroll sc" id="sess-rows"></div>
+            </div>
+            <div class="btns"><button type="button" class="sess-add-btn" id="sess-add">+ Add Session</button></div>
+
+            <div class="canvas-preset-block">
+              <div class="sec">Preset</div>
+              <div class="canvas-preset-line">
+                <div class="canvas-preset-dropdown" id="sess-preset-dropdown">
+                  <button type="button" class="canvas-preset-dropdown-btn" id="sess-preset-dropdown-btn">
+                    <span id="sess-preset-dropdown-label">-</span>
+                    <span class="caret">▼</span>
+                  </button>
+                  <div class="canvas-preset-dropdown-list" id="sess-preset-dropdown-list"></div>
+                </div>
+                <button type="button" class="canvas-icon-btn" id="sess-preset-save" title="Save current sessions as a new preset">+</button>
+              </div>
+              <div class="canvas-preset-save-box" id="sess-preset-save-box">
+                <input type="text" id="sess-preset-save-input" class="canvas-preset-name-input" placeholder="Preset name" autocomplete="off" />
+                <button type="button" class="canvas-icon-btn" id="sess-preset-save-confirm" title="Save">✓</button>
+                <button type="button" class="canvas-icon-btn canvas-icon-btn-danger" id="sess-preset-save-cancel" title="Cancel">✕</button>
+              </div>
+            </div>
+          </div>
+
           <!-- v51: Keyboard Shortcuts — table of every app shortcut with an
                inline assign/change control (see keyboard-shortcuts.js). -->
           <div class="settings-pane" id="settings-pane-keyboard-shortcuts">
-            <div class="kbd-shortcuts-intro">
-              Shortcuts are Global — they use the physical key position and
-              work the same regardless of Persian or English keyboard
-              layout.
-              Trade shortcuts can also be bound to a mouse button (Middle,
-              Back or Forward, with Ctrl/Shift/Alt).
-            </div>
+            <div class="kbd-table-scroll">
             <table class="kbd-shortcuts-table">
               <thead>
                 <tr>
@@ -4505,15 +5281,13 @@
               </thead>
               <tbody id="kbd-shortcuts-tbody"></tbody>
             </table>
+            </div>
             <button type="button" class="kbd-reset-all-btn" id="kbd-reset-all-btn">Reset to Default</button>
           </div>
           <!-- v52: Configuration — every config.py variable, editable here
                with a hover-info "i" icon next to each title and a
                "Restore to Default" button. See app-config.js. -->
           <div class="settings-pane" id="settings-pane-configuration">
-            <div class="appcfg-intro">
-              Only user-facing settings belong here. Advanced runtime parameters remain internal in Config.py
-            </div>
             <div class="appcfg-layout">
               <div class="appcfg-fields" id="appcfg-body"></div>
               <div class="appcfg-desc-panel" id="appcfg-desc-panel">
@@ -4569,34 +5343,33 @@
   </div>
 
   <div id="draw-context-menu" class="draw-context-menu">
+    <!-- v99: redesigned to match Panel.html. Header = editable name + lock /
+         hide / delete / close. While an object is locked the name field is
+         swapped for the static #dcm-title-text ("<Type> — Locked"). -->
     <div class="dcm-title">
+      <div class="dcm-name-wrap" id="dcm-name-row">
+        <input type="text" id="dcm-name" class="dcm-in dcm-name-input" autocomplete="off" spellcheck="false" aria-label="Name" />
+      </div>
       <span id="dcm-title-text">Object</span>
       <span class="dcm-header-actions">
         <button type="button" class="dcm-header-btn" id="dcm-header-lock" title="Lock"></button>
         <button type="button" class="dcm-header-btn" id="dcm-header-hide" title="Hide"></button>
         <button type="button" class="dcm-header-btn dcm-header-btn-danger" id="dcm-header-delete" title="Delete"></button>
-        <span class="dcm-close" id="dcm-close">✕</span>
+        <button type="button" class="dcm-header-btn" id="dcm-close" title="Close"><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
       </span>
     </div>
-    <div class="dcm-row" id="dcm-name-row">
-      <label>Name</label>
-      <input type="text" id="dcm-name" class="dcm-name-input" autocomplete="off" />
-    </div>
-    <!-- v70.7 Update 1/2: Timeframes panel — per Panel.png, sits right under
-         Name for every object type. Three rows (Seconds/Minutes/Hours),
-         each with a group checkbox and three timeframe pills; collapsible
-         via the header caret, open by default. Also doubles as the editor
-         for "Timeframe Based Hidden or Show" (Update 2) — a pill's on/off
-         state is literally the object's per-timeframe visibility. -->
+    <!-- v70.7 Update 1/2: Timeframes panel — sits right under the header for
+         every object type. Three rows (Seconds/Minutes/Hours), each with a
+         group checkbox and three timeframe pills; collapsible via the header
+         caret, open by default. Also the editor for "Timeframe Based Hidden
+         or Show" — a pill's on/off state is the object's per-timeframe
+         visibility. The Auto pill only flips Auto on/off (JS stops the click
+         from reaching the header's collapse toggle). -->
     <div class="dcm-tf-section" id="dcm-tf-section">
       <div class="dcm-tf-header" id="dcm-tf-header">
         <span class="dcm-tf-header-left">
           <span class="dcm-tf-clock-icon" id="dcm-tf-clock-icon"></span>
           <span class="dcm-tf-title">Timeframes</span>
-          <!-- v71 Update 1: Auto toggle — same pill look/feel as the tf
-               pills below (dcm-tf-pill class reused), but clicking it must
-               only flip Auto on/off, never open/close this section, so it
-               stops propagation up to the header's own click handler. -->
           <button type="button" class="dcm-tf-pill dcm-tf-auto-btn" id="dcm-tf-auto-btn" title="Auto">Auto</button>
         </span>
         <span class="dcm-tf-caret" id="dcm-tf-caret">▼</span>
@@ -4637,134 +5410,130 @@
         </div>
       </div>
     </div>
-    <!-- v37 Fix 2: style presets — a minimal themed dropdown (each row has
-         its own trash icon) instead of a native <select>, and an inline
-         "save as" box instead of a native window.prompt(). -->
-    <div class="dcm-row dcm-row-stacked" id="dcm-preset-row">
-      <label>Preset</label>
-      <div class="dcm-preset-line">
+    <!-- v37 Fix 2: style presets — a themed dropdown (each row has its own
+         modify/trash icons) and an inline "save as" row instead of a native
+         window.prompt(). -->
+    <div id="dcm-preset-row">
+      <div class="dcm-g dcm-gp">
+        <span class="dcm-lab">Preset</span>
         <div class="dcm-preset-dropdown" id="dcm-preset-dropdown">
           <button type="button" class="dcm-preset-dropdown-btn" id="dcm-preset-dropdown-btn">
             <span id="dcm-preset-dropdown-label">-</span>
-            <span class="caret">▼</span>
+            <svg class="dcm-cv" viewBox="0 0 10 10"><path d="M1.5 3.5l3.5 3.5 3.5-3.5"/></svg>
           </button>
           <div class="dcm-preset-dropdown-list" id="dcm-preset-dropdown-list"></div>
         </div>
-        <button type="button" class="dcm-icon-btn" id="dcm-preset-save" title="Save current style as a new preset">+</button>
+        <button type="button" class="dcm-btn" id="dcm-preset-save" title="Save current style as a new preset"><svg viewBox="0 0 16 16"><path d="M8 3.2v9.6M3.2 8h9.6"/></svg></button>
       </div>
-      <div class="dcm-preset-save-box" id="dcm-preset-save-box">
-        <input type="text" id="dcm-preset-save-input" class="dcm-name-input" placeholder="Preset name" autocomplete="off" />
-        <button type="button" class="dcm-icon-btn" id="dcm-preset-save-confirm" title="Save">✓</button>
-        <button type="button" class="dcm-icon-btn dcm-icon-btn-danger" id="dcm-preset-save-cancel" title="Cancel">✕</button>
-      </div>
-    </div>
-    <!-- v38 Fix 1: Border and Fill now share a single row — Fill's color
-         swatch opens the same themed color+opacity popover as Border's
-         (see color-picker.js), so the big separate opacity slider that
-         used to sit under Fill is gone; its color swatch just joins
-         Border's row instead. Fill's swatch is hidden by JS for any
-         non-rect object type. -->
-    <div class="dcm-section">
-      <div class="dcm-section-title">Border &amp; Fill</div>
-      <div class="dcm-row dcm-row-compact">
-        <button type="button" id="dcm-border-color" title="Line color"></button>
-        <select id="dcm-border-width" title="Line width">
-          <option value="1">1 px</option>
-          <option value="2">2 px</option>
-          <option value="3">3 px</option>
-          <option value="4">4 px</option>
-          <option value="5">5 px</option>
-        </select>
-        <select id="dcm-border-style" title="Line type">
-          <option value="solid">Solid</option>
-          <option value="dashed">Dashed</option>
-          <option value="dotted">Dotted</option>
-        </select>
-        <button type="button" id="dcm-fill-color" title="Fill color"></button>
+      <div class="dcm-g dcm-gn dcm-preset-save-box" id="dcm-preset-save-box">
+        <span></span>
+        <input type="text" id="dcm-preset-save-input" class="dcm-in dcm-name-input" placeholder="Preset name" autocomplete="off" />
+        <button type="button" class="dcm-btn" id="dcm-preset-save-confirm" title="Save"><svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></svg></button>
+        <button type="button" class="dcm-btn dcm-btn-danger" id="dcm-preset-save-cancel" title="Cancel"><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
       </div>
     </div>
-    <!-- v47: Fib Retracement-only Level & Description table (Update 3 /
-         Set.png). The line color/width/type controls it needs are the
-         same dcm-border-* fields the Border & Fill section above already
-         has — only the level table and the Enable Description toggle are
-         new here. The body is a fixed-height scroll box (see CSS) so an
-         arbitrarily long level list never widens or grows the panel. -->
+    <!-- Style section. Row 1: Fill (rectangles only) + line color, width and
+         type. The Fill swatch is hidden by JS for every other object type
+         (and the label switches to "Line"); the other controls keep their
+         grid columns either way. Row 2 (rectangles only): Middle Line — its
+         controls stay in place but dim and lock while the box is unchecked. -->
+    <div class="dcm-section" id="dcm-style-section">
+      <div class="dcm-g dcm-g5">
+        <span class="dcm-lab" id="dcm-border-label">Fill / Border</span>
+        <button type="button" id="dcm-fill-color" class="dcm-col2" title="Fill color"></button>
+        <button type="button" id="dcm-border-color" class="dcm-col3" title="Line color"></button>
+        <span class="dcm-sel dcm-col4">
+          <select id="dcm-border-width" title="Line width">
+            <option value="1">1 px</option>
+            <option value="2">2 px</option>
+            <option value="3">3 px</option>
+            <option value="4">4 px</option>
+            <option value="5">5 px</option>
+          </select>
+          <svg class="dcm-cv" viewBox="0 0 10 10"><path d="M1.5 3.5l3.5 3.5 3.5-3.5"/></svg>
+        </span>
+        <span class="dcm-sel dcm-col5">
+          <select id="dcm-border-style" title="Line type">
+            <option value="solid">Solid</option>
+            <option value="dashed">Dashed</option>
+            <option value="dotted">Dotted</option>
+          </select>
+          <svg class="dcm-cv" viewBox="0 0 10 10"><path d="M1.5 3.5l3.5 3.5 3.5-3.5"/></svg>
+        </span>
+      </div>
+      <div class="dcm-g dcm-g5 dcm-ml" id="dcm-middle-line-row">
+        <label class="dcm-cbl dcm-ml-label">
+          <input type="checkbox" id="dcm-middle-line-enabled" />
+          Middle Line
+        </label>
+        <button type="button" id="dcm-middle-line-color" class="dcm-col3" title="Middle line color"></button>
+        <span class="dcm-sel dcm-col4">
+          <select id="dcm-middle-line-width" title="Middle line width">
+            <option value="1">1 px</option>
+            <option value="2">2 px</option>
+            <option value="3">3 px</option>
+            <option value="4">4 px</option>
+            <option value="5">5 px</option>
+          </select>
+          <svg class="dcm-cv" viewBox="0 0 10 10"><path d="M1.5 3.5l3.5 3.5 3.5-3.5"/></svg>
+        </span>
+        <span class="dcm-sel dcm-col5">
+          <select id="dcm-middle-line-style" title="Middle line type">
+            <option value="solid">Solid</option>
+            <option value="dashed">Dashed</option>
+            <option value="dotted">Dotted</option>
+          </select>
+          <svg class="dcm-cv" viewBox="0 0 10 10"><path d="M1.5 3.5l3.5 3.5 3.5-3.5"/></svg>
+        </span>
+      </div>
+    </div>
+    <!-- v47/v53: Fib Retracement + Fib Expansion Level & Description table.
+         Line color/width/type come from the style section above; the body is
+         a fixed-height scroll box so a long level list never grows the panel. -->
     <div class="dcm-section" id="dcm-fib-levels-section">
       <div class="dcm-fib-table">
         <div class="dcm-fib-table-head">
           <span class="dcm-fib-col-level">Level</span>
           <span class="dcm-fib-col-desc">Description</span>
-          <button type="button" class="dcm-icon-btn" id="dcm-fib-add-level" title="Add level">+</button>
+          <button type="button" class="dcm-btn dcm-btn-sm" id="dcm-fib-add-level" title="Add level"><svg viewBox="0 0 16 16"><path d="M8 3.2v9.6M3.2 8h9.6"/></svg></button>
         </div>
         <div class="dcm-fib-table-body" id="dcm-fib-table-body"></div>
       </div>
-      <label class="dcm-checkbox-label" id="dcm-fib-desc-toggle-row">
+      <label class="dcm-cbl" id="dcm-fib-desc-toggle-row">
         <input type="checkbox" id="dcm-fib-enable-description" />
         Enable Description
       </label>
     </div>
-    <!-- v36 Fix 4 / v37 Fix 3: rectangle-only Middle Line section — its
-         color/width/type now share one compact row, shown only once the
-         checkbox is enabled. -->
-    <div class="dcm-section" id="dcm-middle-line-row">
-      <div class="dcm-row dcm-row-compact">
-        <label class="dcm-checkbox-label">
-          <input type="checkbox" id="dcm-middle-line-enabled" />
-          Middle Line
-        </label>
+    <!-- Time / price fields. JS shows only the rows that apply to the
+         selected object type and hides this whole section when none do. -->
+    <div class="dcm-section" id="dcm-time-section">
+      <div class="dcm-g dcm-g3" id="dcm-vline-time-row">
+        <span class="dcm-lab">Time</span>
+        <input type="text" id="dcm-vline-time-date" class="dcm-in dcm-num" placeholder="YYYY-MM-DD" inputmode="numeric" autocomplete="off" />
+        <input type="text" id="dcm-vline-time-time" class="dcm-in dcm-num" placeholder="HH:MM:SS" inputmode="numeric" autocomplete="off" />
       </div>
-      <div class="dcm-row dcm-row-compact" id="dcm-middle-line-fields-row">
-        <button type="button" id="dcm-middle-line-color" title="Middle line color"></button>
-        <select id="dcm-middle-line-width" title="Middle line width">
-          <option value="1">1 px</option>
-          <option value="2">2 px</option>
-          <option value="3">3 px</option>
-          <option value="4">4 px</option>
-          <option value="5">5 px</option>
-        </select>
-        <select id="dcm-middle-line-style" title="Middle line type">
-          <option value="solid">Solid</option>
-          <option value="dashed">Dashed</option>
-          <option value="dotted">Dotted</option>
-        </select>
+      <div class="dcm-g dcm-g3" id="dcm-hline-price-row">
+        <span class="dcm-lab">Price</span>
+        <input type="text" id="dcm-hline-price" class="dcm-in dcm-num dcm-span2" placeholder="Price" inputmode="decimal" autocomplete="off" />
+      </div>
+      <div class="dcm-g dcm-g3" id="dcm-time-from-row">
+        <span class="dcm-lab">Start Time</span>
+        <input type="text" id="dcm-time-from-date" class="dcm-in dcm-num" placeholder="YYYY-MM-DD" inputmode="numeric" autocomplete="off" />
+        <input type="text" id="dcm-time-from-time" class="dcm-in dcm-num" placeholder="HH:MM:SS" inputmode="numeric" autocomplete="off" />
+      </div>
+      <div class="dcm-g dcm-g3" id="dcm-time-to-row">
+        <span class="dcm-lab">End Time</span>
+        <input type="text" id="dcm-time-to-date" class="dcm-in dcm-num" placeholder="YYYY-MM-DD" inputmode="numeric" autocomplete="off" />
+        <input type="text" id="dcm-time-to-time" class="dcm-in dcm-num" placeholder="HH:MM:SS" inputmode="numeric" autocomplete="off" />
       </div>
     </div>
-    <div class="dcm-row dcm-row-stacked" id="dcm-vline-time-row">
-      <label>Time</label>
-      <div class="dcm-dt">
-        <input type="text" id="dcm-vline-time-date" class="dcm-dt-date" placeholder="YYYY-MM-DD" inputmode="numeric" />
-        <input type="text" id="dcm-vline-time-time" class="dcm-dt-time" placeholder="HH:MM:SS" inputmode="numeric" />
-      </div>
-    </div>
-    <!-- v70.3 Update 2: hline-only price editor, same shape as the vline
-         time editor above (one field instead of two, since a horizontal
-         line only has a price, no time component). -->
-    <div class="dcm-row dcm-row-stacked" id="dcm-hline-price-row">
-      <label>Price</label>
-      <div class="dcm-dt">
-        <input type="text" id="dcm-hline-price" class="dcm-dt-time" placeholder="Price" inputmode="decimal" />
-      </div>
-    </div>
-    <div class="dcm-row dcm-row-stacked" id="dcm-time-from-row">
-      <label>Start Time</label>
-      <div class="dcm-dt">
-        <input type="text" id="dcm-time-from-date" class="dcm-dt-date" placeholder="YYYY-MM-DD" inputmode="numeric" />
-        <input type="text" id="dcm-time-from-time" class="dcm-dt-time" placeholder="HH:MM:SS" inputmode="numeric" />
-      </div>
-    </div>
-    <div class="dcm-row dcm-row-stacked" id="dcm-time-to-row">
-      <label>End Time</label>
-      <div class="dcm-dt">
-        <input type="text" id="dcm-time-to-date" class="dcm-dt-date" placeholder="YYYY-MM-DD" inputmode="numeric" />
-        <input type="text" id="dcm-time-to-time" class="dcm-dt-time" placeholder="HH:MM:SS" inputmode="numeric" />
-      </div>
-    </div>
-    <button class="dcm-unlock" id="dcm-unlock">Unlock object</button>
+    <button type="button" class="dcm-unlock" id="dcm-unlock">Unlock object</button>
   </div>
 
 
 <script src="js/window-controls.js"></script>
 <script src="js/state.js"></script>
+<script src="js/tz.js"></script>
 <script src="js/app-version.js"></script>
 <script src="js/icons.js"></script>
 <script src="js/coords.js"></script>
@@ -4788,10 +5557,52 @@
 <script src="js/replay-bar.js"></script>
 <script src="js/market-data-overview.js"></script>
 <script src="js/canvas-settings.js"></script>
+<script src="js/sessions.js"></script>
 <script src="js/app-config.js"></script>
 <script src="js/about-panel.js"></script>
 <script src="js/settings-panel.js"></script>
 <script src="js/log-panel.js"></script>
 <script src="js/main.js"></script>
+<script>
+/* Header tooltip: swaps the native title bubble for a themed one. Delegated,
+   so it also covers buttons whose title is set later by other modules. */
+(function () {
+  var hdr = document.querySelector("header");
+  if (!hdr) return;
+  var tip = document.createElement("div");
+  tip.id = "tb-tip";
+  document.body.appendChild(tip);
+  var cur = null, timer = null;
+  function hide() { clearTimeout(timer); tip.classList.remove("show"); cur = null; }
+  hdr.addEventListener("mouseover", function (e) {
+    var el = e.target.closest("button[title], button[data-tip]");
+    if (!el || el === cur || el.disabled) return;
+    if (el.hasAttribute("title")) {
+      el.dataset.tip = el.getAttribute("title");
+      el.setAttribute("aria-label", el.dataset.tip);
+      el.removeAttribute("title");
+    }
+    var text = el.dataset.tip;
+    if (!text) return;
+    cur = el;
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      tip.textContent = text;
+      var r = el.getBoundingClientRect();
+      tip.style.left = "0px"; tip.style.top = "0px";
+      var w = tip.offsetWidth;
+      var x = Math.min(Math.max(6, r.left + r.width / 2 - w / 2), window.innerWidth - w - 6);
+      tip.style.left = x + "px";
+      tip.style.top = (r.bottom + 6) + "px";
+      tip.classList.add("show");
+    }, 350);
+  });
+  hdr.addEventListener("mouseout", function (e) {
+    var el = e.target.closest("button");
+    if (el && el === cur && !el.contains(e.relatedTarget)) hide();
+  });
+  hdr.addEventListener("mousedown", hide);
+})();
+</script>
 </body>
 </html>

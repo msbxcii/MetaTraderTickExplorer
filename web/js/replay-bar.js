@@ -164,6 +164,7 @@
   }
 
   function dayBoundsOk(ts) {
+    if (App.Tz) ts = App.Tz.toBroker(ts);  // v92: picker is in system time
     if (!bounds || bounds.first_time === null || bounds.last_time === null) return true;
     return ts >= Number(bounds.first_time) && ts <= Number(bounds.last_time);
   }
@@ -259,6 +260,7 @@
 
     var current = App.candlesByTf[App.currentTf] || [];
     var seedTs = current.length ? current[current.length - 1].time : Math.floor(Date.now() / 1000);
+    if (App.Tz) seedTs = App.Tz.toUser(seedTs);  // v92
     dom.rbdDateInput.value = fmtDate(seedTs);
     dom.rbdTimeInput.value = fmtTime(seedTs);
     calSelectedTs = seedTs;
@@ -302,7 +304,7 @@
     var ts = validateFields();
     if (ts === null) return;
     closeSelectDate();
-    beginReplayAt(ts);
+    beginReplayAt(App.Tz ? App.Tz.toBroker(ts) : ts);  // v92
   });
 
   // =====================================================================

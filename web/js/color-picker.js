@@ -109,7 +109,6 @@
       '<div class="dcm-cp-hue" id="dcmCpHue"><div class="dcm-cp-thumb" id="dcmCpHueThumb"></div></div>' +
       '<div class="dcm-cp-alpha" id="dcmCpAlpha"><div class="dcm-cp-alpha-fill" id="dcmCpAlphaFill"></div><div class="dcm-cp-thumb" id="dcmCpAlphaThumb"></div></div>' +
       '<div class="dcm-cp-bottom">' +
-        '<button type="button" class="dcm-cp-eyedrop" id="dcmCpEyedrop" title="Pick from screen"></button>' +
         '<span class="dcm-cp-swatch" id="dcmCpSwatch"></span>' +
         '<input type="text" class="dcm-cp-hex" id="dcmCpHex" maxlength="7" spellcheck="false" autocomplete="off" title="Hex color \u2014 paste supported" />' +
       "</div>";
@@ -123,13 +122,11 @@
       alpha: pop.querySelector("#dcmCpAlpha"),
       alphaFill: pop.querySelector("#dcmCpAlphaFill"),
       alphaThumb: pop.querySelector("#dcmCpAlphaThumb"),
-      eyedrop: pop.querySelector("#dcmCpEyedrop"),
       swatch: pop.querySelector("#dcmCpSwatch"),
       hex: pop.querySelector("#dcmCpHex"),
     };
 
-    if (App.Icons && App.Icons.eyedropper) els.eyedrop.innerHTML = App.Icons.eyedropper();
-    if (!window.EyeDropper) els.eyedrop.style.display = "none";
+    // v99: "Pick from screen" (eyedropper) removed.
 
     function ratio(evt, rect, axis) {
       var v = axis === "x" ? (evt.clientX - rect.left) / rect.width : (evt.clientY - rect.top) / rect.height;
@@ -189,18 +186,17 @@
       setTimeout(function () { applyHexInput(true); }, 0);
     });
 
-    els.eyedrop.addEventListener("click", function () {
-      if (!window.EyeDropper) return;
-      new window.EyeDropper().open().then(function (res) {
-        var rgb = hexToRgb(res.sRGBHex);
-        hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
-        syncFromHsv(true);
-        commit(true);
-      }).catch(function () {});
+    // v99: the popover lives on <body>, i.e. OUTSIDE whichever settings panel
+    // (Object panel, group panel, Jump Time, ...) opened it. Those panels close
+    // themselves on a document-level "mousedown" outside them. Drags escaped
+    // that only because preventDefault() on pointerdown suppresses the
+    // compatibility mousedown; a plain click (hex field, popover
+    // padding, a single click on the gradient) still fired it and closed the
+    // panel. Keep every mouse/touch event that starts inside the popover from
+    // reaching document-level outside-click handlers.
+    ["pointerdown", "mousedown", "mouseup", "touchstart", "click", "dblclick", "auxclick"].forEach(function (type) {
+      pop.addEventListener(type, function (evt) { evt.stopPropagation(); });
     });
-
-    pop.addEventListener("pointerdown", function (evt) { evt.stopPropagation(); });
-    pop.addEventListener("click", function (evt) { evt.stopPropagation(); });
     document.addEventListener("pointerdown", function (evt) {
       if (pop.classList.contains("open") && !pop.contains(evt.target)) close();
     });
@@ -289,5 +285,10 @@
     return el;
   }
 
-  App.ColorField = { attach: attach };
+  // v99: lets any outside-click handler ask "was this click inside the picker?"
+  function isPickerTarget(node) {
+    return !!(node && node.closest && node.closest(".dcm-cp-pop"));
+  }
+
+  App.ColorField = { attach: attach, isPickerTarget: isPickerTarget };
 })();

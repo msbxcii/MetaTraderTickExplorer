@@ -404,7 +404,10 @@
     var renderer = {
       draw: function (target) {
         if (App.jumpRenderSuppressed) return;
-        target.useMediaCoordinateSpace(function (scope) { paintRectFills(surface, scope.context); });
+        target.useMediaCoordinateSpace(function (scope) {
+          paintSessions(surface, scope.context, scope.mediaSize.width, scope.mediaSize.height);  // v93
+          paintRectFills(surface, scope.context);
+        });
       },
     };
     var view = { zOrder: function () { return "bottom"; }, renderer: function () { return renderer; } };
@@ -415,6 +418,62 @@
       requestUpdate: function () { if (reqUpdate) reqUpdate(); },
     };
   }
+
+  // v93: trading sessions = low-opacity background bands under the candles
+  // (no top strip / name label). Edges use the same time->logical->pixel
+  // path as rectangle boxes (C.timeToLogical + C.logicalToX), so a boundary
+  // sits exactly on its time at every timeframe. Session times are display
+  // time (system time when Local Timezone is on, broker time otherwise).
+  var SESSION_MAX_TF = 3600;
+  function paintSessions(surface, ctx, w, h) {
+    var list = App.sessions;
+    if (!list || !list.length || App.jumpRenderSuppressed || !surface.getCandles) return;
+    var tf = surfaceTf(surface);
+    if (!tf || tf > SESSION_MAX_TF) return;
+    var arr = surface.getCandles();
+    if (!arr || !arr.length) return;
+    var range = null;
+    try { range = surface.chart.timeScale().getVisibleLogicalRange(); } catch (_) {}
+    if (!range) return;
+    var C = surface.C, n = arr.length;
+    var tMin = C.logicalToTime(range.from - 1), tMax = C.logicalToTime(range.to + 1);
+    if (tMin === null || tMax === null) return;
+    var off = App.Tz ? App.Tz.offset() : 0;
+    var gapMax = Math.max(tf * 2, 3600);
+    var d0 = Math.floor((tMin + off) / 86400) - 1, d1 = Math.floor((tMax + off) / 86400);
+
+    // Time -> logical like boxes do; a time inside a market-closed gap
+    // snaps to the joint between the two candles around it. Clamped to the
+    // data edges (half a bar past the first/last candle).
+    function edge(t) {
+      var l = C.timeToLogical(t);
+      if (l === null) return null;
+      var lo = Math.floor(l);
+      if (lo >= 0 && lo < n - 1 && l > lo && arr[lo + 1].time - arr[lo].time > gapMax) l = lo + 0.5;
+      return Math.max(-0.5, Math.min(n - 0.5, l));
+    }
+
+    ctx.save();
+    for (var k = 0; k < list.length; k++) {
+      var x = list[k], len = (x.s < x.e ? x.e - x.s : x.e + 1440 - x.s) * 60;
+      ctx.fillStyle = hexToRgba(x.color, x.opacity);
+      for (var d = d0; d <= d1; d++) {
+        var t0 = d * 86400 - off + x.s * 60, t1 = t0 + len;
+        if (t1 < tMin || t0 > tMax) continue;
+        var la = edge(t0), lb = edge(t1);
+        if (la === null || lb === null || lb <= la) continue;
+        var xa = C.logicalToX(la), xb = C.logicalToX(lb);
+        if (xa === null || xb === null) continue;
+        var l = Math.max(0, xa), r = Math.min(w, xb);
+        if (r > l) ctx.fillRect(l, 0, r - l, h);
+      }
+    }
+    ctx.restore();
+  }
+  function refreshSessions() {
+    surfaces.forEach(function (sf) { if (sf._fillPrim) sf._fillPrim.requestUpdate(); });
+  }
+  document.addEventListener("App:timeOffsetChanged", function () { refreshSessions(); });
 
   function fillableRect(obj, tf) {
     return obj && obj.type === "rect" && !obj.hidden && obj.style && obj.style.fillOpacity > 0 &&
@@ -1446,7 +1505,7 @@
         if (!obj._preview && style.showDescription && lvl.description) {
           ctx.save();
           ctx.setLineDash([]);
-          ctx.font = "9px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+          ctx.font = "9px " + App.FONT_FAMILY;
           ctx.textBaseline = "middle";
           ctx.textAlign = "left";
           ctx.fillStyle = hexToRgba(style.borderColor, style.borderOpacity == null ? 100 : Math.max(70, style.borderOpacity));
@@ -1493,7 +1552,7 @@
           if (!obj._preview && style.showDescription && flvl.description) {
             ctx.save();
             ctx.setLineDash([]);
-            ctx.font = "9px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+            ctx.font = "9px " + App.FONT_FAMILY;
             ctx.textBaseline = "middle";
             ctx.textAlign = "left";
             ctx.fillStyle = hexToRgba(style.borderColor, style.borderOpacity == null ? 100 : Math.max(70, style.borderOpacity));
@@ -1506,6 +1565,24 @@
     ctx.restore();
   }
 
+  // V99 Update 2/3: every selection handle (trend/fib/fibext endpoints, rect
+  // corners + edge midpoints, hline/vline anchor dot) is now the SAME small
+  // square: white fill, border in the object's own line color.
+  function handleStrokeColor(obj) {
+    var c = obj && obj.style && obj.style.borderColor;
+    return (typeof c === "string" && c) ? c : "#c9a227";
+  }
+  function drawSquareHandle(ctx, x, y, color) {
+    var sz = App.HANDLE_S;
+    ctx.beginPath();
+    ctx.rect(Math.round(x - sz / 2) + 0.5, Math.round(y - sz / 2) + 0.5, sz, sz);
+    ctx.fillStyle = "#ffffff";
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.fill();
+    ctx.stroke();
+  }
+
   // Draws the selection box for the currently-selected object: draggable
   // handles for trend/rect (which support resize), and a soft highlight
   // band along the line for hline/vline (which only support move).
@@ -1514,40 +1591,22 @@
     if (!px) return;
 
     ctx.save();
+    var hc = handleStrokeColor(obj);
     if (obj.type === "trend" || obj.type === "fib" || obj.type === "fibext") {
-      ctx.fillStyle = "#ffffff";
-      ctx.strokeStyle = "#c9a227";
-      ctx.lineWidth = 1.5;
       // v53: draws 2 handles for trend/fib, 3 for a fully-placed fibext.
       getTrendHandles(surface, obj).forEach(function (pt) {
-        ctx.beginPath();
-        ctx.arc(pt.x, pt.y, App.HANDLE_R, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
+        drawSquareHandle(ctx, pt.x, pt.y, hc);
       });
     } else if (obj.type === "rect") {
       var minX = Math.min(px.x1, px.x2), maxX = Math.max(px.x1, px.x2);
       var minY = Math.min(px.y1, px.y2), maxY = Math.max(px.y1, px.y2);
-      // v70.8 Update 4: the dashed outline traced around the whole
-      // rectangle on select is gone - selection is shown the same way as
-      // before, by just the corner/edge-midpoint handles below, with no
-      // extra dashed border drawn around the shape.
-      ctx.fillStyle = "#ffffff";
-      ctx.strokeStyle = "#c9a227";
-      ctx.lineWidth = 1.5;
+      // v70.8 Update 4: no dashed outline on select, only handles.
       [[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY]].forEach(function (pt) {
-        ctx.beginPath();
-        ctx.rect(pt[0] - App.HANDLE_S / 2, pt[1] - App.HANDLE_S / 2, App.HANDLE_S, App.HANDLE_S);
-        ctx.fill();
-        ctx.stroke();
+        drawSquareHandle(ctx, pt[0], pt[1], hc);
       });
-      // v36.9 Fix 2: edge-midpoint handles, drawn the same way as the
-      // corner handles so they read as "also draggable" at a glance.
+      // v36.9 Fix 2: edge-midpoint handles.
       getRectMidHandles(surface, obj).forEach(function (pt) {
-        ctx.beginPath();
-        ctx.rect(pt.x - App.HANDLE_S / 2, pt.y - App.HANDLE_S / 2, App.HANDLE_S, App.HANDLE_S);
-        ctx.fill();
-        ctx.stroke();
+        drawSquareHandle(ctx, pt.x, pt.y, hc);
       });
     }
     // v70.3 Update 3: hline/vline no longer get the soft highlight band —
@@ -1754,18 +1813,10 @@
   // Small, cheap, selection-only additions — nothing here runs unless at
   // least one hline/vline is currently selected on this surface.
 
-  function drawAxisAnchorDot(ctx, x, y) {
-    // Same look as a trend-line endpoint handle (white fill, gold ring),
-    // so a selected hline/vline reads as "part of the same object family"
-    // instead of inventing a new visual language just for these two.
+  function drawAxisAnchorDot(ctx, x, y, color) {
+    // V99: same square handle as every other object.
     ctx.save();
-    ctx.beginPath();
-    ctx.arc(x, y, App.HANDLE_R, 0, Math.PI * 2);
-    ctx.fillStyle = "#ffffff";
-    ctx.strokeStyle = "#c9a227";
-    ctx.lineWidth = 1.5;
-    ctx.fill();
-    ctx.stroke();
+    drawSquareHandle(ctx, x, y, color || "#c9a227");
     ctx.restore();
   }
 
@@ -1776,7 +1827,7 @@
   // parts, no local-timezone shift, so this label always agrees with the
   // rest of the app's own time fields for the same object.
   function formatAxisTime(t) {
-    var d = new Date(Number(t) * 1000);
+    var d = new Date((window.App && App.Tz ? App.Tz.toUser(t) : Number(t)) * 1000);  // v92
     return d.getUTCFullYear() + "-" + axisPad2(d.getUTCMonth() + 1) + "-" + axisPad2(d.getUTCDate()) +
       " " + axisPad2(d.getUTCHours()) + ":" + axisPad2(d.getUTCMinutes()) + ":" + axisPad2(d.getUTCSeconds());
   }
@@ -1802,7 +1853,7 @@
     var text = formatAxisTime(obj.points[0].time);
     var color = (obj.style && obj.style.borderColor) || "#2962ff";
     ctx.save();
-    ctx.font = "11px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.font = "11px " + App.FONT_FAMILY;
     var padX = 6;
     var boxW = Math.ceil(ctx.measureText(text).width) + padX * 2;
     var boxH = Math.min(timeScaleH - 4, 20);
@@ -1825,11 +1876,11 @@
       if (obj.type === "hline") {
         var px = objectPixels(surface, obj);
         if (!px || px.y < 0 || px.y > plot.h) return;
-        drawAxisAnchorDot(ctx, plot.w, px.y);
+        drawAxisAnchorDot(ctx, plot.w, px.y, handleStrokeColor(obj));
       } else if (obj.type === "vline") {
         var pv = objectPixels(surface, obj);
         if (!pv || pv.x < 0 || pv.x > plot.w) return;
-        drawAxisAnchorDot(ctx, pv.x, plot.h);
+        drawAxisAnchorDot(ctx, pv.x, plot.h, handleStrokeColor(obj));
         drawVlineTimeLabel(ctx, obj, pv.x, plot.h, timeScaleH, cssW);
       }
     });
@@ -2486,6 +2537,7 @@
     // right-click editor, resize, etc.) calls this so the next frame
     // actually repaints. See the dirty-render note above `surfaces`.
     requestRender: requestRender,
+    refreshSessions: refreshSessions,  // v93
     // v70.7 Update 2: Timeframe Based Hidden/Show — used by drawing-
     // context-menu.js's new Timeframes editor to read/mutate an object's
     // per-timeframe visibility map and get it re-rendered everywhere.

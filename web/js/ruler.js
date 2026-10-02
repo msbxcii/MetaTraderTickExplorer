@@ -180,7 +180,7 @@
     ctx.restore();
 
     if (!text) return;
-    ctx.font = fs + "px " + (lo.fontFamily || "-apple-system,BlinkMacSystemFont,'Trebuchet MS',Roboto,Ubuntu,sans-serif");
+    ctx.font = fs + "px " + App.FONT_FAMILY;
     ctx.textBaseline = "top";
     var tw = ctx.measureText(text).width, pad = 4, bh = fs + 6;
     var cx = Math.max(0, Math.min(x, plotW - 1)), cy = Math.max(0, Math.min(y, plotH - 1));

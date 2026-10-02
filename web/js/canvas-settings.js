@@ -60,7 +60,7 @@
 //
 // v50.3 Update 4: new "Selector" row under Text — a color swatch for the
 // app-wide var(--gold) accent (active tabs, focus rings, selected-object
-// highlight, etc.), default #C9A227, applied via applySelector() as a CSS
+// highlight, etc.), default #E6E9EF, applied via applySelector() as a CSS
 // custom property so every existing var(--gold) usage picks it up with no
 // other file needing changes.
 //
@@ -140,7 +140,7 @@
     crosshairWidth: 1,
     // v50.3 Update 4: the whole app's "Selector" accent (var(--gold) —
     // active tabs, focus borders, selected-object highlight, etc.).
-    selectorColor: "#c9a227",
+    selectorColor: "#e6e9ef",
     // V64.1 Update 2: live ASK line — off by default; look defaults equal the
     // Price Line's (color / Dashed / 1px).
     askEnabled: false,
@@ -150,7 +150,7 @@
     // V64.2: Daily Break (a vertical line at the first candle of each trading
     // day) - off by default; color / width default to the Crosshair's. Solid only.
     // V70.8: color now matches "Default Dark" (was #6b7686).
-    dailyBreakEnabled: false,
+    dailyBreakEnabled: true,  // v94: on by default
     dailyBreakColor: "#2c3342",
     dailyBreakWidth: 1,
     // Bumped when the factory defaults change (see migrateOldDefaults()).
@@ -174,11 +174,12 @@
         crosshairStyle: "solid", // v89: built-in presets use a Solid crosshair
         priceLineColor: "#8b95a5",
         textColor: "#8b95a5",
-        selectorColor: "#c9a227",
+        selectorColor: "#e6e9ef",
         bodyUp: "#089981", bodyDown: "#f23645",
         borderUp: "#089981", borderDown: "#f23645",
         wickUp: "#089981", wickDown: "#f23645",
         gridHorzEnabled: false, gridVertEnabled: false,
+        dailyBreakEnabled: true, // v94
         askColor: "#8b95a5",
         dailyBreakColor: "#2c3342",
         darkTheme: true,
@@ -193,11 +194,12 @@
         crosshairStyle: "solid", // v89: built-in presets use a Solid crosshair
         priceLineColor: "#8b95a5",
         textColor: "#8b95a5",
-        selectorColor: "#c3c3c3",
+        selectorColor: "#1a1d24",
         bodyUp: "#089981", bodyDown: "#f23645",
         borderUp: "#089981", borderDown: "#f23645",
         wickUp: "#089981", wickDown: "#f23645",
         gridHorzEnabled: false, gridVertEnabled: false,
+        dailyBreakEnabled: true, // v94
         askColor: "#8b95a5",
         dailyBreakColor: "#c7c7c7",
         darkTheme: false,
@@ -212,11 +214,12 @@
         crosshairStyle: "solid", // v89: built-in presets use a Solid crosshair
         priceLineColor: "#000000",
         textColor: "#292929",
-        selectorColor: "#f5deb6",
+        selectorColor: "#1a1d24",
         bodyUp: "#32cd32", bodyDown: "#b22222",
         borderUp: "#000000", borderDown: "#000000",
         wickUp: "#000000", wickDown: "#000000",
         gridHorzEnabled: false, gridVertEnabled: false,
+        dailyBreakEnabled: true, // v94
         askColor: "#000000",
         dailyBreakColor: "#f5deb6",
         darkTheme: false,
@@ -231,11 +234,12 @@
         crosshairStyle: "solid", // v89: built-in presets use a Solid crosshair
         priceLineColor: "#778899",
         textColor: "#778899",
-        selectorColor: "#daa520",
+        selectorColor: "#e6e9ef",
         bodyUp: "#0ee715", bodyDown: "#ffffff",
         borderUp: "#0ee715", borderDown: "#ffffff",
         wickUp: "#0ee715", wickDown: "#ffffff",
         gridHorzEnabled: false, gridVertEnabled: false,
+        dailyBreakEnabled: true, // v94
         askColor: "#778899",
         dailyBreakColor: "#2c3342",
         darkTheme: true,
@@ -702,10 +706,8 @@
   function wireGridCheckbox(checkboxEl, swatchEl, stateKey) {
     if (!checkboxEl) return;
     checkboxEl.checked = !!state[stateKey];
-    if (swatchEl) swatchEl.classList.toggle("hidden", !checkboxEl.checked);
     checkboxEl.addEventListener("change", function () {
       state[stateKey] = checkboxEl.checked;
-      if (swatchEl) swatchEl.classList.toggle("hidden", !checkboxEl.checked);
       applyGrid();
       markPresetDirty();
       persist();
@@ -749,11 +751,9 @@
     if (dom.canvasDailyBreakCheckbox) dom.canvasDailyBreakCheckbox.checked = !!state.dailyBreakEnabled;
     if (dom.canvasGridHorzCheckbox) {
       dom.canvasGridHorzCheckbox.checked = !!state.gridHorzEnabled;
-      if (dom.canvasGridHorzSwatch) dom.canvasGridHorzSwatch.classList.toggle("hidden", !state.gridHorzEnabled);
     }
     if (dom.canvasGridVertCheckbox) {
       dom.canvasGridVertCheckbox.checked = !!state.gridVertEnabled;
-      if (dom.canvasGridVertSwatch) dom.canvasGridVertSwatch.classList.toggle("hidden", !state.gridVertEnabled);
     }
     applyAll();
     refreshPresetOptions();
