@@ -6,7 +6,18 @@
 (function () {
   "use strict";
 
+  // v104: apply the interface scale BEFORE the chart is built (so it is created
+  // at its final size); bounded wait - startup never depends on it.
+  var started = false;
   function boot() {
+    if (!(App.UiScale && App.UiScale.init)) { start(); return; }
+    App.UiScale.init().then(start, start);
+    setTimeout(start, 1500);
+  }
+
+  function start() {
+    if (started) return;
+    started = true;
     // v67.2: fetch the app name/version (single source: src/version.py)
     // as early as possible so the title bar shows the right text/version
     // from the first frame rather than flashing the static HTML fallback.

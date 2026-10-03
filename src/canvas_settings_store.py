@@ -24,7 +24,10 @@ import os
 import tempfile
 import threading
 
+import ui_scale
+
 _FILENAME = "canvas_settings.json"
+_UI_SCALE_FILENAME = "ui_scale.json"  # v104: interface scale prefs (not part of presets)
 
 
 class CanvasSettingsStore:
@@ -87,6 +90,45 @@ class CanvasSettingsStore:
                     self._logger.warning(
                         f"CanvasSettingsStore.save: failed to write {self._path}: {e}"
                     )
+                return False
+            finally:
+                if tmp_path is not None:
+                    try:
+                        os.remove(tmp_path)
+                    except OSError:
+                        pass
+
+    # ---- v104: interface scale prefs (own file, never part of a preset) ----
+    def load_ui_scale(self):
+        """``{"auto": bool, "percent": int}``; defaults if missing/corrupt."""
+        with self._lock:
+            try:
+                with open(os.path.join(self._dir, _UI_SCALE_FILENAME), "r", encoding="utf-8") as f:
+                    return ui_scale.sanitize_prefs(json.load(f))
+            except FileNotFoundError:
+                return ui_scale.sanitize_prefs(None)
+            except Exception as e:
+                if self._logger:
+                    self._logger.warning(f"CanvasSettingsStore.load_ui_scale: {e}")
+                return ui_scale.sanitize_prefs(None)
+
+    def save_ui_scale(self, prefs):
+        """Atomically write the sanitized prefs (same temp+rename pattern)."""
+        clean = ui_scale.sanitize_prefs(prefs)
+        with self._lock:
+            tmp_path = None
+            try:
+                fd, tmp_path = tempfile.mkstemp(
+                    prefix=".ui-scale-", suffix=".tmp", dir=self._dir
+                )
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(clean, f, separators=(",", ":"))
+                os.replace(tmp_path, os.path.join(self._dir, _UI_SCALE_FILENAME))
+                tmp_path = None
+                return True
+            except Exception as e:
+                if self._logger:
+                    self._logger.warning(f"CanvasSettingsStore.save_ui_scale: {e}")
                 return False
             finally:
                 if tmp_path is not None:

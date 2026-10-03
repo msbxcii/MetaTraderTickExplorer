@@ -55,6 +55,13 @@
     if (drag) drag.addEventListener("dblclick", toggleMaximize);
   }
 
+  // v105: while maximized the window is topmost only when active, so Alt+Tab
+  // and other apps can come in front (Python ignores this unless maximized).
+  function initTopmostFollowsFocus() {
+    window.addEventListener("blur", () => callApi("window_set_topmost", false));
+    window.addEventListener("focus", () => callApi("window_set_topmost", true));
+  }
+
   // --- Window drag ----------------------------------------------------
   function initWindowDrag() {
     const drag = document.getElementById("titlebar-drag");
@@ -146,6 +153,7 @@
   function init() {
     initButtons();
     initWindowDrag();
+    initTopmostFollowsFocus();
     initResizeGrips();
   }
 

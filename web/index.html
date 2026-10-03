@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <title>MetaTrader Tick Explorer</title>
+<!-- v104: hidden only until ui-scale.js applies the interface scale (no flash at the wrong size); fail-safe reveal. -->
+<script>document.documentElement.classList.add("ui-scale-pending");setTimeout(function(){document.documentElement.classList.remove("ui-scale-pending");},2500);</script>
 <!-- v27.1: switched back from the unpkg CDN to a locally-vendored copy of
      Lightweight Charts v5.2.1 (was on CDN briefly in the first v27 build),
      so the chart no longer needs internet access to load — matching how
@@ -10,6 +12,7 @@
      locally instead of CDN" for the full rationale and download link. -->
 <script src="vendor/lightweight-charts.standalone.production.js"></script>
 <style>
+  html.ui-scale-pending body { visibility: hidden; }  /* v104 */
   :root { --font-ui: "Inter", "Segoe UI", system-ui, sans-serif; }
   button, input, select, textarea { font-family: inherit; }
   /* v98: Inter is now bundled locally (web/vendor/fonts, SIL OFL) instead of being
@@ -272,18 +275,20 @@
      since a frameless window loses the OS's native resize-by-edge (see
      chart_bridge.py's window_resize() docstring). Thin enough to stay out
      of the way of normal chart interaction. */
+  /* v104: --gz = 1 screen px at any interface scale, so the grab edges keep their size. */
+  :root { --gz: calc(1px / var(--ui-zoom, 1)); }
   .resize-grip {
     position: fixed;
     z-index: 500;
   }
-  .resize-grip-n  { top: 0; left: 6px; right: 6px; height: 4px; cursor: ns-resize; }
-  .resize-grip-s  { bottom: 0; left: 6px; right: 6px; height: 4px; cursor: ns-resize; }
-  .resize-grip-e  { top: 6px; right: 0; bottom: 6px; width: 4px; cursor: ew-resize; }
-  .resize-grip-w  { top: 6px; left: 0; bottom: 6px; width: 4px; cursor: ew-resize; }
-  .resize-grip-ne { top: 0; right: 0; width: 8px; height: 8px; cursor: nesw-resize; }
-  .resize-grip-nw { top: 0; left: 0; width: 8px; height: 8px; cursor: nwse-resize; }
-  .resize-grip-se { bottom: 0; right: 0; width: 8px; height: 8px; cursor: nwse-resize; }
-  .resize-grip-sw { bottom: 0; left: 0; width: 8px; height: 8px; cursor: nesw-resize; }
+  .resize-grip-n  { top: 0; left: calc(6 * var(--gz)); right: calc(6 * var(--gz)); height: calc(4 * var(--gz)); cursor: ns-resize; }
+  .resize-grip-s  { bottom: 0; left: calc(6 * var(--gz)); right: calc(6 * var(--gz)); height: calc(4 * var(--gz)); cursor: ns-resize; }
+  .resize-grip-e  { top: calc(6 * var(--gz)); right: 0; bottom: calc(6 * var(--gz)); width: calc(4 * var(--gz)); cursor: ew-resize; }
+  .resize-grip-w  { top: calc(6 * var(--gz)); left: 0; bottom: calc(6 * var(--gz)); width: calc(4 * var(--gz)); cursor: ew-resize; }
+  .resize-grip-ne { top: 0; right: 0; width: calc(8 * var(--gz)); height: calc(8 * var(--gz)); cursor: nesw-resize; }
+  .resize-grip-nw { top: 0; left: 0; width: calc(8 * var(--gz)); height: calc(8 * var(--gz)); cursor: nwse-resize; }
+  .resize-grip-se { bottom: 0; right: 0; width: calc(8 * var(--gz)); height: calc(8 * var(--gz)); cursor: nwse-resize; }
+  .resize-grip-sw { bottom: 0; left: 0; width: calc(8 * var(--gz)); height: calc(8 * var(--gz)); cursor: nesw-resize; }
 
   header {
     display: flex;
@@ -5194,6 +5199,8 @@
             <!-- v94: table layout (Item / Color / Style / Size) matching Setting.html; all element ids unchanged. -->
             <div class="tbl">
               <div class="tr chart head"><span></span><span>Item</span><span>Color</span><span>Style</span><span>Size</span></div>
+              <!-- v104: Interface Scale (see ui-scale.js); not part of a Canvas preset. -->
+              <div class="tr chart"><span></span><span class="lb">Interface Scale</span><span></span><span><select id="ui-scale-percent"><option value="50">50%</option><option value="75">75%</option><option value="100" selected>100%</option><option value="125">125%</option><option value="150">150%</option></select></span><span></span></div>
               <div class="tr chart"><span></span><span class="lb">Background</span><span><button type="button" id="canvas-bg-swatch"></button></span><span></span><span></span></div>
               <div class="tr chart"><span></span><span class="lb">Crosshair</span><span><button type="button" id="canvas-crosshair-swatch"></button></span>
                 <span><select id="canvas-crosshair-style"><option value="dotted">Dotted</option><option value="solid">Solid</option><option value="dashed">Dashed</option></select></span>
@@ -5562,6 +5569,7 @@
 <script src="js/replay-bar.js"></script>
 <script src="js/market-data-overview.js"></script>
 <script src="js/canvas-settings.js"></script>
+<script src="js/ui-scale.js"></script>
 <script src="js/sessions.js"></script>
 <script src="js/app-config.js"></script>
 <script src="js/about-panel.js"></script>

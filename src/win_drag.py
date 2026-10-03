@@ -125,3 +125,17 @@ class WindowDragger:
         except Exception as e:
             if self._logger:
                 self._logger.debug(f"Get Started drag loop stopped: {e}")
+
+
+def get_cursor_pos():
+    """v104: physical cursor position ``(x, y)`` or None. Unit-independent, so
+    window drag/resize stay exact whatever the page zoom is."""
+    if not _IS_WINDOWS:
+        return None
+    try:
+        pt = _POINT()
+        if _u32.GetCursorPos(ctypes.byref(pt)):
+            return pt.x, pt.y
+    except Exception:
+        pass
+    return None

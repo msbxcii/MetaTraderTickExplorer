@@ -291,7 +291,7 @@
   if (dom.logPanelHandle) {
     dom.logPanelHandle.addEventListener("mousedown", function (e) {
       e.preventDefault();
-      var startY = e.screenY;
+      var startY = e.clientY;  // v104: CSS px, same unit as the panel height at any zoom
       var startHeight = dom.logPanel.getBoundingClientRect().height;
       var minHeight = parseFloat(getComputedStyle(dom.logPanel).minHeight) || 80;
       var maxHeight = parseFloat(getComputedStyle(dom.logPanel).maxHeight) || (window.innerHeight * 0.7);
@@ -302,7 +302,7 @@
         // to the bottom of the window, so dragging up (negative deltaY)
         // must grow it and dragging down must shrink it - the sign is
         // inverted relative to a plain top-left resize grip.
-        var delta = moveEvt.screenY - startY;
+        var delta = moveEvt.clientY - startY;
         var next = startHeight - delta;
         if (next < minHeight) next = minHeight;
         if (next > maxHeight) next = maxHeight;

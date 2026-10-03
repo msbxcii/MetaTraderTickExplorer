@@ -15,6 +15,8 @@ import candle_aggregator
 import candle_cache
 import symbol_manager
 import tick_store
+import ui_scale  # v104
+import win_drag  # v104: cursor position for zoom-independent drag/resize
 from runtime_paths import PROJECT_ROOT as _PROJECT_ROOT, RESOURCE_ROOT as _RESOURCE_ROOT
 from config import (
     OUTPUT_DIR,
@@ -172,6 +174,13 @@ if _IS_WINDOWS:
             hwnd, insert_after, int(x), int(y), int(w), int(h), flags,
         )
 
+    def _win32_set_topmost(hwnd, on):
+        """v105: change only the topmost flag (no move/size/activation)."""
+        _user32.SetWindowPos(
+            hwnd, _HWND_TOPMOST if on else _HWND_NOTOPMOST, 0, 0, 0, 0,
+            0x0001 | 0x0002 | _SWP_NOACTIVATE,  # NOSIZE | NOMOVE | NOACTIVATE
+        )
+
     def _win32_work_area(hwnd):
         """The monitor's work area (screen minus taskbar)."""
         monitor = _user32.MonitorFromWindow(hwnd, _MONITOR_DEFAULTTONEAREST)
@@ -227,6 +236,13 @@ class ChartBridge:
         self._window = None
         self._maximized = False
         self._restore_geometry = None
+        # v104: interface scale (see ui_scale_apply) + min window size that
+        # follows it, and the cursor snapshots for zoom-independent drag.
+        self._ui_scale_lock = threading.Lock()
+        self._ui_zoom_first = True
+        self._min_w, self._min_h = self._MIN_W, self._MIN_H
+        self._drag_cursor0 = None
+        self._resize_cursor0 = None
         # v69/v71: About-tab update download state - see
         # check_for_updates/start_update_download/open_update_folder below.
         self._update_download_thread = None
@@ -242,6 +258,13 @@ class ChartBridge:
         # v50.1: optional, same reasoning — persists the Setting panel's
         # Canvas tab settings/presets (see canvas_settings_store.py).
         self._canvas_settings_store = canvas_settings_store
+        # v106: candle window/chunk sizes follow the Interface Scale (see _n_initial).
+        self._candle_factor = 1.0
+        try:
+            if canvas_settings_store:
+                self._candle_factor = ui_scale.candle_factor(canvas_settings_store.load_ui_scale()["percent"])
+        except Exception:
+            pass
         # v51: Keyboard Shortcuts tab bindings (see keyboard_shortcuts_store.py).
         self._keyboard_shortcuts_store = keyboard_shortcuts_store
         # v52: optional, same reasoning — persists the Setting panel's
@@ -276,9 +299,17 @@ class ChartBridge:
             "symbols": list(self._symbol_list),
             "cached_symbols": list(self.get_cached_symbols()),
             "timeframes_seconds": list(CHART_TIMEFRAMES_SECONDS),
-            "initial_candles": CHART_INITIAL_CANDLES,
-            "lazy_load_chunk": CHART_LAZY_LOAD_CHUNK,
+            "initial_candles": self._n_initial(),
+            "lazy_load_chunk": self._n_chunk(),
         }
+
+    def _n_initial(self):
+        """v106: initial candle count, scaled for the current Interface Scale."""
+        return max(1, int(round(CHART_INITIAL_CANDLES * self._candle_factor)))
+
+    def _n_chunk(self):
+        """v106: lazy-load chunk size, scaled for the current Interface Scale."""
+        return max(1, int(round(CHART_LAZY_LOAD_CHUNK * self._candle_factor)))
 
     def get_cached_symbols(self):
         """v65.2: which symbols in the current dropdown already have a candle
@@ -364,7 +395,7 @@ class ChartBridge:
         are laid over it (see _merge_live_overlay) - the switch-timeframe gap
         fix, still with zero raw-tick reads.
         """
-        effective_limit = CHART_INITIAL_CANDLES if limit is None else max(1, int(limit))
+        effective_limit = self._n_initial() if limit is None else max(1, int(limit))
         if timeframe_seconds is None:
             timeframes = sorted(set(int(t) for t in CHART_TIMEFRAMES_SECONDS))
         else:
@@ -529,7 +560,7 @@ class ChartBridge:
                 try:
                     if after_time is None:
                         candles = candle_cache.build_recent_candles_from_cache(
-                            self._conn, tf, CHART_INITIAL_CANDLES
+                            self._conn, tf, self._n_initial()
                         )
                     else:
                         lower_ms = (int(after_time) + tf) * 1000
@@ -558,7 +589,7 @@ class ChartBridge:
                 min_time = None if after_time is None else int(after_time) + tf
                 result[str(tf)] = self._merge_live_overlay(
                     tf, _candles_to_dicts(candles, None),
-                    limit=CHART_INITIAL_CANDLES if after_time is None else None,
+                    limit=self._n_initial() if after_time is None else None,
                     min_time=min_time,
                 )
         return result
@@ -569,7 +600,7 @@ class ChartBridge:
             timeframe_seconds = int(timeframe_seconds)
         except (TypeError, ValueError):
             return []
-        effective_limit = CHART_LAZY_LOAD_CHUNK if limit is None else max(1, int(limit))
+        effective_limit = self._n_chunk() if limit is None else max(1, int(limit))
         with self._lock:
             try:
                 candles = candle_cache.build_oldest_candles_from_cache(
@@ -606,7 +637,7 @@ class ChartBridge:
             target_time = int(target_time)
         except (TypeError, ValueError):
             return {"before": [], "after": [], "target_time": None}
-        effective_limit = CHART_LAZY_LOAD_CHUNK if limit is None else max(1, int(limit))
+        effective_limit = self._n_chunk() if limit is None else max(1, int(limit))
         with self._lock:
             try:
                 result = candle_cache.build_candle_window_from_cache(
@@ -661,7 +692,7 @@ class ChartBridge:
             )
             return []
 
-        effective_limit = CHART_LAZY_LOAD_CHUNK if limit is None else max(1, int(limit))
+        effective_limit = self._n_chunk() if limit is None else max(1, int(limit))
         with self._lock:
             try:
                 candles = candle_cache.build_candles_page_after_from_cache(
@@ -703,7 +734,7 @@ class ChartBridge:
             self._logger.warning(f"get_history_page: timeframe_seconds must be >= 1, got {timeframe_seconds}")
             return []
 
-        effective_limit = CHART_LAZY_LOAD_CHUNK if limit is None else int(limit)
+        effective_limit = self._n_chunk() if limit is None else int(limit)
 
         with self._lock:
             try:
@@ -840,6 +871,88 @@ class ChartBridge:
         except Exception as e:
             self._logger.warning(f"save_canvas_settings: failed: {e}")
             return False
+
+    # ---- v104: interface scale (native WebView2 zoom) ----------------------
+    def _webview_zoom(self, factor=None):
+        """Read (and, if ``factor`` differs, set) the WebView2 zoom on the UI
+        thread. Also turns off Ctrl+wheel zoom so only this setting changes
+        it. Returns the zoom now in effect, or None if unavailable."""
+        form = getattr(self._window, "native", None)
+        view = getattr(form, "webview", None)
+        if view is None:
+            return None
+        from System import Func, Type  # pythonnet, already loaded by pywebview
+        out = {}
+
+        def _do():
+            try:
+                core = view.CoreWebView2
+                if core is None:
+                    return
+                core.Settings.IsZoomControlEnabled = False
+                cur = float(view.ZoomFactor)
+                if factor is not None and abs(cur - factor) > 0.004:
+                    view.ZoomFactor = float(factor)
+                    cur = float(view.ZoomFactor)
+                out["z"] = cur
+            except Exception as e:
+                out["err"] = str(e)
+
+        form.Invoke(Func[Type](_do))
+        if "err" in out:
+            self._logger.debug(f"_webview_zoom failed: {out['err']}")
+        return out.get("z")
+
+    def ui_scale_apply(self, prefs=None):
+        """Apply the saved interface scale (v104: fixed percent, no auto-fit).
+
+        ``prefs`` (optional ``{"percent"}``) is saved first. Cheap and
+        idempotent: nothing is touched if the zoom is unchanged. Returns the
+        state the Canvas tab shows."""
+        store = self._canvas_settings_store
+        with self._ui_scale_lock:
+            cur = ui_scale.sanitize_prefs(None)
+            try:
+                cur = store.load_ui_scale() if store else cur
+                if isinstance(prefs, dict):
+                    cur = ui_scale.sanitize_prefs(dict(cur, **prefs))
+                    if store:
+                        store.save_ui_scale(cur)
+                self._candle_factor = ui_scale.candle_factor(cur["percent"])
+                info = {"supported": False, "percent": cur["percent"], "zoom": 1.0,
+                        "lazyChunk": self._n_chunk()}
+                hwnd = self._hwnd() if self._window is not None else None
+                if not hwnd:
+                    return info
+                zoom = self._webview_zoom(ui_scale.target_zoom(cur))
+                if zoom is None:
+                    return info
+                info.update(supported=True, zoom=round(zoom, 3))
+                self._apply_zoom_to_window(hwnd, zoom)
+                return info
+            except Exception as e:
+                self._logger.warning(f"ui_scale_apply: failed: {e}")
+                return {"supported": False, "percent": cur["percent"], "zoom": 1.0,
+                        "lazyChunk": self._n_chunk()}
+
+    def _apply_zoom_to_window(self, hwnd, zoom):
+        """Zoomed-in UI needs a proportionally larger window: keep the minimum
+        size in step, and on the first apply of a session grow the start size
+        (zoom < 1 needs nothing - it only gives the page more room)."""
+        self._min_w = int(self._MIN_W * max(1.0, zoom))
+        self._min_h = int(self._MIN_H * max(1.0, zoom))
+        if not self._ui_zoom_first:
+            return
+        self._ui_zoom_first = False
+        if zoom <= 1.05 or self._maximized:
+            return
+        l, t, r, b = _win32_get_rect(hwnd)
+        wl, wt, ww, wh = _win32_work_area(hwnd)
+        w = min(int((r - l) * zoom), ww)
+        h = min(int((b - t) * zoom), wh)
+        x = min(max(l, wl), wl + ww - w)
+        y = min(max(t, wt), wt + wh - h)
+        _win32_set_rect(hwnd, x, y, w, h)
 
     # ---- v51: Keyboard Shortcuts tab bindings persistence -------------------
     def get_keyboard_shortcuts(self):
@@ -1450,6 +1563,29 @@ class ChartBridge:
             self._logger.debug(f"window_toggle_maximize failed: {e}")
         return self._maximized
 
+    def window_set_topmost(self, on):
+        """v105: while pseudo-maximized the window is topmost only when it is
+        the active one, so Alt+Tab / other apps can come in front of it."""
+        if self._window is None or not self._maximized:
+            return
+        try:
+            hwnd = self._hwnd()
+            if hwnd:
+                _win32_set_topmost(hwnd, bool(on))
+        except Exception as e:
+            self._logger.debug(f"window_set_topmost failed: {e}")
+
+    def _leave_maximized(self):
+        """v105: a manual drag/resize ends pseudo-maximize, so drop topmost too."""
+        if self._maximized:
+            self._maximized = False
+            try:
+                hwnd = self._hwnd()
+                if hwnd:
+                    _win32_set_topmost(hwnd, False)
+            except Exception as e:
+                self._logger.debug(f"_leave_maximized failed: {e}")
+
     _MIN_W, _MIN_H = 800, 500
 
     # v55.4: explicit custom-titlebar dragging. The previous version relied
@@ -1466,10 +1602,11 @@ class ChartBridge:
             if hwnd:
                 l, t, r, b = _win32_get_rect(hwnd)
                 self._drag_baseline = (l, t)
+                self._drag_cursor0 = win_drag.get_cursor_pos()  # v104
             else:
                 self._drag_baseline = (self._window.x, self._window.y)
             # A manual drag is a user move, so it leaves pseudo-maximized mode.
-            self._maximized = False
+            self._leave_maximized()
         except Exception as e:
             self._logger.debug(f"window_drag_begin failed: {e}")
             self._drag_baseline = None
@@ -1480,7 +1617,8 @@ class ChartBridge:
             return
         try:
             x0, y0 = self._drag_baseline
-            x, y = x0 + int(dx), y0 + int(dy)
+            dx, dy = self._cursor_delta(self._drag_cursor0, dx, dy)  # v104
+            x, y = x0 + dx, y0 + dy
             hwnd = self._hwnd()
             if hwnd:
                 # Keep the current size; only the top-left position changes.
@@ -1493,6 +1631,16 @@ class ChartBridge:
 
     def window_drag_end(self):
         self._drag_baseline = None
+        self._drag_cursor0 = None
+
+    def _cursor_delta(self, cursor0, dx, dy):
+        """v104: JS mouse deltas change unit with the page zoom, so on Windows
+        the delta is re-read from the real cursor (physical px); the JS values
+        remain the fallback."""
+        cur = win_drag.get_cursor_pos() if cursor0 else None
+        if cur:
+            return cur[0] - cursor0[0], cur[1] - cursor0[1]
+        return int(dx), int(dy)
 
     def window_resize_begin(self):
         """Called on mousedown on one of the .resize-grip edge/corner
@@ -1512,6 +1660,7 @@ class ChartBridge:
             if hwnd:
                 l, t, r, b = _win32_get_rect(hwnd)
                 self._resize_baseline = (r - l, b - t, l, t)
+                self._resize_cursor0 = win_drag.get_cursor_pos()  # v104
             else:
                 self._resize_baseline = (
                     self._window.width, self._window.height,
@@ -1532,7 +1681,7 @@ class ChartBridge:
             return
         try:
             w0, h0, x0, y0 = self._resize_baseline
-            dx, dy = int(dx), int(dy)
+            dx, dy = self._cursor_delta(self._resize_cursor0, dx, dy)  # v104
             w, h, x, y = w0, h0, x0, y0
             if "e" in edge:
                 w = w0 + dx
@@ -1544,15 +1693,16 @@ class ChartBridge:
             if "n" in edge:
                 h = h0 - dy
                 y = y0 + dy
-            w = max(w, self._MIN_W)
-            h = max(h, self._MIN_H)
+            min_w, min_h = self._min_w, self._min_h  # v104: follows the UI zoom
+            w = max(w, min_w)
+            h = max(h, min_h)
             # If a min-size clamp kicked in on an edge that also moves the
             # window, keep the fixed edge fixed rather than letting x/y
             # drift past it.
-            if "w" in edge and w == self._MIN_W:
-                x = x0 + (w0 - self._MIN_W)
-            if "n" in edge and h == self._MIN_H:
-                y = y0 + (h0 - self._MIN_H)
+            if "w" in edge and w == min_w:
+                x = x0 + (w0 - min_w)
+            if "n" in edge and h == min_h:
+                y = y0 + (h0 - min_h)
             hwnd = self._hwnd()
             if hwnd:
                 _win32_set_rect(hwnd, x, y, w, h)
@@ -1560,12 +1710,13 @@ class ChartBridge:
                 self._window.resize(w, h)
                 if "w" in edge or "n" in edge:
                     self._window.move(x, y)
-            self._maximized = False
+            self._leave_maximized()
         except Exception as e:
             self._logger.debug(f"window_resize_move failed: {e}")
 
     def window_resize_end(self):
         self._resize_baseline = None
+        self._resize_cursor0 = None
 
     def _read_log_file(self, path, start):
         """Read appended bytes from one daily log file.
