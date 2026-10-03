@@ -143,7 +143,7 @@ window.App = {
   HIT_TOLERANCE: 6,        // px tolerance for hitting a line/border
   HANDLE_HIT: 8,           // px tolerance for grabbing a handle
   HANDLE_R: 5,             // px radius of a trend-line endpoint handle
-  FONT_FAMILY: "Inter, 'Segoe UI', system-ui, sans-serif",  // V99: single UI/canvas font
+  FONT_FAMILY: "InterTab, Inter, 'Segoe UI', system-ui, sans-serif",  // V99: single UI/canvas font; v103: InterTab = equal-width digits
   HANDLE_S: 6,             // px size of the square selection handle (all object types)
 
   dpr: window.devicePixelRatio || 1,

@@ -176,7 +176,7 @@
   var TOAST_CLOSE = '<svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 2l6 6M8 2L2 8"/></svg>';
 
   function alertSettings() {
-    return (App.AppConfig && App.AppConfig.getAlertSettings) ? App.AppConfig.getAlertSettings() : { seconds: 5, max: 12 };
+    return (App.AppConfig && App.AppConfig.getAlertSettings) ? App.AppConfig.getAlertSettings() : { seconds: 5, max: 2 };
   }
 
   // Real mouse movement (not a layout-triggered synthetic event: position must
@@ -333,7 +333,7 @@
     el.className = "tp-item";
     el.innerHTML =
       '<div class="tp-row1"><span><input type="checkbox" class="tp-cb"><span class="tp-sym"></span><span class="tp-side"></span></span><span><span class="tp-fee-tag" hidden></span><span class="tp-pl"></span></span></div>' +
-      '<div class="tp-row2"><span><span class="tp-entry"></span><span class="tp-be"></span></span></div>' +
+      '<div class="tp-row2"><span><span class="tp-entry"></span><span class="tp-be"></span><span class="tp-rw"></span></span></div>' +
       '<div class="tp-item-actions"><button type="button" class="rf">Risk-free</button><button type="button">Close 25%</button><button type="button">Close 50%</button><button type="button" class="close">Close</button></div>';
     var btns = el.querySelectorAll(".tp-item-actions button");
     btns[0].addEventListener("click", function () { doRiskFree([p.ticket]); });
@@ -348,7 +348,7 @@
       syncSelectAll();
     });
     return { el: el, cb: cb, sym: el.querySelector(".tp-sym"), side: el.querySelector(".tp-side"),
-      pl: el.querySelector(".tp-pl"), fee: el.querySelector(".tp-fee-tag"), be: el.querySelector(".tp-be"), entry: el.querySelector(".tp-entry"), key: "" };
+      pl: el.querySelector(".tp-pl"), fee: el.querySelector(".tp-fee-tag"), be: el.querySelector(".tp-be"), rw: el.querySelector(".tp-rw"), entry: el.querySelector(".tp-entry"), key: "" };
   }
 
   var focusEl = null;
@@ -387,6 +387,10 @@
       var be = Number(p.be) || 0;
       r.be.textContent = "BE " + px(be > 0 ? be : p.price_open, d); // V86: row = lot @ entry | BE
     }
+    // v103: live reward multiple next to BE (0.00 while in loss); only touches DOM on change
+    var rw = App.TradeLines && App.TradeLines.rewardOf ? App.TradeLines.rewardOf(p) : null;
+    var rwt = "Reward #" + (rw === null ? "0.00" : rw.toFixed(2));
+    if (r.rw && r.rw.textContent !== rwt) r.rw.textContent = rwt;
     // V90: after a partial close, P/L = open part + already-banked part (whole trade)
     var rz = Number(p.realized) || 0, tot = (Number(p.profit) || 0) + rz, pl = money(tot);
     if (r.pl.textContent !== pl) {

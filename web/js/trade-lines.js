@@ -273,6 +273,34 @@
     var r0 = Number(p.r0) || 0;
     return r0 > 0 && tp > 0 ? "TP#" + (Math.abs(tp - p.price_open) / r0).toFixed(2) : "TP";
   }
+  // v103: open-trade entry label = "Sell#2.23" / "Buy#0.00": live reward multiple (profit
+  // distance / initial risk), 2 decimals, never negative. Pending orders keep their label.
+  function rewardOf(p) {
+    var r0 = Number(p.r0) || 0, op = Number(p.price_open);
+    if (!(r0 > 0)) return null;
+    var buy = p.type === 0, px = buy ? bid() : ask();
+    if (!isFinite(px) || px <= 0) px = Number(p.price);
+    if (!isFinite(px)) return null;
+    var r = ((buy ? px - op : op - px) / r0);
+    return r > 0 ? r : 0;
+  }
+  function entryTitle(p, et) {
+    if (p.kind === "pending") return et;
+    var r = rewardOf(p);
+    return r === null ? et : (p.type === 0 ? "Buy" : "Sell") + "#" + r.toFixed(2);
+  }
+  // Called on every live price change; only touches a line whose label text changed.
+  function refreshEntryTitles() {
+    if (App.replayActive) return;
+    for (var k in posLines) {
+      var L = posLines[k], p = L.p;
+      if (!L.entry || !L.titles || !p || p.kind === "pending" || (drag && drag.key === k)) continue;
+      var t = entryTitle(p, L.titles.entry);
+      if (t === L.titles.entry) continue;
+      L.titles.entry = t;
+      if (focusT == null || focusT === k) L.entry.applyOptions({ title: t });
+    }
+  }
   function renderPositions() {
     var s = series();
     if (!s || App.replayActive) { if (linesSeries) clearPositionLines(); return; }
@@ -289,7 +317,7 @@
       var key = [p.type, p.volume, p.price_open, p.sl, p.tp, p.r0].join("|");
       if (key === L.key) return;
       L.key = key;
-      var et = PT[p.type] || (p.type === 0 ? "BUY" : "SELL"); // V87: no lot size in label
+      var et = entryTitle(p, PT[p.type] || (p.type === 0 ? "BUY" : "SELL")); // V87 / v103
       if (!L.entry) L.entry = mkLine(p.price_open, col.entry, DOTTED, et); else L.entry.applyOptions({ price: p.price_open, title: et });
       [["sl", col.sl, "SL"], ["tp", col.tp, tpTitle(p, p.tp)]].forEach(function (d) {
         var v = Number(p[d[0]]);
@@ -532,6 +560,8 @@
   App.TradeLines = {
     onPositions: function (list) { positions = list; renderPositions(); },
     onSpecs: function () { if (armed) schedule(); },
+    onPrice: refreshEntryTitles, // v103
+    rewardOf: rewardOf,
     onResult: onResult,
     isArmed: function () { return armed; },
     toggleArm: toggleArm,

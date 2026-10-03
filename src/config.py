@@ -58,7 +58,10 @@ SHOW_TOOL_HINTS = True
 # never starts while the user is away); ALERT_MAX_COUNT is how many notifications
 # can be stacked at once. Both apply immediately (frontend preference).
 ALERT_DISPLAY_SECONDS = 5.0
-ALERT_MAX_COUNT = 12
+ALERT_MAX_COUNT = 2
+# v101: when True, MT5 connection notifications (connection lost / Connected to
+# MT5 / Sync) are not shown. Default True (hidden). Applies immediately.
+DISABLE_CONNECTION_ALERTS = True
 
 # v67.3: Log panel initial in-memory window and browser poll cadence.
 # These values are retained in config.py because chart_bridge imports them

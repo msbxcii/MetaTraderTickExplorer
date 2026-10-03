@@ -187,7 +187,11 @@
       var obj = App.interaction.obj;
       var role = App.interaction.role;
       if (obj.type === "rect" && role === "corner") {
-        App.interaction._shiftLockPrice = obj.points[0].price;
+        // v102: lock the DRAGGED corner's price, not points[0]'s - points[0] is only the
+        // dragged corner after the first mousemove; before that it may be the fixed
+        // corner, which collapsed the rect to zero height.
+        var fx = App.interaction.fixed, p0 = obj.points[0].price, p1 = obj.points[1].price;
+        App.interaction._shiftLockPrice = (fx && Math.abs(p0 - fx.price) < Math.abs(p1 - fx.price)) ? p1 : p0;
       } else if ((obj.type === "fib" || obj.type === "fibext") && role && role.indexOf("pt") === 0) {
         var idx = parseInt(role.slice(2), 10);
         if (!isNaN(idx) && obj.points[idx]) App.interaction._shiftLockPrice = obj.points[idx].price;

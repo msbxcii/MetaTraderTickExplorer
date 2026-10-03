@@ -166,8 +166,13 @@
     var name = $("sess-preset-save-input").value.trim();
     if (!name) return;
     if (BUILTIN.some(function (b) { return b.name === name; })) { $("sess-preset-save-input").focus(); return; }  // v94: reserved
-    var p = editingPresetId && presets.filter(function (x) { return x.id === editingPresetId; })[0];
-    if (p) { p.name = name; p.sessions = clone(state.sessions); }
+    // v101: preset names are unique - same name updates that preset (as in the Canvas tab).
+    var byName = presets.filter(function (x) { return x.name === name; })[0];
+    var byId = editingPresetId ? presets.filter(function (x) { return x.id === editingPresetId; })[0] : null;
+    if (byName) {
+      byName.sessions = clone(state.sessions);
+      if (byId && byId !== byName) presets = presets.filter(function (x) { return x !== byId; });
+    } else if (byId) { byId.name = name; byId.sessions = clone(state.sessions); }
     else presets.push({ id: "s" + Date.now().toString(36), name: name, sessions: clone(state.sessions) });
     currentPresetLabel = name; paintPresetLabel();
     closeSaveBox(); renderPresetList(); persist();
@@ -182,6 +187,10 @@
       currentPresetLabel = "-";  // user's saved list (may differ from a built-in)
     }
     presets = (data && Array.isArray(data.presets)) ? data.presets : [];
+    // v101: collapse same-name presets saved by earlier versions (newest wins).
+    var seen = {};
+    presets.forEach(function (x, i) { seen[x.name] = i; });
+    presets = presets.filter(function (x, i) { return seen[x.name] === i; });
     paintPresetLabel();
     $("sess-local-tz").checked = state.localTz;
     if (App.Tz) App.Tz.setEnabled(state.localTz);

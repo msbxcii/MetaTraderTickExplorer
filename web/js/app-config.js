@@ -87,6 +87,11 @@
           key: "ALERT_MAX_COUNT", type: "int", step: "1", unit: "items",
           title: "Max Notifications Shown",
           description: "Maximum number of notifications stacked on screen at the same time (bottom-left). When the limit is reached the oldest notification is dismissed first. Allowed range 1 to 30. Takes effect immediately."
+        },
+        {
+          key: "DISABLE_CONNECTION_ALERTS", type: "bool",
+          title: "Disable Connection Notifications",
+          description: "Hides all MT5 connection notifications: connection lost, Connected to MT5 and data Sync messages. The connection status dot is not affected. On by default. Takes effect immediately."
         }
       ],
     },
@@ -181,6 +186,7 @@
     Object.keys(FIELD_BY_KEY).forEach(function (k) {
       var type = FIELD_BY_KEY[k].type;
       d[k] = type === "intlist" ? [] : (type === "bool" ? false : "");
+      if (k === "DISABLE_CONNECTION_ALERTS") d[k] = true;   // v101
     });
     return d;
   }
@@ -425,10 +431,11 @@
     var secs = Number(loaded ? current.ALERT_DISPLAY_SECONDS : NaN);
     var count = Number(loaded ? current.ALERT_MAX_COUNT : NaN);
     if (!(secs > 0)) secs = 5;
-    if (!(count > 0)) count = 12;
+    if (!(count > 0)) count = 2;
     return {
       seconds: Math.min(120, Math.max(1, secs)),
-      max: Math.min(30, Math.max(1, Math.round(count)))
+      max: Math.min(30, Math.max(1, Math.round(count))),
+      muteConnection: !(loaded && current.DISABLE_CONNECTION_ALERTS === false)   // v101: muted by default
     };
   }
 

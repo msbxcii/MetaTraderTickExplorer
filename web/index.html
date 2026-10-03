@@ -18,6 +18,8 @@
      rendered in the fallback font first and visibly re-sized/re-flowed once Inter
      loaded. A local file loads immediately and font-display:block hides text for
      those few milliseconds instead of showing a different font. */
+  /* v103: Inter with equal-width digits, used by chart canvas text so live labels (Sell#2.23) do not change width */
+  @font-face { font-family: "InterTab"; font-style: normal; font-weight: 400; font-display: block; src: url("vendor/fonts/intertab-latin-400-normal.woff2") format("woff2"); }
   @font-face { font-family: "Inter"; font-style: normal; font-weight: 400; font-display: block; src: url("vendor/fonts/inter-latin-400-normal.woff2") format("woff2"); }
   @font-face { font-family: "Inter"; font-style: normal; font-weight: 500; font-display: block; src: url("vendor/fonts/inter-latin-500-normal.woff2") format("woff2"); }
   @font-face { font-family: "Inter"; font-style: normal; font-weight: 600; font-display: block; src: url("vendor/fonts/inter-latin-600-normal.woff2") format("woff2"); }
@@ -3860,6 +3862,8 @@
   .tp-side.buy { background: var(--tp-up-bg); color: var(--up); }
   .tp-side.sell { background: var(--tp-down-bg); color: var(--down); }
   .tp-pl { font-weight: 700; font-size: 12px; }
+  /* v103: equal-width digits so live P/L, Net Profit and Reward don't jitter horizontally */
+  .tp-pl, #tp-open-net, .tp-stat .num, .tp-rw { font-variant-numeric: tabular-nums; }
   .tp-pos { color: var(--up); }
   .tp-neg { color: var(--down); }
   .tp-be { color: var(--tp-accent); } /* V85 */
@@ -3878,6 +3882,7 @@
   .tp-input-wrap:focus-within { border-color: var(--muted); }
   /* V87: BE right after entry; hover focus dims the other trades */
   .tp-row2 .tp-be { margin-left: 8px; }
+  .tp-row2 .tp-rw { margin-left: 8px; } /* v103 */
   #tp-open-list .tp-item { transition: opacity .12s; }
   #tp-open-list.tp-focus .tp-item:not(.tp-focused) { opacity: .35; }
   /* V84: trade toasts + fast-order cursor */

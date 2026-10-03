@@ -39,6 +39,18 @@
     } catch (_) {}
   };
 
+  // v103: canvas text needs InterTab loaded before it can use it; once loaded, re-apply
+  // the same font option to every chart so labels are redrawn with it (one-time).
+  if (document.fonts && document.fonts.load) {
+    document.fonts.load("400 12px InterTab").then(function () {
+      var opts = { layout: { fontFamily: App.FONT_FAMILY + " " } };   // value change forces a repaint
+      if (App.chart) App.chart.applyOptions(opts);
+      if (App.MultiPanel && App.MultiPanel.getPanels) {
+        App.MultiPanel.getPanels().forEach(function (p) { if (p.chart) p.chart.applyOptions(opts); });
+      }
+    }).catch(function () { /* font missing: Inter fallback keeps working */ });
+  }
+
   // ---- Chart setup -------------------------------------------------------
   function createChart() {
     App.chart = LightweightCharts.createChart(dom.chartContainer, {
@@ -249,6 +261,7 @@
 
     App.livePrice = numericPrice;
     App.livePriceLine.applyOptions({ price: numericPrice });
+    if (App.TradeLines && App.TradeLines.onPrice) App.TradeLines.onPrice(); // v103
   }
 
   // History navigation must never replace the remembered live price. This is
@@ -306,6 +319,7 @@
     var numericPrice = Number(price);
     if (!Number.isFinite(numericPrice) || numericPrice <= 0) return;
     App.liveAsk = numericPrice;
+    if (App.TradeLines && App.TradeLines.onPrice) App.TradeLines.onPrice(); // v103: Sell reward uses ASK
     // The newest ASK is always remembered (one number), so ticking the
     // checkbox shows the line at once; while it is off nothing is scheduled.
     if (!App.askTheme.enabled || App.replayActive || askFlushPending) return;
@@ -1164,7 +1178,9 @@
     // stay silent.
     var prevCls = updateStatusDot._prev;
     updateStatusDot._prev = cls;
-    if (prevCls && prevCls !== cls && App.Trade && App.Trade.toast) {
+    // v101: skipped entirely when Setting > Configuration > Disable Connection Notifications is on.
+    var muteConn = App.AppConfig && App.AppConfig.getAlertSettings && App.AppConfig.getAlertSettings().muteConnection;
+    if (prevCls && prevCls !== cls && !muteConn && App.Trade && App.Trade.toast) {
       if (cls === "live") App.Trade.toast("Connected to MT5 \u2014 live data is back", "ok");
       else if (cls === "syncing") App.Trade.toast("Syncing with MT5 \u2014 updating data", "info");
       else App.Trade.toast("MT5 connection lost \u2014 working offline", "err");
