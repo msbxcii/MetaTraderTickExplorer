@@ -2,11 +2,13 @@
 /logs/
 /build/
 /dist/
+/tools/
 /output/
 src/__pycache__/
 REPOMAP.md
 run.cmd
 root-location.json
+colors-mockup.html
 
 # Python bytecode / caches
 *.py[cod]

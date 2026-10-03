@@ -138,9 +138,11 @@
     priceLineStyle: "dashed",
     priceLineWidth: 1,
     crosshairWidth: 1,
-    // v50.3 Update 4: the whole app's "Selector" accent (var(--gold) —
-    // active tabs, focus borders, selected-object highlight, etc.).
-    selectorColor: "#e6e9ef",
+    // v107 Update 1: the "Selector" accent (--gold) is no longer a Canvas
+    // setting - it is an internal theme variable (theme-colors.css), set per
+    // theme in colors-mockup.html. `themeId` names the default theme whose UI
+    // colors (theme-colors.css) go with this preset.
+    themeId: "default-dark",
     // V64.1 Update 2: live ASK line — off by default; look defaults equal the
     // Price Line's (color / Dashed / 1px).
     askEnabled: false,
@@ -168,13 +170,13 @@
     {
       id: "__default_dark__",
       name: "Default Dark",
+      themeId: "default-dark",
       settings: {
         background: "#0a0e17",
         crosshairColor: "#6b7686",
         crosshairStyle: "solid", // v89: built-in presets use a Solid crosshair
         priceLineColor: "#8b95a5",
         textColor: "#8b95a5",
-        selectorColor: "#e6e9ef",
         bodyUp: "#089981", bodyDown: "#f23645",
         borderUp: "#089981", borderDown: "#f23645",
         wickUp: "#089981", wickDown: "#f23645",
@@ -188,13 +190,13 @@
     {
       id: "__default_light__",
       name: "Default Light",
+      themeId: "default-light",
       settings: {
         background: "#f5f5f5",
         crosshairColor: "#6b7686",
         crosshairStyle: "solid", // v89: built-in presets use a Solid crosshair
         priceLineColor: "#8b95a5",
         textColor: "#8b95a5",
-        selectorColor: "#1a1d24",
         bodyUp: "#089981", bodyDown: "#f23645",
         borderUp: "#089981", borderDown: "#f23645",
         wickUp: "#089981", wickDown: "#f23645",
@@ -208,13 +210,13 @@
     {
       id: "__ivory_white__",
       name: "Ivory White",
+      themeId: "ivory-white",
       settings: {
         background: "#fdf5e6",
         crosshairColor: "#000000",
         crosshairStyle: "solid", // v89: built-in presets use a Solid crosshair
         priceLineColor: "#000000",
         textColor: "#292929",
-        selectorColor: "#1a1d24",
         bodyUp: "#32cd32", bodyDown: "#b22222",
         borderUp: "#000000", borderDown: "#000000",
         wickUp: "#000000", wickDown: "#000000",
@@ -228,13 +230,13 @@
     {
       id: "__emerald_black__",
       name: "Emerald Black",
+      themeId: "emerald-black",
       settings: {
         background: "#11161f",
         crosshairColor: "#778899",
         crosshairStyle: "solid", // v89: built-in presets use a Solid crosshair
         priceLineColor: "#778899",
         textColor: "#778899",
-        selectorColor: "#e6e9ef",
         bodyUp: "#0ee715", bodyDown: "#ffffff",
         borderUp: "#0ee715", borderDown: "#ffffff",
         wickUp: "#0ee715", wickDown: "#ffffff",
@@ -246,6 +248,24 @@
       },
     },
   ];
+  // v107 Update 2: the built-in (undeletable) default themes are designed in
+  // colors-mockup.html, which exports web/js/default-themes.js
+  // (App.DefaultThemes = [{id, name, base: "dark"|"light", canvas: {...}}]).
+  // When that file is present it REPLACES the hardcoded list above, so any
+  // number of default themes can be registered; each also has a
+  // `body.theme-<id>` block in theme-colors.css for its UI colors.
+  function builtinsFromThemes(list) {
+    return list.map(function (t) {
+      var settings = {};
+      for (var k in (t.canvas || {})) settings[k] = t.canvas[k];
+      settings.darkTheme = t.base !== "light";
+      settings.themeId = t.id;
+      return { id: "__" + String(t.id).replace(/-/g, "_") + "__", name: t.name, themeId: t.id, settings: settings };
+    });
+  }
+  if (Array.isArray(App.DefaultThemes) && App.DefaultThemes.length) {
+    BUILTIN_PRESETS = builtinsFromThemes(App.DefaultThemes);
+  }
   function findBuiltinPreset(id) {
     return BUILTIN_PRESETS.filter(function (p) { return p.id === id; })[0] || null;
   }
@@ -459,13 +479,6 @@
     };
     if (App.DrawingEngine && App.DrawingEngine.requestRender) App.DrawingEngine.requestRender();
   }
-  // v50.3 Update 4: the app-wide "Selector" accent — every var(--gold)
-  // usage across index.html (active tabs, focus rings, selected-object
-  // highlight, etc.) picks this up immediately since it's a CSS custom
-  // property on the root element.
-  function applySelector() {
-    document.documentElement.style.setProperty("--gold", state.selectorColor);
-  }
   // v50.2 Update 1: applies/removes the `light-theme` class on <body> —
   // every element in index.html is themed off the var(--bg)/var(--panel)/
   // var(--border)/var(--text)/var(--muted)/var(--ov*) custom properties
@@ -475,6 +488,12 @@
   // other file needs to know which theme is active.
   function applyDarkTheme() {
     document.body.classList.toggle("light-theme", !state.darkTheme);
+    // v107: extra default themes (theme-colors.css `body.theme-<id>` blocks).
+    var cls = document.body.classList, rm = [];
+    for (var i = 0; i < cls.length; i++) if (cls[i].indexOf("theme-") === 0) rm.push(cls[i]);
+    rm.forEach(function (c) { cls.remove(c); });
+    var id = state.themeId;
+    if (id && id !== "default-dark" && id !== "default-light") cls.add("theme-" + id);
   }
 
   // Applies every field to the live chart at once — used at startup (see
@@ -490,7 +509,6 @@
     applyPriceLine();
     applyAsk();
     applyDailyBreak();
-    applySelector();
   }
 
   // v50.3 Update 1: called by multi-panel.js right after a new companion
@@ -569,8 +587,6 @@
   if (dom.canvasAskSwatch) attachSwatch(dom.canvasAskSwatch, "askColor", applyAsk);
   // V64.2: Daily Break color swatch.
   if (dom.canvasDailyBreakSwatch) attachSwatch(dom.canvasDailyBreakSwatch, "dailyBreakColor", applyDailyBreak);
-  // v50.3 Update 4: Selector (app-wide accent) color swatch.
-  if (dom.canvasSelectorSwatch) attachSwatch(dom.canvasSelectorSwatch, "selectorColor", applySelector);
   // Background also drives the Price Line's box-text color, so re-apply
   // the Price Line any time Background changes.
   if (dom.canvasBgSwatch) {
@@ -741,7 +757,6 @@
     if (dom.canvasPriceLineStyle) dom.canvasPriceLineStyle.value = state.priceLineStyle;
     if (dom.canvasCrosshairWidth) dom.canvasCrosshairWidth.value = String(state.crosshairWidth);
     if (dom.canvasPriceLineWidth) dom.canvasPriceLineWidth.value = String(state.priceLineWidth);
-    if (dom.canvasSelectorSwatch) dom.canvasSelectorSwatch.value = state.selectorColor;
     if (dom.canvasAskSwatch) dom.canvasAskSwatch.value = state.askColor;
     if (dom.canvasAskStyle) dom.canvasAskStyle.value = state.askStyle;
     if (dom.canvasAskWidth) dom.canvasAskWidth.value = String(state.askWidth);
@@ -882,6 +897,10 @@
     setPresetDropdownLabel(label);
     refreshUI();
     persist();
+    // v107: lets the theme designer (colors-mockup.html) follow preset changes.
+    try {
+      document.dispatchEvent(new CustomEvent("App:canvasPresetApplied", { detail: { themeId: state.themeId, builtin: !!builtin } }));
+    } catch (e) { /* non-critical */ }
   }
 
   function deletePreset(id) {
@@ -988,7 +1007,23 @@
   function activate() {}
   function deactivate() {}
 
+  // v107: used by colors-mockup.html (theme designer) to push live edits into
+  // the real Canvas tab, and to register extra default themes while designing.
+  function setState(partial) {
+    for (var k in (partial || {})) {
+      if (Object.prototype.hasOwnProperty.call(DEFAULTS, k)) state[k] = partial[k];
+    }
+    refreshUI();
+  }
+  function setDefaultThemes(list) {
+    if (!Array.isArray(list) || !list.length) return;
+    BUILTIN_PRESETS = builtinsFromThemes(list);
+    refreshPresetOptions();
+  }
+
   App.CanvasSettings = {
+    setState: setState,
+    setDefaultThemes: setDefaultThemes,
     activate: activate,
     deactivate: deactivate,
     applyAll: applyAll,

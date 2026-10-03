@@ -277,6 +277,12 @@ window.App = {
     dcmTimeFromTime: document.getElementById("dcm-time-from-time"),
     dcmTimeToDate: document.getElementById("dcm-time-to-date"),
     dcmTimeToTime: document.getElementById("dcm-time-to-time"),
+    // v108: Text section (trend / horizontal / vertical line).
+    dcmTextSection: document.getElementById("dcm-text-section"),
+    dcmTextSize: document.getElementById("dcm-text-size"),
+    dcmTextPlace: document.getElementById("dcm-text-place"),
+    dcmTextAlign: document.getElementById("dcm-text-align"),
+    dcmTextArea: document.getElementById("dcm-text-area"),
     dcmUnlock: document.getElementById("dcm-unlock"),
     dcmClose: document.getElementById("dcm-close"),
 
@@ -397,8 +403,6 @@ window.App = {
     canvasPriceLineStyle: document.getElementById("canvas-price-line-style"),
     canvasCrosshairWidth: document.getElementById("canvas-crosshair-width"),
     canvasPriceLineWidth: document.getElementById("canvas-price-line-width"),
-    // v50.3 Update 4: Selector (app-wide accent) swatch.
-    canvasSelectorSwatch: document.getElementById("canvas-selector-swatch"),
     // v50.1 Update 1: grid-line enable checkboxes + their color swatches.
     canvasGridHorzCheckbox: document.getElementById("canvas-grid-horz-checkbox"),
     canvasGridHorzSwatch: document.getElementById("canvas-grid-horz-swatch"),

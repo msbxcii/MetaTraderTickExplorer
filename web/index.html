@@ -11,6 +11,7 @@
      v4.2.3 was vendored before. See README.md, "v27.1 — vendored v5.2.1
      locally instead of CDN" for the full rationale and download link. -->
 <script src="vendor/lightweight-charts.standalone.production.js"></script>
+<link rel="stylesheet" href="theme-colors.css">
 <style>
   html.ui-scale-pending body { visibility: hidden; }  /* v104 */
   :root { --font-ui: "Inter", "Segoe UI", system-ui, sans-serif; }
@@ -26,35 +27,9 @@
   @font-face { font-family: "Inter"; font-style: normal; font-weight: 400; font-display: block; src: url("vendor/fonts/inter-latin-400-normal.woff2") format("woff2"); }
   @font-face { font-family: "Inter"; font-style: normal; font-weight: 500; font-display: block; src: url("vendor/fonts/inter-latin-500-normal.woff2") format("woff2"); }
   @font-face { font-family: "Inter"; font-style: normal; font-weight: 600; font-display: block; src: url("vendor/fonts/inter-latin-600-normal.woff2") format("woff2"); }
-  :root {
-    --bg: #0a0e17;
-    --panel: #11161f;
-    --border: #1e2531;
-    --text: #e6e9ef;
-    --muted: #6b7686;
-    --up: #3fb68b;
-    --down: #e5484d;
-    --gold: #e6e9ef;
-    /* v50.1: shared hover/active "state layer" overlays used throughout
-       the app's buttons/rows/list-items. Defined once here (instead of
-       each rule hardcoding rgba(255,255,255,X)) so v50.2's Light Theme
-       can flip them from a white lighten-on-hover to a dark darken-on-
-       hover without touching every individual rule. */
-    --ov3: rgba(255, 255, 255, 0.03);
-    --ov4: rgba(255, 255, 255, 0.04);
-    --ov45: rgba(255, 255, 255, 0.045);
-    --ov5: rgba(255, 255, 255, 0.05);
-    --ov6: rgba(255, 255, 255, 0.06);
-    --ov8: rgba(255, 255, 255, 0.08);
-    /* v99: surface tokens for the object settings panel (see #draw-context-menu). */
-    --dcm-ctl: #1a212d;
-    --dcm-ctl-hover: #212a38;
-    --dcm-ctl-text: #c5ccd8;
-    --dcm-pill-on: #2b3444;
-    --dcm-chk-a: #3a3f4a;
-    --dcm-chk-b: #262b34;
-    --dcm-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-  }
+  /* Colors live in theme-colors.css; only the shadow geometry (non-color) stays here */
+  :root { --dcm-shadow-geo: 0 10px 30px; }
+  body.light-theme { --dcm-shadow-geo: 0 8px 24px; }
 
   /* =========================================================================
      v50.2 Update 1 — Light Theme.
@@ -77,27 +52,6 @@
      identity in both themes, exactly like TradingView's own light/dark
      presets keep the same up/down colors in both themes.
      ========================================================================= */
-  body.light-theme {
-    --bg: #f4f5f7;
-    --panel: #ffffff;
-    --border: #d7dbe2;
-    --text: #1a1d24;
-    --muted: #5a6472;
-    /* --up / --down / --gold intentionally unchanged from Dark Mode. */
-    --ov3: rgba(0, 0, 0, 0.03);
-    --ov4: rgba(0, 0, 0, 0.04);
-    --ov45: rgba(0, 0, 0, 0.045);
-    --ov5: rgba(0, 0, 0, 0.05);
-    --ov6: rgba(0, 0, 0, 0.06);
-    --ov8: rgba(0, 0, 0, 0.08);
-    --dcm-ctl: #f1f2f5;
-    --dcm-ctl-hover: #e7e9ee;
-    --dcm-ctl-text: #3a4150;
-    --dcm-pill-on: #d7dbe2;
-    --dcm-chk-a: #c9cdd4;
-    --dcm-chk-b: #ffffff;
-    --dcm-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
-  }
 
   * { box-sizing: border-box; }
 
@@ -144,7 +98,7 @@
     -webkit-user-select: text;
     user-select: text;
   }
-  ::selection { background: rgba(128, 134, 145, 0.38); color: inherit; }  /* V99: neutral grey, readable on dark + light themes */
+  ::selection { background: var(--selection-bg); color: inherit; }  /* V99: neutral grey, readable on dark + light themes */
 
   /* 3. Keyboard focus. Nearly every input in this app sets `outline: none`
         on :focus (so a mouse click doesn't leave a browser-default ring on a
@@ -256,7 +210,7 @@
 
   #custom-titlebar .titlebar-btn.close-btn:hover {
     background: var(--down);
-    color: #fff;
+    color: var(--titlebar-close-text);
   }
 
   #custom-titlebar .titlebar-btn svg {
@@ -332,7 +286,7 @@
 
   .symbol .dot.live {
     background: var(--up);
-    box-shadow: 0 0 0 0 rgba(63, 182, 139, 0.6);
+    box-shadow: 0 0 0 0 var(--pulse-live-strong);
     animation: pulse 2s infinite;
   }
 
@@ -345,7 +299,7 @@
      updateStatusDot() in chart-core.js. */
   .symbol .dot.syncing {
     background: var(--gold);
-    box-shadow: 0 0 0 0 rgba(201, 162, 39, 0.6);
+    box-shadow: 0 0 0 0 var(--pulse-sync);
     animation: pulse 0.9s infinite;
   }
 
@@ -360,9 +314,9 @@
   }
 
   @keyframes pulse {
-    0%   { box-shadow: 0 0 0 0 rgba(63, 182, 139, 0.5); }
-    70%  { box-shadow: 0 0 0 6px rgba(63, 182, 139, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(63, 182, 139, 0); }
+    0%   { box-shadow: 0 0 0 0 var(--pulse-live-ring); }
+    70%  { box-shadow: 0 0 0 6px var(--pulse-live-fade); }
+    100% { box-shadow: 0 0 0 0 var(--pulse-live-fade); }
   }
 
   .header-right {
@@ -406,7 +360,7 @@
 
   .pill-btn.active {
     background: var(--gold);
-    color: #1a1500;
+    color: var(--on-accent);
     font-weight: 600;
   }
 
@@ -483,7 +437,7 @@
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 6px;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.28);
+    box-shadow: 0 3px 10px var(--shadow-soft);
   }
   .symbol-search-wrap:focus-within { border-color: var(--gold); }
   .symbol-search-icon {
@@ -614,7 +568,7 @@
     height: 5px;
     border-radius: 50%;
     background: var(--gold);
-    box-shadow: 0 0 0 2px rgba(201,162,39,0.18);
+    box-shadow: 0 0 0 2px var(--accent-dot-ring);
   }
   .symbol-options .symbol-pin-divider {
     padding: 6px 10px 4px;
@@ -682,7 +636,7 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 4px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+    box-shadow: 0 8px 24px var(--shadow-dropdown);
     display: none;
     flex-direction: column;
     gap: 2px;
@@ -710,7 +664,7 @@
 
   .tf-dropdown-list button.active {
     background: var(--gold);
-    color: #1a1500;
+    color: var(--on-accent);
     font-weight: 600;
   }
 
@@ -882,9 +836,9 @@
   }
 
   #autofit-btn.active {
-    background: #ffffff;
-    color: #000000;
-    border-color: #ffffff;
+    background: var(--autofit-active-bg);
+    color: var(--autofit-active-text);
+    border-color: var(--autofit-active-border);
   }
 
   /* v56.5 Update 1: same Auto Fit ("A") button, one per companion panel
@@ -915,9 +869,9 @@
   }
 
   .panel-autofit-btn.active {
-    background: #ffffff;
-    color: #000000;
-    border-color: #ffffff;
+    background: var(--autofit-active-bg);
+    color: var(--autofit-active-text);
+    border-color: var(--autofit-active-border);
   }
 
   /* ---- Right-click style editor for a drawn object. */
@@ -928,7 +882,7 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 10px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    box-shadow: 0 10px 30px var(--shadow-modal);
     width: 300px;
     font-size: 12px;
     color: var(--text);
@@ -957,7 +911,7 @@
   }
   .dcm-group-item:hover { background: var(--ov8); }
   .dcm-group-item-danger { color: var(--down); }
-  .dcm-group-item-danger:hover { background: rgba(229, 72, 77, 0.15); }
+  .dcm-group-item-danger:hover { background: var(--danger-hover-bg); }
 
   /* v30.2: centered Jump Time dialog. It deliberately reuses the drawing
      editor's date/time control styling so both panels share one visual
@@ -1045,7 +999,7 @@
     padding: 8px;
     gap: 8px;
     border-radius: 8px;
-    box-shadow: var(--dcm-shadow);
+    box-shadow: var(--dcm-shadow-geo) var(--dcm-shadow-color);
     font: 12px/1.25 "Inter", "Segoe UI", system-ui, sans-serif;
     color: var(--text);
   }
@@ -1059,6 +1013,37 @@
   #draw-context-menu .dcm-g5 { grid-template-columns: 80px 24px 24px 56px 1fr; }
   #draw-context-menu .dcm-gp { grid-template-columns: 80px 1fr 28px; }
   #draw-context-menu .dcm-gn { grid-template-columns: 80px 1fr 28px 28px; }
+  /* v108: Text row — label, font size, placement, position on line. */
+  #draw-context-menu .dcm-gt { grid-template-columns: 80px 34px 1fr 74px; }
+  #draw-context-menu .dcm-gt .dcm-text-size { padding: 0; text-align: center; }
+  #draw-context-menu .dcm-gt.dcm-gt-nop { grid-template-columns: 80px 1fr 34px 74px; }
+  #draw-context-menu .dcm-gt.dcm-gt-nop .dcm-text-size { grid-column: 3; }
+  #draw-context-menu .dcm-gt.dcm-gt-nop #dcm-text-align-wrap { grid-column: 4; }
+  #draw-context-menu #dcm-text-section { display: none; }
+  #draw-context-menu textarea.dcm-text-area {
+    width: calc(100% - 86px);
+    margin-left: 86px;
+    height: 64px;
+    padding: 6px 7px;
+    resize: none;
+    line-height: 1.35;
+    font-size: 12px;
+  }
+  /* v108: inline editor drawn over a line's text on the chart. */
+  .line-text-editor {
+    position: absolute;
+    z-index: 12;
+    white-space: pre;
+    text-align: center;
+    padding: 0 2px;
+    border-radius: 4px;
+    line-height: 1.3;
+    font-weight: 600;
+    outline: none;
+    cursor: text;
+    user-select: text;
+    -webkit-user-select: text;
+  }
   #draw-context-menu .dcm-col2 { grid-column: 2; }
   #draw-context-menu .dcm-col3 { grid-column: 3; }
   #draw-context-menu .dcm-col4 { grid-column: 4; }
@@ -1138,7 +1123,7 @@
   }
   #draw-context-menu .dcm-header-btn:hover { color: var(--text); background: var(--ov8); }
   #draw-context-menu .dcm-header-btn.active { color: var(--gold); }
-  #draw-context-menu .dcm-header-btn-danger:hover { color: var(--down); background: rgba(229, 72, 77, 0.15); }
+  #draw-context-menu .dcm-header-btn-danger:hover { color: var(--down); background: var(--danger-hover-bg); }
 
   /* ---- text inputs ------------------------------------------------------- */
   #draw-context-menu .dcm-in {
@@ -1370,7 +1355,7 @@
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 6px;
-    box-shadow: var(--dcm-shadow);
+    box-shadow: var(--dcm-shadow-geo) var(--dcm-shadow-color);
   }
   #draw-context-menu .dcm-preset-dropdown.open .dcm-preset-dropdown-list { display: flex; }
   #draw-context-menu .dcm-preset-dropdown-item { display: flex; align-items: center; gap: 2px; border-radius: 4px; }
@@ -1409,7 +1394,7 @@
   #draw-context-menu .dcm-preset-dropdown-item-modify svg { width: 11px; height: 11px; display: block; }
   #draw-context-menu .dcm-preset-dropdown-item-trash svg { width: 12px; height: 12px; display: block; }
   #draw-context-menu .dcm-preset-dropdown-item-modify:hover { color: var(--text); background: var(--ov8); }
-  #draw-context-menu .dcm-preset-dropdown-item-trash:hover { color: var(--down); background: rgba(229, 72, 77, 0.15); }
+  #draw-context-menu .dcm-preset-dropdown-item-trash:hover { color: var(--down); background: var(--danger-hover-bg); }
   #draw-context-menu .dcm-preset-dropdown-empty { padding: 6px 8px; color: var(--muted); font-size: 11.5px; }
   /* Inline "save preset" row — hidden until opened (keyframes defined below). */
   #draw-context-menu .dcm-preset-save-box { display: none; }
@@ -1442,7 +1427,7 @@
     border-radius: 3px;
     overflow: hidden;
     background-image:
-      linear-gradient(var(--sw-color, #c9a227), var(--sw-color, #c9a227)),
+      linear-gradient(var(--sw-color, var(--swatch-fallback)), var(--sw-color, var(--swatch-fallback))),
       repeating-conic-gradient(var(--dcm-chk-a) 0% 25%, var(--dcm-chk-b) 0% 50%);
     background-size: auto, 8px 8px;
     background-clip: padding-box;
@@ -1535,7 +1520,7 @@
     stroke-width: 1.5;
     stroke-linecap: round;
   }
-  #draw-context-menu .dcm-fib-row-trash:hover { color: var(--down); background: rgba(229, 72, 77, 0.15); }
+  #draw-context-menu .dcm-fib-row-trash:hover { color: var(--down); background: var(--danger-hover-bg); }
   #draw-context-menu .dcm-fib-row-trash:disabled { visibility: hidden; cursor: default; }
 
   /* ---- locked mode: only the title bar, Timeframes and Unlock remain ----- */
@@ -1575,7 +1560,7 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 10px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.55);
+    box-shadow: 0 10px 30px var(--shadow-popover);
     display: none;
     flex-direction: column;
     gap: 8px;
@@ -1600,8 +1585,8 @@
     height: 10px;
     margin: -5px;
     border-radius: 50%;
-    border: 2px solid #fff;
-    box-shadow: 0 0 0 1px rgba(0,0,0,0.6);
+    border: 2px solid var(--picker-thumb);
+    box-shadow: 0 0 0 1px var(--picker-thumb-ring);
     pointer-events: none;
   }
   .dcm-cp-hue, .dcm-cp-alpha {
@@ -1629,9 +1614,9 @@
     margin-left: -5px;
     margin-top: -5px;
     border-radius: 50%;
-    background: #fff;
-    border: 2px solid #fff;
-    box-shadow: 0 0 0 1px rgba(0,0,0,0.6);
+    background: var(--picker-thumb);
+    border: 2px solid var(--picker-thumb);
+    box-shadow: 0 0 0 1px var(--picker-thumb-ring);
     pointer-events: none;
   }
   .dcm-cp-bottom { display: flex; align-items: center; gap: 6px; }
@@ -1642,7 +1627,7 @@
     border-radius: 5px;
     border: 1px solid var(--border);
     background-image:
-      linear-gradient(var(--sw-color, #c9a227), var(--sw-color, #c9a227)),
+      linear-gradient(var(--sw-color, var(--swatch-fallback)), var(--sw-color, var(--swatch-fallback))),
       repeating-conic-gradient(var(--dcm-chk-a) 0% 25%, var(--dcm-chk-b) 0% 50%);
     background-size: auto, 8px 8px;    overflow: hidden;
     background-clip: padding-box;
@@ -1694,7 +1679,7 @@
   }
   #objects-panel-toggle svg { width: 15px; height: 15px; display: block; }
   #objects-panel-toggle:hover { color: var(--text); background: var(--ov4); }
-  #objects-panel-toggle.active { background: var(--gold); color: #1a1500; }
+  #objects-panel-toggle.active { background: var(--gold); color: var(--on-accent); }
 
   /* ---- v40: Bar Replay toggle — sits in the header's tool cluster right
      before the Object Tree toggle (see index.html header markup), sharing
@@ -1717,7 +1702,7 @@
   }
   #replay-bar-toggle svg { width: 15px; height: 15px; display: block; }
   #replay-bar-toggle:hover { color: var(--text); background: var(--ov4); }
-  #replay-bar-toggle.active { background: var(--gold); color: #1a1500; }
+  #replay-bar-toggle.active { background: var(--gold); color: var(--on-accent); }
 
   /* ---- v50: Setting toggle — identical box/hover/active styling to
      #objects-panel-toggle / #replay-bar-toggle (same pill wrapper class,
@@ -1741,7 +1726,7 @@
   }
   #settings-toggle svg { width: 15px; height: 15px; display: block; }
   #settings-toggle:hover { color: var(--text); background: var(--ov4); }
-  #settings-toggle.active { background: var(--gold); color: #1a1500; }
+  #settings-toggle.active { background: var(--gold); color: var(--on-accent); }
 
   /* ---- v59: Log toggle — identical box/hover/active styling to
      #settings-toggle (same pill wrapper class, same size, same hover fade,
@@ -1764,7 +1749,7 @@
   }
   #log-toggle svg { width: 15px; height: 15px; display: block; }
   #log-toggle:hover { color: var(--text); background: var(--ov4); }
-  #log-toggle.active { background: var(--gold); color: #1a1500; }
+  #log-toggle.active { background: var(--gold); color: var(--on-accent); }
 
   /* ---- v38.1: Market Data Overview modal — a true centered dialog with a
      dimming backdrop (no such pattern existed before this; the closest
@@ -1775,7 +1760,7 @@
     display: none;
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.55);
+    background: var(--backdrop);
     z-index: 500;
     align-items: center;
     justify-content: center;
@@ -1789,7 +1774,7 @@
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 28px 32px 24px;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    box-shadow: 0 12px 40px var(--shadow-modal);
     box-sizing: border-box;
   }
 
@@ -2287,7 +2272,7 @@
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 10px;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    box-shadow: 0 12px 40px var(--shadow-modal);
     box-sizing: border-box;
     display: flex;
     overflow: hidden;
@@ -2852,7 +2837,7 @@
   .about-update-status a { color: var(--gold); text-decoration: none; }
   .about-update-status a:hover { text-decoration: underline; }
   .about-update-status.is-available { color: var(--gold); }
-  .about-update-status.is-error { color: #c0664a; }
+  .about-update-status.is-error { color: var(--status-error); }
   /* v71: the [hidden] attribute is how JS shows/hides this - the previous
      unconditional "display: flex" here silently overrode the browser's
      own [hidden] { display: none } rule (author CSS always beats the UA
@@ -3037,8 +3022,8 @@
     inset: 2px;
     border-radius: 3px;
     background-image:
-      linear-gradient(var(--sw-color, #c9a227), var(--sw-color, #c9a227)),
-      repeating-conic-gradient(#3a3f4a 0% 25%, #262b34 0% 50%);
+      linear-gradient(var(--sw-color, var(--swatch-fallback)), var(--sw-color, var(--swatch-fallback))),
+      repeating-conic-gradient(var(--dcm-chk-a) 0% 25%, var(--dcm-chk-b) 0% 50%);
     background-size: auto, 8px 8px;    overflow: hidden;
     background-clip: padding-box;
   }
@@ -3109,7 +3094,7 @@
     border: 1px solid var(--border);
     border-radius: 7px;
     padding: 3px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+    box-shadow: 0 8px 24px var(--shadow-dropdown);
     display: none;
     flex-direction: column;
     gap: 1px;
@@ -3151,7 +3136,7 @@
     padding: 0;
   }
   .canvas-preset-dropdown-item-trash svg { width: 12px; height: 12px; display: block; }
-  .canvas-preset-dropdown-item-trash:hover { color: var(--down); background: rgba(229, 72, 77, 0.15); }
+  .canvas-preset-dropdown-item-trash:hover { color: var(--down); background: var(--danger-hover-bg); }
   .canvas-preset-dropdown-item-trash { transition: color 0.15s ease, background 0.15s ease; }
   /* V70.1 Update 3: Modify icon — same treatment as the drawing tool's
      own preset-row Modify icon (.dcm-preset-dropdown-item-modify). */
@@ -3172,7 +3157,7 @@
     transition: color 0.15s ease, background 0.15s ease;
   }
   .canvas-preset-dropdown-item-modify svg { width: 11px; height: 11px; display: block; }
-  .canvas-preset-dropdown-item-modify:hover { color: var(--gold); background: rgba(201, 162, 39, 0.15); }
+  .canvas-preset-dropdown-item-modify:hover { color: var(--gold); background: var(--accent-hover-bg); }
   .canvas-preset-dropdown-empty { color: var(--muted); font-size: 11.5px; padding: 6px 8px; }
   .canvas-preset-save-box { display: none; align-items: center; gap: 5px; margin-top: 8px; }
   .canvas-preset-save-box.open { display: flex; animation: dcm-preset-savebox-in 0.15s ease forwards; }
@@ -3225,7 +3210,7 @@
   .objects-panel.open {
     width: 250px;
     border-left: 1px solid var(--border);
-    box-shadow: -8px 0 24px rgba(0,0,0,0.35);
+    box-shadow: -8px 0 24px var(--shadow-panel);
   }
   /* Fixed-width inner wrapper: while `.objects-panel` itself animates from
      0 -> 250px (so the chart smoothly shifts), its content must not reflow
@@ -3286,7 +3271,7 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 4px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+    box-shadow: 0 8px 24px var(--shadow-dropdown);
     display: none;
     flex-direction: column;
     gap: 2px;
@@ -3312,7 +3297,7 @@
   .obj-panel-sort-list button:hover { background: var(--ov6); }
   .obj-panel-sort-list button.active {
     background: var(--gold);
-    color: #1a1500;
+    color: var(--on-accent);
     font-weight: 600;
   }
 
@@ -3385,7 +3370,7 @@
      unreachable rather than just dimmed. */
   .obj-row.obj-out-of-range .obj-row-label { color: var(--muted); text-decoration: line-through; }
   .obj-row.obj-folder-row { font-weight: 600; }
-  .obj-row.obj-folder-dragover { background: rgba(201, 162, 39, 0.22); outline: 1px dashed var(--gold); }
+  .obj-row.obj-folder-dragover { background: var(--accent-drop-bg); outline: 1px dashed var(--gold); }
   /* v33.3 fix 3: a more pronounced offset than v33.2's 16px — a nested
      row now reads clearly as "inside" its folder rather than looking
      like a slightly-misaligned top-level row. */
@@ -3412,11 +3397,11 @@
     width: 15px;
     height: 15px;
     display: flex;
-    color: var(--muted);
+    color: var(--objtree-icon, var(--muted));
   }
   .obj-row-icon svg { width: 15px; height: 15px; display: block; }
   .obj-row.active .obj-row-icon,
-  .obj-row.panel-selected .obj-row-icon { color: var(--gold); }
+  .obj-row.panel-selected .obj-row-icon { color: var(--objtree-icon-active, var(--gold)); }
 
   .obj-row-label {
     flex: 1 1 auto;
@@ -3472,7 +3457,7 @@
   .obj-row-btn svg { width: 13px; height: 13px; display: block; }
   .obj-row-btn:hover { color: var(--text); background: var(--ov8); }
   .obj-row-btn.active { color: var(--gold); }
-  .obj-row-btn-danger:hover { color: var(--down); background: rgba(229, 72, 77, 0.15); }
+  .obj-row-btn-danger:hover { color: var(--down); background: var(--danger-hover-bg); }
 
   /* =========================================================================
      v40 — Bar Replay
@@ -3517,7 +3502,7 @@
   }
   .replay-icon-btn svg { width: 15px; height: 15px; display: block; }
   .replay-icon-btn:hover { color: var(--text); background: var(--ov6); }
-  .replay-icon-btn.active { background: var(--gold); color: #1a1500; }
+  .replay-icon-btn.active { background: var(--gold); color: var(--on-accent); }
 
   .replay-close-btn {
     position: absolute;
@@ -3527,7 +3512,7 @@
     color: var(--muted);
     font-family: "Inter", "Segoe UI", system-ui, sans-serif;
   }
-  .replay-close-btn:hover { color: var(--down); background: rgba(229, 72, 77, 0.12); }
+  .replay-close-btn:hover { color: var(--down); background: var(--danger-hover-bg-weak); }
 
   /* =========================================================================
      v59 — Log panel
@@ -3591,7 +3576,7 @@
     font-size: 12px;
     padding: 0;
   }
-  .log-panel-close:hover { color: var(--down); background: rgba(229, 72, 77, 0.12); }
+  .log-panel-close:hover { color: var(--down); background: var(--danger-hover-bg-weak); }
 
   /* v62.6 - topical filter chips (All/Info/Database/Warning/Error/Debug),
      see web/js/log-panel.js. Filtering happens client-side against lines
@@ -3655,7 +3640,7 @@
     border-radius: 8px;
     padding: 4px;
     min-width: 64px;
-    box-shadow: 0 -8px 24px rgba(0,0,0,0.45);
+    box-shadow: 0 -8px 24px var(--shadow-dropdown);
     z-index: 40;
   }
   .replay-speed-wrap.open .replay-speed-list { display: flex; }
@@ -3672,7 +3657,7 @@
     cursor: pointer;
   }
   .replay-speed-list button:hover { background: var(--ov6); }
-  .replay-speed-list button.active { background: var(--gold); color: #1a1500; font-weight: 600; }
+  .replay-speed-list button.active { background: var(--gold); color: var(--on-accent); font-weight: 600; }
 
   /* Select Date modal — a centered backdrop dialog, following the exact
      same pattern as .mdo-backdrop/.mdo-modal, but with its own class
@@ -3682,7 +3667,7 @@
     display: none;
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.55);
+    background: var(--backdrop);
     z-index: 500;
     align-items: center;
     justify-content: center;
@@ -3696,7 +3681,7 @@
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 20px 22px 18px;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    box-shadow: 0 12px 40px var(--shadow-modal);
     box-sizing: border-box;
     color: var(--text);
   }
@@ -3799,22 +3784,20 @@
   }
   #trade-panel-toggle svg { width: 14px; height: 14px; display: block; }
   #trade-panel-toggle:hover { color: var(--text); background: var(--ov4); }
-  #trade-panel-toggle.active { background: var(--gold); color: #1a1500; }
+  #trade-panel-toggle.active { background: var(--gold); color: var(--on-accent); }
 
   .trade-panel {
     --tp-panel2: color-mix(in srgb, var(--text) 3%, var(--panel));
     --tp-gold-bg: color-mix(in srgb, var(--tp-accent) 22%, transparent);
     --tp-up-bg: color-mix(in srgb, var(--up) 15%, transparent);
     --tp-down-bg: color-mix(in srgb, var(--down) 15%, transparent);
-    --tp-blue: #3b82f6;
     /* V87: panel accent follows Dark/Light theme, not the Selector color */
-    --tp-accent: #e0b23a;
     position: relative; flex: 0 0 auto; width: 0; overflow: hidden;
     background: var(--panel); border-left: 0 solid var(--border);
     display: flex; flex-direction: column; transition: width 0.18s ease;
     font-size: 12px; color: var(--text);
   }
-  .trade-panel.open { width: 310px; border-left: 1px solid var(--border); box-shadow: -8px 0 24px rgba(0,0,0,0.35); }
+  .trade-panel.open { width: 310px; border-left: 1px solid var(--border); box-shadow: -8px 0 24px var(--shadow-panel); }
   .trade-panel-inner { width: 310px; flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
   .tp-tabs { display: flex; border-bottom: 1px solid var(--border); flex: 0 0 auto; }
   .tp-tab { flex: 1; text-align: center; padding: 10px 0 9px; font-size: 12.5px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
@@ -3878,7 +3861,6 @@
   /* V83: off-screen history rows skip layout/paint (keeps panel open/close smooth). */
   #tp-hist-list .tp-item { content-visibility: auto; contain-intrinsic-size: auto 52px; }
   .trade-panel:not(.open) .tp-content { visibility: hidden; }
-  body.light-theme .trade-panel { --tp-accent: #9a6a00; --tp-blue: #1d5fd6; }
   .tp-tab.active { border-bottom-color: var(--text); }
   .tp-chip.selected, .tp-unit-toggle button.active { color: var(--text); border-color: var(--text); background: var(--ov8); }
   .tp-lots { color: var(--tp-accent); }
@@ -3914,7 +3896,7 @@
     background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
     color: var(--text); font-size: 12.5px; line-height: 1.4;
     padding: 9px 12px 11px 10px;
-    box-shadow: 0 6px 18px rgba(0,0,0,.28);
+    box-shadow: 0 6px 18px var(--shadow-soft);
   }
   .tl-toast.err { --tl-accent: var(--down); }
   .tl-toast.info { --tl-accent: var(--muted); }
@@ -4011,13 +3993,10 @@
      ========================================================================= */
   .settings-modal {
     --fb: "Inter", "Segoe UI", system-ui, sans-serif;
-    --ctl: #1a2130;
-    --ctl-text: #b4bccb;
     font-family: var(--fb);
     font-size: 13px;
     color: var(--text);
   }
-  body.light-theme .settings-modal { --ctl: #f1f2f5; --ctl-text: #3a4150; }
   .settings-modal :not(code):not(pre) { font-family: var(--fb); }
 
   .settings-sidebar { flex: 0 0 260px; padding: 26px 28px 36px 30px; }
@@ -4157,9 +4136,14 @@
 
   /* Market Data Overview */
   .mdo-control select { width: auto; }
+  /* v107 Update 4: Year / Month / tolerance dropdowns of Market Data Overview get their own
+     colors (default: follow the shared Setting-control colors, so nothing changes until a theme sets them). */
+  .mdo-control label { color: var(--mdo-label-text, var(--muted)); }
+  .mdo-control select { background-color: var(--mdo-select-bg, var(--ctl)); color: var(--mdo-select-text, var(--ctl-text)); }
+  .mdo-control select option { background: var(--mdo-select-option-bg, var(--panel)); color: var(--mdo-select-option-text, var(--text)); }
   .mdo-chart-box { border-radius: 8px; }
   .mdo-view-btn, .mdo-refresh-btn { background: var(--ctl); border: 1px solid var(--border); border-radius: 6px; }
-  .mdo-view-btn.active, .mdo-view-btn.active:hover { background: #5b6472; color: #fff; border-color: #5b6472; }
+  .mdo-view-btn.active, .mdo-view-btn.active:hover { background: var(--seg-active-bg); color: var(--seg-active-text); border-color: var(--seg-active-bg); }
 
   /* =========================================================================
      Toolbar redesign — minimal, borderless, single flat bar.
@@ -4370,11 +4354,11 @@
     flex: none;
     width: 15px;
     height: 15px;
-    color: var(--muted);
+    color: var(--tf-clock-icon, var(--muted));
     transition: color 0.14s ease;
   }
   .tf-dropdown.tfx .tf-ic svg { width: 15px; height: 15px; display: block; }
-  .tf-dropdown.tfx > .tf-dropdown-btn:hover .tf-ic { color: var(--text); }
+  .tf-dropdown.tfx > .tf-dropdown-btn:hover .tf-ic { color: var(--tf-clock-icon-hover, var(--text)); }
 
   /* open: the button shrinks to just the clock (the "collapse" cell) */
   .tf-dropdown.tfx.open > .tf-dropdown-btn { width: 30px; padding: 0; justify-content: center; }
@@ -4472,13 +4456,12 @@
     border-left: 0;
     border-top: 0;
     border-radius: 0;
-    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 14px 34px var(--shadow-symbol-list);
     overflow: hidden;
     max-height: none;
     scrollbar-gutter: auto;
     transform-origin: top left;
   }
-  body.light-theme .symbol-dropdown > .tf-dropdown-list { box-shadow: 0 14px 34px rgba(26, 36, 56, 0.18); }
   .symbol-dropdown.open > .tf-dropdown-list { animation: symMenuIn 0.2s var(--tfx-ease) both; }
 
   /* fixed search field: sits above the scrolling rows, not inside them */
@@ -5210,7 +5193,6 @@
                 <span><select id="canvas-price-line-width" class="canvas-thickness-select" title="Thickness"></select></span></div>
               <div class="tr chart"><span></span><span class="lb">Text</span><span><button type="button" id="canvas-text-swatch"></button></span><span></span>
                 <span><select id="canvas-text-size"></select></span></div>
-              <div class="tr chart"><span></span><span class="lb">Selector</span><span><button type="button" id="canvas-selector-swatch"></button></span><span></span><span></span></div>
               <!-- v94: labels are "Horizontal GridLine"/"Vertical GridLine"; swatch is always visible. -->
               <div class="tr chart"><span><input type="checkbox" id="canvas-grid-horz-checkbox" /></span><span class="lb">Horizontal GridLine</span><span><button type="button" id="canvas-grid-horz-swatch" class="canvas-grid-swatch"></button></span><span></span><span></span></div>
               <div class="tr chart"><span><input type="checkbox" id="canvas-grid-vert-checkbox" /></span><span class="lb">Vertical GridLine</span><span><button type="button" id="canvas-grid-vert-swatch" class="canvas-grid-swatch"></button></span><span></span><span></span></div>
@@ -5539,12 +5521,35 @@
         <input type="text" id="dcm-time-to-time" class="dcm-in dcm-num" placeholder="HH:MM:SS" inputmode="numeric" autocomplete="off" />
       </div>
     </div>
+    <!-- v108: Text (trend / horizontal / vertical line only; shown by JS).
+         Row = font size, placement (Top/Middle/Bottom), position on the line;
+         the textarea below is the same text the chart edits inline. -->
+    <div class="dcm-section" id="dcm-text-section">
+      <div class="dcm-g dcm-gt" id="dcm-text-row">
+        <span class="dcm-lab">Text</span>
+        <input type="text" id="dcm-text-size" class="dcm-in dcm-num dcm-text-size" inputmode="numeric" maxlength="3" autocomplete="off" title="Font size" />
+        <span class="dcm-sel" id="dcm-text-place-wrap">
+          <select id="dcm-text-place" title="Placement">
+            <option value="above">Top</option>
+            <option value="center">Middle</option>
+            <option value="below">Bottom</option>
+          </select>
+          <svg class="dcm-cv" viewBox="0 0 10 10"><path d="M1.5 3.5l3.5 3.5 3.5-3.5"/></svg>
+        </span>
+        <span class="dcm-sel" id="dcm-text-align-wrap">
+          <select id="dcm-text-align" title="Position on line"></select>
+          <svg class="dcm-cv" viewBox="0 0 10 10"><path d="M1.5 3.5l3.5 3.5 3.5-3.5"/></svg>
+        </span>
+      </div>
+      <textarea id="dcm-text-area" class="dcm-in dcm-text-area" rows="3" placeholder="Add text" autocomplete="off" spellcheck="false"></textarea>
+    </div>
     <button type="button" class="dcm-unlock" id="dcm-unlock">Unlock object</button>
   </div>
 
 
 <script src="js/window-controls.js"></script>
 <script src="js/state.js"></script>
+<script src="js/default-themes.js"></script>
 <script src="js/tz.js"></script>
 <script src="js/app-version.js"></script>
 <script src="js/icons.js"></script>

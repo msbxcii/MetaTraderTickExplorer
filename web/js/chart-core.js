@@ -86,7 +86,7 @@
     // unchanged, so none of the calculation/rendering behavior below moves.
     // V80: free (non-magnetic) vertical crosshair.
     if (App.FreeCrosshair) App.FreeCrosshair.attach(App.chart, dom.chartContainer, function () {
-      return { candles: App.candlesByTf[App.currentTf], tf: App.currentTf };
+      return { candles: App.candlesByTf[App.currentTf], tf: App.currentTf, series: App.series };
     });
 
     App.series = App.chart.addSeries(LightweightCharts.CandlestickSeries, {

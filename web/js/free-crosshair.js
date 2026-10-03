@@ -63,21 +63,59 @@
       return Math.floor(t);
     }
 
+    function indexOfTime(arr, time) {
+      var lo = 0, hi = arr.length - 1;
+      while (lo <= hi) {
+        var m = (lo + hi) >> 1;
+        if (arr[m].time === time) return m;
+        if (arr[m].time < time) lo = m + 1; else hi = m - 1;
+      }
+      return -1;
+    }
+    function restoreRaw(x, y) {
+      var d = getData && getData(), arr = d && d.candles;
+      if (!d || !d.series || !arr || !arr.length) return;
+      var ref = chart.timeScale().coordinateToLogical(x);
+      if (ref === null) return;
+      var i = Math.max(0, Math.min(arr.length - 1, Math.round(ref)));
+      var price = d.series.coordinateToPrice(y);
+      if (price === null) return;
+      try { chart.setCrosshairPosition(price, arr[i].time, d.series); } catch (_) {}
+    }
+    container._fcRefresh = function () { if (pending && !raf) raf = requestAnimationFrame(paint); };
+
     function paint() {
       raf = 0;
       if (!pending) return;
       var x = pending.x, y = pending.y;
       var ts = chart.timeScale();
+      var mg = container._magnet, mdata = mg ? getData() : null, mx = null;
+      if (mg && mdata && mdata.candles) {
+        // v109: Ctrl magnet - draw the crosshair on the snapped candle point.
+        var li = indexOfTime(mdata.candles, mg.time);
+        mx = li < 0 ? null : ts.logicalToCoordinate(li);
+        if (mx === null || mx === undefined) mg = null;
+      } else mg = null;
+      if (mg && mdata.series) {
+        try { chart.setCrosshairPosition(mg.price, mg.time, mdata.series); } catch (_) {}
+      } else if (container._fcWasMagnet || (window.App && ((App.currentTool && App.currentTool !== "cursor") || App.interaction))) {
+        // Ctrl released, or a drawing tool / handle drag has the overlay canvas
+        // on top (the chart's own crosshair gets no mouse events then): drive
+        // the horizontal line from the raw mouse position ourselves.
+        restoreRaw(x, y);
+      }
+      container._fcWasMagnet = !!mg;
       var paneW = ts.width(), axisH = ts.height();
       var paneH = container.clientHeight - axisH;
       if (x < 0 || x > paneW || y < 0 || y > container.clientHeight) { hide(); return; }
       var o = chart.options(), v = (o.crosshair && o.crosshair.vertLine) || {};
       var w = Math.max(1, Number(v.width) || 1);
+      if (mg) x = mx;
       line.style.borderLeft = w + "px " + (DASH[v.style] || "dotted") + " " + (v.color || "#6b7686");
       line.style.left = (Math.round(x) - Math.floor(w / 2)) + "px";
       line.style.height = paneH + "px";
       line.style.display = "block";
-      var t = timeAt(x);
+      var t = mg ? mg.time : timeAt(x);
       if (t === null) { label.style.display = "none"; return; }
       var data = getData();
       label.textContent = fmt(t, data.tf);

@@ -243,6 +243,49 @@
     return { time: anchor.time, price: fallbackPrice }; // vertical
   }
 
+  // v109: Ctrl magnet. While placing/dragging a point, Ctrl snaps it to the
+  // nearest candle (by X, so between two bars the closer one wins) and to
+  // the closest of that candle's High / body-top / body-bottom / Low.
+  // Nearest-of-four reproduces every zone rule (above High -> High, below
+  // Low -> Low, in-between -> nearer boundary). No candle under the cursor
+  // (live data not there yet) -> null, the point simply follows the mouse.
+  function magnetPoint(surface, pos) {
+    var arr = surface.getCandles ? surface.getCandles() : null;
+    if (!arr || !arr.length) return null;
+    var lg = surface.C.xToLogical(pos.x);
+    var price = surface.C.yToPrice(pos.y);
+    if (lg === null || lg === undefined || price === null || price === undefined) return null;
+    var i = Math.round(lg);
+    if (i < 0 || i > arr.length - 1) { setMagnet(surface, null); return null; }
+    var c = arr[i];
+    var lv = [c.high, Math.max(c.open, c.close), Math.min(c.open, c.close), c.low];
+    var best = lv[0];
+    for (var k = 1; k < 4; k++) if (Math.abs(lv[k] - price) < Math.abs(best - price)) best = lv[k];
+    var res = { time: c.time, price: best };
+    setMagnet(surface, res);
+    return res;
+  }
+
+  // v109: tell the surface's crosshair to draw on the snapped point instead
+  // of the raw mouse position (null = back to normal).
+  function setMagnet(surface, pt) {
+    var el = surface.container;
+    if (!el || (!el._magnet && !pt)) return;
+    el._magnet = pt;
+    if (el._fcRefresh) el._fcRefresh();
+  }
+  function clearAllMagnets() {
+    for (var i = 0; i < surfaces.length; i++) setMagnet(surfaces[i], null);
+  }
+  document.addEventListener("keyup", function (evt) { if (evt.key === "Control" || evt.key === "Meta") clearAllMagnets(); });
+  window.addEventListener("blur", clearAllMagnets);
+  // Ctrl pressed over a still mouse, tool armed but no first point yet.
+  document.addEventListener("keydown", function (evt) {
+    if ((evt.key !== "Control" && evt.key !== "Meta") || shiftDown || App.pendingObject || App.currentTool === "cursor") return;
+    if (!lastHover) return;
+    magnetPoint(lastHover.surface, mousePos(lastHover.surface, lastHover));
+  });
+
   var TOOL_DEFS = [
     { id: "cursor", label: "Cursor", icon: App.Icons.cursor() },
     { id: "trend",  label: "Trend Line", icon: App.Icons.trend() },
@@ -693,7 +736,7 @@
     }
   }
 
-  function returnToCursor() { setTool("cursor"); }
+  function returnToCursor() { clearAllMagnets(); setTool("cursor"); }
 
   // ---- Hit testing (for right-click selection) --------------------------
   function distPointToSegment(px, py, ax, ay, bx, by) {
@@ -796,6 +839,11 @@
         if (hitTestRectRegion(px, x, y, obj.style.fillOpacity)) return obj;
       } else if (obj.type === "fib" || obj.type === "fibext") {
         if (hitTestFibRegion(surface, obj, x, y)) return obj;
+      }
+      // v108: the text of a trend/h/v line is part of that line.
+      if (obj.lineText && obj.lineText.text && supportsLineText(obj)) {
+        var ltg = lineTextGeom(surface, obj, px);
+        if (ltg && ltg.mode === "text" && hitLineTextGeom(ltg, x, y)) return obj;
       }
     }
     return null;
@@ -1006,6 +1054,8 @@
       // v71 Update 1: a clone also keeps the source's Auto on/off state —
       // it's still a copy of "this exact object's settings".
       autoTf: !!obj.autoTf,
+      // v108: a clone keeps the line's text too.
+      lineText: obj.lineText ? { text: obj.lineText.text, size: obj.lineText.size, place: obj.lineText.place, align: obj.lineText.align } : undefined,
     };
   }
 
@@ -1019,6 +1069,14 @@
       var handleHit = hitTestHandles(surface, App.selectedObject, x, y);
       if (handleHit) return { obj: App.selectedObject, kind: "resize", role: handleHit.role, fixed: handleHit.fixed, axis: handleHit.axis, midPointIndex: handleHit.midPointIndex };
     }
+    // v108: "+ Add text" pill of the selected trend/h/v line.
+    var ps = App.selectedObject;
+    if (ps && !textEdit && !ps.locked && !ps.hidden && supportsLineText(ps) && !(ps.lineText && ps.lineText.text) &&
+        App.drawObjects.indexOf(ps) !== -1 && isObjectVisibleAtTf(ps, surfaceTf(surface))) {
+      var pxs = objectPixels(surface, ps);
+      var ptg = pxs ? lineTextGeom(surface, ps, pxs) : null;
+      if (ptg && ptg.mode === "pill" && hitLineTextGeom(ptg, x, y)) return { obj: ps, kind: "addtext" };
+    }
     var obj = hitTest(surface, x, y);
     if (obj) return { obj: obj, kind: "move" };
     return null;
@@ -1027,6 +1085,7 @@
   function cursorForHit(hit) {
     if (!hit) return "";
     if (hit.kind === "resize") return "crosshair";
+    if (hit.kind === "addtext") return "pointer";
     // Fix (item 2): this used to also return "crosshair" for a plain
     // *body* hover on a trend line (hit.kind === "move"), which is
     // visually identical to lightweight-charts' own default crosshair
@@ -1045,6 +1104,9 @@
     var hit = computeCursorHit(surface, pos.x, pos.y);
     surface.canvas.style.pointerEvents = hit ? "auto" : "";
     surface.canvas.style.cursor = cursorForHit(hit);
+    // v108: brighten the pill while hovered (repaint only when it changes).
+    var hp = hit && hit.kind === "addtext" ? hit.obj : null;
+    if (hp !== hoverPillObj) { hoverPillObj = hp; requestRender(); }
   }
 
   // v40: Ctrl+click on an object toggles it in/out of the multi-selection
@@ -1201,6 +1263,13 @@
     App.panelSelectedObjects = [hit.obj];
     App.panelLastClickedObject = hit.obj;
     if (App.ObjectsPanel) App.ObjectsPanel.refresh();
+    // v108: clicking the "+ Add text" pill opens the inline editor (default
+    // action prevented so the editor keeps the focus it is given here).
+    if (hit.kind === "addtext") {
+      evt.preventDefault();
+      startTextEdit(surface, hit.obj);
+      return;
+    }
     var workObj = hit.obj;
 
     var startLogical = C.xToLogical(pos.x);
@@ -1291,7 +1360,16 @@
     if (App.interaction.kind === "move") {
       var dl = curLogical - App.interaction.startLogical;
       var dp = curPrice - App.interaction.startPrice;
-      if (obj.type === "hline") {
+      // v109: Ctrl magnet while dragging a horizontal/vertical line - the
+      // line jumps to the snapped point as if it were the floating mouse.
+      var mgM = ((obj.type === "hline" || obj.type === "vline") && (evt.ctrlKey || evt.metaKey) && !shiftDown)
+        ? magnetPoint(surface, pos) : null;
+      if (!mgM) setMagnet(surface, null);
+      if (mgM && obj.type === "hline") {
+        obj.points[0].price = mgM.price;
+      } else if (mgM && obj.type === "vline") {
+        obj.points[0].time = mgM.time;
+      } else if (obj.type === "hline") {
         // Fix 2: a horizontal line only moves along its own axis (price).
         obj.points[0].price = App.interaction.startPoints[0].price + dp;
       } else if (obj.type === "vline") {
@@ -1322,6 +1400,10 @@
       // stored real time untouched.
       var curTimeR = C.logicalToTime(curLogical);
       if (curTimeR === null) return;
+      if ((evt.ctrlKey || evt.metaKey) && !shiftDown) { // v109: Ctrl magnet
+        var mgR = magnetPoint(surface, pos);
+        if (mgR) { curTimeR = mgR.time; curPrice = mgR.price; }
+      } else setMagnet(surface, null);
       if (obj.type === "trend") {
         // v70.2 Update 1: same dynamic horizontal/vertical snap as
         // placement, relative to the OTHER (still-fixed) endpoint.
@@ -1397,6 +1479,7 @@
       persistChange();
     }
     App.interaction = null;
+    clearAllMagnets();
     updateHoverArming(surface, pos);
   }
 
@@ -1421,7 +1504,205 @@
     return [];
   }
 
-  function drawOneObject(surface, ctx, obj, w, h) {
+  // ---- v108: Text on trend / horizontal / vertical lines -------------------
+  // obj.lineText = {text, size, place, align} (kept OUT of obj.style so presets
+  // and per-type default styles never carry text). Drawn straight on the
+  // overlay canvas (works on every panel); only the inline editor is DOM.
+  // hline text pins to the plot's left/right end, vline text to its top/bottom
+  // end, so both stay visible while the chart scrolls. Colour = line colour.
+  var LT_MIN = 8, LT_MAX = 64, LT_DEFAULT = 14;
+  var LT_FONT = "Inter, \"Segoe UI\", system-ui, sans-serif";
+  var ltMeasureCtx = document.createElement("canvas").getContext("2d");
+  var ltDefaults = {};
+  var textEdit = null;   // {obj, surface, el, live}
+  var hoverPillObj = null;
+
+  function supportsLineText(obj) {
+    return !!obj && (obj.type === "trend" || obj.type === "hline" || obj.type === "vline");
+  }
+  function makeLineText(type) {
+    return { text: "", size: LT_DEFAULT, place: "center", align: type === "hline" ? "end" : type === "vline" ? "start" : "center" };
+  }
+  function ensureLineText(obj) {
+    if (!obj.lineText) obj.lineText = makeLineText(obj.type);
+    return obj.lineText;
+  }
+  function clampTextSize(v) { return Math.max(LT_MIN, Math.min(LT_MAX, Math.round(v))); }
+  function plotOf(surface) {
+    return surface._paintPlot || plotAreaSize(surface, surface.canvas.width / App.dpr, surface.canvas.height / App.dpr);
+  }
+
+  // Cached on the text object (key = size|text) so repaints don't re-measure.
+  function ltMetrics(t, str, size) {
+    var key = size + "|" + str;
+    if (t._mk === key) return;
+    ltMeasureCtx.font = "600 " + size + "px " + LT_FONT;
+    var lines = (str || "W").split("\n"), mw = 0;
+    for (var i = 0; i < lines.length; i++) {
+      var m = ltMeasureCtx.measureText(lines[i] || "W").width;
+      if (m > mw) mw = m;
+    }
+    t._mk = key; t._ml = lines; t._mw = mw;
+  }
+
+  // Where the text (or the "+ Add text" pill / the live editor) sits.
+  // Returns null when nothing is shown for this object right now.
+  function lineTextGeom(surface, obj, px) {
+    var t = obj.lineText;
+    var isEd = !!(textEdit && textEdit.obj === obj);
+    var has = !!(t && t.text);
+    var isSel = App.selectedObject === obj && !obj.locked && !obj._preview && App.currentTool === "cursor";
+    var mode = isEd ? "edit" : has ? "text" : isSel ? "pill" : null;
+    if (!mode) return null;
+    if (!t) t = ltDefaults[obj.type] || (ltDefaults[obj.type] = makeLineText(obj.type));
+    var plot = plotOf(surface);
+    var A, B;
+    if (obj.type === "hline") { A = [0, px.y]; B = [plot.w, px.y]; }
+    else if (obj.type === "vline") { A = [px.x, 0]; B = [px.x, plot.h]; }
+    else { A = [px.x1, px.y1]; B = [px.x2, px.y2]; }
+    var vert = Math.abs(B[0] - A[0]) < Math.abs(B[1] - A[1]) * 0.035;
+    if (vert ? A[1] > B[1] : A[0] > B[0]) { var tmp = A; A = B; B = tmp; }
+    var dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
+    var ang = 0, side = 0;
+    if (!vert) { ang = Math.atan2(dy, dx); side = t.place === "above" ? -1 : t.place === "below" ? 1 : 0; }
+    var str = mode === "edit" ? textEdit.live : mode === "text" ? t.text : "+ Add text";
+    var sz = mode === "pill" ? LT_DEFAULT : t.size;
+    ltMetrics(t, str, sz);
+    var n = t._ml.length;
+    var w = t._mw + (has ? 16 : 12), h = sz * 1.35 * n + sz * 0.15;
+    var ext = vert ? h : w, m = 14;
+    var d = t.align === "start" ? m + ext / 2 : t.align === "end" ? L - m - ext / 2 : L / 2;
+    d = Math.max(ext / 2, Math.min(L - ext / 2, d));
+    var mx = A[0] + ux * d, my = A[1] + uy * d;
+    var gap = (vert || t.place === "center") ? Math.min(ext, L * 0.9) : 0;
+    var off = vert ? 0 : (h / 2 + 4);
+    return {
+      mode: mode, t: t, A: A, B: B, mx: mx, my: my, gap: gap, ux: ux, uy: uy, vert: vert,
+      cx: mx - Math.sin(ang) * off * side, cy: my + Math.cos(ang) * off * side,
+      ang: vert ? 0 : ang, w: w, h: h, sz: sz, lines: str.split("\n"),
+    };
+  }
+
+  function hitLineTextGeom(tg, x, y) {
+    var dx = x - tg.cx, dy = y - tg.cy;
+    if (tg.ang) {
+      var c = Math.cos(-tg.ang), s = Math.sin(-tg.ang);
+      var rx = dx * c - dy * s, ry = dx * s + dy * c;
+      dx = rx; dy = ry;
+    }
+    return Math.abs(dx) <= tg.w / 2 + 2 && Math.abs(dy) <= tg.h / 2 + 2;
+  }
+
+  function drawLineText(ctx, obj, tg) {
+    if (tg.mode === "edit") return; // the DOM editor paints it
+    var style = obj.style;
+    var op = style.borderOpacity == null ? 100 : style.borderOpacity;
+    ctx.save();
+    ctx.translate(tg.cx, tg.cy);
+    if (tg.ang) ctx.rotate(tg.ang);
+    ctx.textBaseline = "middle";
+    if (tg.mode === "pill") {
+      ctx.fillStyle = hexToRgba(style.borderColor, op * (hoverPillObj === obj ? 0.9 : 0.55));
+      ctx.textAlign = "left";
+      ctx.font = "300 " + (tg.sz * 1.6) + "px " + LT_FONT;
+      var plusW = ctx.measureText("+").width;
+      ctx.font = "400 " + tg.sz + "px " + LT_FONT;
+      var wordW = ctx.measureText("Add text").width;
+      var x0 = -(plusW + 2 + wordW) / 2;
+      ctx.font = "300 " + (tg.sz * 1.6) + "px " + LT_FONT;
+      ctx.fillText("+", x0, 1);
+      ctx.font = "400 " + tg.sz + "px " + LT_FONT;
+      ctx.fillText("Add text", x0 + plusW + 2, 0);
+    } else {
+      ctx.fillStyle = hexToRgba(style.borderColor, op);
+      ctx.textAlign = "center";
+      ctx.font = "600 " + tg.sz + "px " + LT_FONT;
+      var lh = tg.sz * 1.3, y0 = -(tg.lines.length - 1) * lh / 2;
+      for (var i = 0; i < tg.lines.length; i++) ctx.fillText(tg.lines[i], 0, y0 + i * lh);
+    }
+    ctx.restore();
+  }
+
+  // A line stroked in two pieces, leaving a gap where the text sits.
+  function strokeSeg(ctx, x1, y1, x2, y2) {
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  }
+
+  // Light update path (typing / wheel): repaint + debounced save only.
+  function lineTextTouched() {
+    requestRender();
+    if (App.DrawingPersistence) App.DrawingPersistence.scheduleSave();
+  }
+  function syncTextPanel(obj) {
+    if (App.DrawingContextMenu && App.DrawingContextMenu.syncText && App.activeMenuObject === obj) App.DrawingContextMenu.syncText();
+  }
+
+  function positionTextEditor() {
+    var te = textEdit;
+    if (!te) return;
+    var px = objectPixels(te.surface, te.obj);
+    var tg = px ? lineTextGeom(te.surface, te.obj, px) : null;
+    if (!tg) { te.el.style.display = "none"; return; }
+    var s = te.el.style, st = te.obj.style;
+    s.display = "block";
+    s.left = tg.cx + "px";
+    s.top = tg.cy + "px";
+    s.transform = "translate(-50%,-50%) rotate(" + (tg.ang * 180 / Math.PI) + "deg)";
+    s.fontSize = tg.t.size + "px";
+    s.color = hexToRgba(st.borderColor, st.borderOpacity == null ? 100 : st.borderOpacity);
+  }
+
+  function startTextEdit(surface, obj) {
+    if (!supportsLineText(obj) || obj.locked) return;
+    if (textEdit) endTextEdit(true);
+    var t = ensureLineText(obj);
+    var el = document.createElement("div");
+    el.className = "line-text-editor";
+    el.contentEditable = "true";
+    el.spellcheck = false;
+    el.textContent = t.text;
+    ["mousedown", "mouseup", "click", "dblclick", "contextmenu"].forEach(function (n) {
+      el.addEventListener(n, function (e) { e.stopPropagation(); });
+    });
+    el.addEventListener("input", function () {
+      if (!textEdit || textEdit.el !== el) return;
+      textEdit.live = el.textContent;
+      requestRender();
+    });
+    el.addEventListener("paste", function (e) {
+      e.preventDefault();
+      var txt = (e.clipboardData || window.clipboardData).getData("text") || "";
+      document.execCommand("insertText", false, txt);
+    });
+    el.addEventListener("keydown", function (e) {
+      e.stopPropagation();
+      if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); document.execCommand("insertText", false, "\n"); }
+      else if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); el.blur(); }
+    });
+    el.addEventListener("blur", function () { if (textEdit && textEdit.el === el) endTextEdit(true); });
+    surface.container.appendChild(el);
+    textEdit = { obj: obj, surface: surface, el: el, live: t.text };
+    positionTextEditor();
+    el.focus();
+    var r = document.createRange();
+    r.selectNodeContents(el);
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
+    requestRender();
+  }
+
+  function endTextEdit(commit) {
+    var te = textEdit;
+    if (!te) return;
+    textEdit = null;
+    if (commit && te.obj.lineText) te.obj.lineText.text = te.el.textContent.replace(/\u00a0/g, " ").trim();
+    if (te.el.parentNode) te.el.parentNode.removeChild(te.el);
+    persistChange();
+    syncTextPanel(te.obj);
+  }
+
+  function drawOneObject(surface, ctx, obj, w, h, skipText) {
     var px = objectPixels(surface, obj);
     if (!px) return;
     var style = obj.style;
@@ -1438,27 +1719,52 @@
     ctx.strokeStyle = hexToRgba(style.borderColor, style.borderOpacity == null ? 100 : style.borderOpacity);
     ctx.setLineDash(obj._preview ? [6, 4] : dashArrayFor(style.borderStyle, style.borderWidth));
 
+    // v108: text geometry (null for everything but a trend/h/v line that
+    // shows text, the "+ Add text" pill or the inline editor).
+    var tg = (obj._preview || !supportsLineText(obj)) ? null : lineTextGeom(surface, obj, px);
+
     if (obj.type === "hline") {
       if (hasBorder) {
-        ctx.beginPath();
-        ctx.moveTo(0, px.y + 0.5);
-        ctx.lineTo(w, px.y + 0.5);
-        ctx.stroke();
+        if (tg && tg.gap > 0) {
+          var hhg = tg.gap / 2;
+          strokeSeg(ctx, 0, px.y + 0.5, tg.mx - hhg, px.y + 0.5);
+          strokeSeg(ctx, tg.mx + hhg, px.y + 0.5, w, px.y + 0.5);
+        } else {
+          ctx.beginPath();
+          ctx.moveTo(0, px.y + 0.5);
+          ctx.lineTo(w, px.y + 0.5);
+          ctx.stroke();
+        }
       }
+      if (tg && !skipText) drawLineText(ctx, obj, tg);
     } else if (obj.type === "vline") {
       if (hasBorder) {
-        ctx.beginPath();
-        ctx.moveTo(px.x + 0.5, 0);
-        ctx.lineTo(px.x + 0.5, h);
-        ctx.stroke();
+        if (tg && tg.gap > 0) {
+          var vhg = tg.gap / 2;
+          strokeSeg(ctx, px.x + 0.5, 0, px.x + 0.5, tg.my - vhg);
+          strokeSeg(ctx, px.x + 0.5, tg.my + vhg, px.x + 0.5, h);
+        } else {
+          ctx.beginPath();
+          ctx.moveTo(px.x + 0.5, 0);
+          ctx.lineTo(px.x + 0.5, h);
+          ctx.stroke();
+        }
       }
+      if (tg && !skipText) drawLineText(ctx, obj, tg);
     } else if (obj.type === "trend") {
       if (hasBorder) {
-        ctx.beginPath();
-        ctx.moveTo(px.x1, px.y1);
-        ctx.lineTo(px.x2, px.y2);
-        ctx.stroke();
+        if (tg && tg.gap > 0) {
+          var thg = tg.gap / 2;
+          strokeSeg(ctx, tg.A[0], tg.A[1], tg.mx - tg.ux * thg, tg.my - tg.uy * thg);
+          strokeSeg(ctx, tg.mx + tg.ux * thg, tg.my + tg.uy * thg, tg.B[0], tg.B[1]);
+        } else {
+          ctx.beginPath();
+          ctx.moveTo(px.x1, px.y1);
+          ctx.lineTo(px.x2, px.y2);
+          ctx.stroke();
+        }
       }
+      if (tg && !skipText) drawLineText(ctx, obj, tg);
     } else if (obj.type === "rect") {
       var rx = Math.min(px.x1, px.x2), ry = Math.min(px.y1, px.y2);
       var rw = Math.abs(px.x2 - px.x1), rh = Math.abs(px.y2 - px.y1);
@@ -1753,6 +2059,7 @@
     ctx.setTransform(App.dpr, 0, 0, App.dpr, 0, 0);
     ctx.clearRect(0, 0, cssW, cssH);
     var plot = plotAreaSize(surface, cssW, cssH);
+    surface._paintPlot = plot; // v108: shared with the line-text geometry
     ctx.beginPath();
     ctx.rect(0, 0, plot.w, plot.h);
     ctx.clip();
@@ -1778,7 +2085,7 @@
       // so it doesn't obscure it; draw it first for those two types.
       if (obj.type === "hline" || obj.type === "vline") {
         drawSelectionHandles(surface, ctx, obj, cssW, cssH);
-        drawOneObject(surface, ctx, obj, cssW, cssH);
+        drawOneObject(surface, ctx, obj, cssW, cssH, true);
       } else {
         drawSelectionHandles(surface, ctx, obj, cssW, cssH);
       }
@@ -1805,7 +2112,9 @@
     ctx.restore();
     syncHlineAxisLabels(surface, selectedForChart);
     syncFillPrimitive(surface);
+    if (textEdit && textEdit.surface === surface) positionTextEditor();
     } finally {
+      surface._paintPlot = null;
       // The memo must never outlive the paint it belongs to: an interactive
       // call site (hit-testing mid-drag) reading a memoized value would be
       // reading coordinates from before the drag moved the object.
@@ -2128,8 +2437,12 @@
   // confirming click recomputed straight from the raw mouse position,
   // silently discarding an active Shift lock — the preview looked locked
   // but the finalized object snapped back to the unlocked cursor spot).
-  function computePendingPointValue(surface, pos, t, price) {
+  function computePendingPointValue(surface, pos, t, price, evt) {
     var tool = App.pendingObject.type;
+    if (evt && (evt.ctrlKey || evt.metaKey) && !shiftDown) { // v109: Ctrl magnet
+      var mgP = magnetPoint(surface, pos);
+      if (mgP) return mgP;
+    } else setMagnet(surface, null);
     var lastIdx = App.pendingObject.points.length - 1;
     if (shiftDown && tool === "trend") {
       return trendLockedPoint(surface, App.pendingObject.points[0], pos, t, price);
@@ -2152,7 +2465,10 @@
     var price = C.yToPrice(pos.y);
     if (logical === null || logical === undefined || price === null || price === undefined) return;
 
+    var mgL = (evt.ctrlKey || evt.metaKey) && !shiftDown && (App.currentTool === "hline" || App.currentTool === "vline")
+      ? magnetPoint(surface, pos) : null; // v109: Ctrl magnet for hline/vline placement
     if (App.currentTool === "hline") {
+      if (mgL) price = mgL.price;
       finalizeObject({ type: "hline", points: [{ logical: logical, price: price }], style: defaultStyle("hline") });
       returnToCursor();
     } else if (App.currentTool === "vline") {
@@ -2160,6 +2476,7 @@
       // logical index, so the line stays put on every timeframe/panel.
       var vt0 = C.logicalToTime(logical);
       if (vt0 === null) return;
+      if (mgL) { vt0 = mgL.time; price = mgL.price; }
       finalizeObject({ type: "vline", points: [{ time: vt0, price: price }], style: defaultStyle("vline") });
       returnToCursor();
     } else if (App.currentTool === "trend" || App.currentTool === "rect" || App.currentTool === "fib" || App.currentTool === "fibext") {
@@ -2179,6 +2496,10 @@
       if (!App.pendingObject) {
         var t0 = C.logicalToTime(logical);
         if (t0 === null) return;
+        if (evt.ctrlKey || evt.metaKey) { // v109: Ctrl magnet on the first point too
+          var mg0 = magnetPoint(surface, pos);
+          if (mg0) { t0 = mg0.time; price = mg0.price; }
+        }
         App.dragStart = { time: t0, price: price, surface: surface };
         App.pendingObject = {
           type: App.currentTool,
@@ -2202,7 +2523,7 @@
       // surface the placement started on tracks/confirms it.
       if (App.dragStart && App.dragStart.surface !== surface) return;
       var tN = C.logicalToTime(logical);
-      if (tN !== null) App.pendingObject.points[App.pendingObject.points.length - 1] = computePendingPointValue(surface, pos, tN, price);
+      if (tN !== null) App.pendingObject.points[App.pendingObject.points.length - 1] = computePendingPointValue(surface, pos, tN, price, evt);
 
       if (App.currentTool === "fibext" && App.pendingObject.points.length === 2) {
         // That was the 2nd click (Level -1) — Level -2/-1 are now both
@@ -2226,7 +2547,12 @@
     // v36.9 Fix 3: the live preview now tracks the mouse continuously while
     // a trend/rect/fib(ext) placement is pending — no button needs to be
     // held down.
-    if (!App.pendingObject) return;
+    if (!App.pendingObject) {
+      // v109: before the first click, Ctrl still shows the magnet crosshair.
+      if (App.currentTool !== "cursor" && (evt.ctrlKey || evt.metaKey) && !shiftDown) magnetPoint(surface, mousePos(surface, evt));
+      else setMagnet(surface, null);
+      return;
+    }
     if (App.dragStart && App.dragStart.surface !== surface) return;
     var C = surface.C;
     var pos = mousePos(surface, evt);
@@ -2239,7 +2565,7 @@
     // the last one in the array) so this same line drives the 2-point
     // trend/rect/fib preview AND fibext's growing 2-then-3-point preview.
     var lastIdx = App.pendingObject.points.length - 1;
-    App.pendingObject.points[lastIdx] = computePendingPointValue(surface, pos, t, price);
+    App.pendingObject.points[lastIdx] = computePendingPointValue(surface, pos, t, price, evt);
   }
 
   function onCanvasMouseUp(surface, evt) {
@@ -2276,6 +2602,41 @@
     surface.canvas.addEventListener("mousedown", function (evt) { markActive(); onCanvasMouseDown(surface, evt); });
     surface.canvas.addEventListener("mousemove", function (evt) { markActive(); onCanvasMouseMove(surface, evt); });
     surface.canvas.addEventListener("mouseup", function (evt) { markActive(); onCanvasMouseUp(surface, evt); });
+    // v108: text of the selected line — double-click edits it, the mouse
+    // wheel over it (only while the line is selected) changes the font size.
+    function selectedTextAt(evt) {
+      var o = App.selectedObject;
+      if (App.currentTool !== "cursor" || textEdit || !o || o.locked || o.hidden || !supportsLineText(o)) return null;
+      if (!o.lineText || !o.lineText.text || App.drawObjects.indexOf(o) === -1) return null;
+      if (!isObjectVisibleAtTf(o, surfaceTf(surface))) return null;
+      var p = objectPixels(surface, o);
+      var tg = p ? lineTextGeom(surface, o, p) : null;
+      var pos = mousePos(surface, evt);
+      return (tg && tg.mode === "text" && hitLineTextGeom(tg, pos.x, pos.y)) ? o : null;
+    }
+    surface.canvas.addEventListener("dblclick", function (evt) {
+      var o = selectedTextAt(evt);
+      if (o) { evt.preventDefault(); startTextEdit(surface, o); }
+    });
+    // v108: the wheel changes the font size only when the line is selected
+    // AND its whole text is selected (inline editor, all text highlighted).
+    // In every other state the wheel keeps its normal chart behaviour.
+    surface.container.addEventListener("wheel", function (evt) {
+      var te = textEdit;
+      if (!te || te.surface !== surface || !te.el.contains(evt.target)) return;
+      var o = te.obj;
+      if (!o.lineText || App.selectedObject !== o) return;
+      var sel = window.getSelection();
+      if (!sel || !sel.rangeCount || sel.isCollapsed || !te.el.contains(sel.anchorNode)) return;
+      var strip = function (s) { return s.replace(/\s/g, ""); };
+      var all = strip(te.el.textContent);
+      if (!all || strip(sel.toString()) !== all) return;
+      evt.preventDefault();
+      evt.stopPropagation();
+      o.lineText.size = clampTextSize(o.lineText.size + (evt.deltaY < 0 ? 1 : -1));
+      lineTextTouched();
+      syncTextPanel(o);
+    }, { passive: false, capture: true });
     surface.canvas.addEventListener("mouseleave", function () {
       // v21 restore: losing the mouse mid-drag of a trend/rect shouldn't
       // leave a half-finished pending object stuck forever.
@@ -2549,5 +2910,17 @@
     ensureTimeframesMap: ensureTimeframesMap,
     isObjectVisibleAtTf: isObjectVisibleAtTf,
     applyAutoTimeframes: applyAutoTimeframes,
+    // v108: Text on trend/h/v lines — used by drawing-context-menu.js.
+    LINE_TEXT_MIN: LT_MIN,
+    LINE_TEXT_MAX: LT_MAX,
+    supportsLineText: supportsLineText,
+    ensureLineText: ensureLineText,
+    lineTextTouched: lineTextTouched,
+    isLineTextVertical: function (obj) {
+      if (!obj || obj.type === "vline") return true;
+      if (obj.type === "hline") return false;
+      var s = primarySurface, p = s ? objectPixels(s, obj) : null;
+      return !!p && Math.abs(p.x2 - p.x1) < Math.abs(p.y2 - p.y1) * 0.035;
+    },
   };
 })();

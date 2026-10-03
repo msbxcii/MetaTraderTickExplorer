@@ -116,6 +116,13 @@
         // case) for the same "no extra bytes for the default" reason as
         // timeframes above.
         autoTf: obj.autoTf ? true : undefined,
+        // v108: text of a trend/h/v line (see drawing-engine.js).
+        lineText: obj.lineText ? {
+          text: String(obj.lineText.text || ""),
+          size: obj.lineText.size,
+          place: obj.lineText.place,
+          align: obj.lineText.align,
+        } : undefined,
       };
     });
   }
@@ -137,6 +144,20 @@
       return { id: id, name: (raw && typeof raw.name === "string" && raw.name) || "Folder" };
     }).filter(Boolean);
     return { folders: folders, maxId: maxId };
+  }
+
+  // v108: text settings of a trend/h/v line, clamped to the editor's ranges.
+  function sanitizeLineText(type, raw) {
+    if (!raw || typeof raw !== "object" || (type !== "trend" && type !== "hline" && type !== "vline")) return undefined;
+    var size = Math.round(Number(raw.size));
+    if (!Number.isFinite(size)) size = 14;
+    size = Math.max(8, Math.min(64, size));
+    var place = (raw.place === "above" || raw.place === "below") ? raw.place : "center";
+    var align = (raw.align === "start" || raw.align === "end" || raw.align === "center") ? raw.align : null;
+    if (type === "hline" && align === "center") align = null;
+    if (type === "vline" && align === "center") align = null;
+    if (!align) align = type === "hline" ? "end" : type === "vline" ? "start" : "center";
+    return { text: typeof raw.text === "string" ? raw.text : "", size: size, place: place, align: align };
   }
 
   function deserializeObjects(list, validFolderIds) {
@@ -202,6 +223,8 @@
         // as off, same "fail to the pre-feature behavior" policy as
         // timeframes above.
         autoTf: !!(raw && raw.autoTf),
+        // v108: missing/malformed reads back as "no text".
+        lineText: sanitizeLineText(type, raw && raw.lineText),
       };
     }).filter(Boolean);
 

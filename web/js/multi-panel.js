@@ -273,7 +273,7 @@
     }
     // V80: free (non-magnetic) vertical crosshair.
     if (App.FreeCrosshair) App.FreeCrosshair.attach(chart, mount, function () {
-      return { candles: panel.candles, tf: panel.tf };
+      return { candles: panel.candles, tf: panel.tf, series: series };
     });
 
     var drawSurface = App.DrawingEngine.createPanelSurface({

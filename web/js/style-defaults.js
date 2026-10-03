@@ -333,7 +333,28 @@
   // overwriting that preset (per spec: two presets can never share a
   // name) — the row being edited (if any) is folded into it rather than
   // left behind as a stale duplicate.
-  function savePreset(type, name, style, targetId) {
+  // v108: a preset of a trend/h/v line can carry the line's text (text, font
+  // size, placement, position). Only stored when the text is non-empty; a
+  // preset without it leaves an object's own text untouched when applied.
+  function sanitizeLineText(type, raw) {
+    if (!raw || typeof raw !== "object" || typeof raw.text !== "string" || !raw.text) return undefined;
+    if (type !== "trend" && type !== "hline" && type !== "vline") return undefined;
+    var size = Math.round(Number(raw.size));
+    if (!Number.isFinite(size)) size = 14;
+    size = Math.max(8, Math.min(64, size));
+    var place = (raw.place === "above" || raw.place === "below") ? raw.place : "center";
+    var okAlign = type === "trend" ? ["start", "center", "end"] : ["start", "end"];
+    var align = okAlign.indexOf(raw.align) !== -1 ? raw.align : (type === "hline" ? "end" : type === "vline" ? "start" : "center");
+    return { text: raw.text, size: size, place: place, align: align };
+  }
+
+  function getPresetLineText(type, id) {
+    if (VALID_TYPES.indexOf(type) === -1 || !presetsCache) return null;
+    var found = (presetsCache[type] || []).filter(function (p) { return p.id === id; })[0];
+    return (found && sanitizeLineText(type, found.lineText)) || null;
+  }
+
+  function savePreset(type, name, style, targetId, lineText) {
     if (VALID_TYPES.indexOf(type) === -1) return null;
     var cleanName = (name || "").trim();
     if (!cleanName) return null;
@@ -342,9 +363,11 @@
     var byName = list.filter(function (p) { return p.name === cleanName; })[0];
     var byId = targetId != null ? list.filter(function (p) { return p.id === targetId; })[0] : null;
     var cleanStyle = sanitizeStyle(type, style);
+    var cleanText = sanitizeLineText(type, lineText); // v108
     var resultId;
     if (byName) {
       byName.style = cleanStyle;
+      byName.lineText = cleanText;
       if (byId && byId !== byName) {
         presetsCache[type] = list.filter(function (p) { return p !== byId; });
       }
@@ -352,10 +375,11 @@
     } else if (byId) {
       byId.name = cleanName;
       byId.style = cleanStyle;
+      byId.lineText = cleanText;
       resultId = byId.id;
     } else {
       resultId = nextPresetIdFor(presetsCache);
-      presetsCache[type].push({ id: resultId, name: cleanName, style: cleanStyle });
+      presetsCache[type].push({ id: resultId, name: cleanName, style: cleanStyle, lineText: cleanText });
     }
     scheduleSave();
     return resultId;
@@ -390,6 +414,7 @@
     setDefaultStyle: setDefaultStyle,
     listPresets: listPresets,
     getPreset: getPreset,
+    getPresetLineText: getPresetLineText,
     savePreset: savePreset,
     deletePreset: deletePreset,
     getAutoDefault: getAutoDefault,

@@ -186,6 +186,10 @@
     // freshly-drawn object's untouched (all-visible) state into a stored
     // per-object override.
     renderTimeframesPanel(obj);
+    // v108: Text section — trend / horizontal / vertical line only.
+    var hasLineText = !!(App.DrawingEngine && App.DrawingEngine.supportsLineText(obj));
+    if (dom.dcmTextSection) dom.dcmTextSection.style.display = hasLineText ? "flex" : "none";
+    if (hasLineText) syncTextFields(obj, true);
 
     dom.contextMenuEl.classList.add("open");
     // Position after it's visible so we can read its real size and keep
@@ -329,6 +333,93 @@
     });
     if (dom.dcmTfClockIcon && App.Icons && App.Icons.clock) dom.dcmTfClockIcon.innerHTML = App.Icons.clock();
   })();
+
+  // ---- v108: Text section (trend / horizontal / vertical line) -------------
+  // Same fields as the inline text on the chart: font size, placement
+  // (Top/Middle/Bottom, hidden when the line's text sits across it) and
+  // position on the line, plus the text itself. Everything edits
+  // obj.lineText; the chart repaints through the engine.
+  function lineTextOf(obj) {
+    return obj && App.DrawingEngine && App.DrawingEngine.supportsLineText(obj) ? App.DrawingEngine.ensureLineText(obj) : null;
+  }
+
+  // `force` also refreshes a field that currently has focus (used on open).
+  function syncTextFields(obj, force) {
+    if (!dom.dcmTextSection || !obj || !App.DrawingEngine) return;
+    var t = obj.lineText || { text: "", size: 14, place: "center",
+      align: obj.type === "hline" ? "end" : obj.type === "vline" ? "start" : "center" };
+    var vert = App.DrawingEngine.isLineTextVertical(obj);
+    var opts = obj.type === "hline" ? [["start", "Left"], ["end", "Right"]]
+      : obj.type === "vline" ? [["start", "Top"], ["end", "Bottom"]]
+      : vert ? [["start", "Top"], ["center", "Center"], ["end", "Bottom"]]
+      : [["start", "Left"], ["center", "Center"], ["end", "Right"]];
+    var key = opts.map(function (o) { return o[1]; }).join("|");
+    if (dom.dcmTextAlign._key !== key) {
+      dom.dcmTextAlign.innerHTML = opts.map(function (o) { return '<option value="' + o[0] + '">' + o[1] + "</option>"; }).join("");
+      dom.dcmTextAlign._key = key;
+    }
+    dom.dcmTextAlign.value = t.align;
+    dom.dcmTextPlace.value = t.place;
+    // v108: with no placement box (vertical text) the size box moves right,
+    // directly next to the position box.
+    var noPlace = vert || obj.type === "vline";
+    var placeWrap = document.getElementById("dcm-text-place-wrap");
+    if (placeWrap) placeWrap.style.display = noPlace ? "none" : "";
+    var textRow = document.getElementById("dcm-text-row");
+    if (textRow) textRow.classList.toggle("dcm-gt-nop", noPlace);
+    if (force || document.activeElement !== dom.dcmTextSize) dom.dcmTextSize.value = String(t.size);
+    if (force || document.activeElement !== dom.dcmTextArea) dom.dcmTextArea.value = t.text;
+  }
+
+  if (dom.dcmTextArea) {
+    dom.dcmTextArea.addEventListener("input", function () {
+      var t = lineTextOf(App.activeMenuObject);
+      if (!t) return;
+      t.text = dom.dcmTextArea.value;
+      App.DrawingEngine.lineTextTouched();
+    });
+    dom.dcmTextArea.addEventListener("change", function () {
+      if (lineTextOf(App.activeMenuObject)) persistChange();
+    });
+    dom.dcmTextArea.addEventListener("keydown", function (evt) { evt.stopPropagation(); });
+  }
+  if (dom.dcmTextSize) {
+    dom.dcmTextSize.addEventListener("input", function () {
+      var t = lineTextOf(App.activeMenuObject);
+      if (!t) return;
+      dom.dcmTextSize.value = dom.dcmTextSize.value.replace(/\D/g, "");
+      var v = Number(dom.dcmTextSize.value);
+      if (v >= App.DrawingEngine.LINE_TEXT_MIN && v <= App.DrawingEngine.LINE_TEXT_MAX) {
+        t.size = v;
+        App.DrawingEngine.lineTextTouched();
+      }
+    });
+    dom.dcmTextSize.addEventListener("blur", function () {
+      var t = lineTextOf(App.activeMenuObject);
+      if (t) { dom.dcmTextSize.value = String(t.size); persistChange(); }
+    });
+    dom.dcmTextSize.addEventListener("keydown", function (evt) {
+      evt.stopPropagation();
+      var t = lineTextOf(App.activeMenuObject);
+      if (!t) return;
+      if (evt.key === "Enter") { dom.dcmTextSize.blur(); return; }
+      if (evt.key === "ArrowUp" || evt.key === "ArrowDown") {
+        evt.preventDefault();
+        var lo = App.DrawingEngine.LINE_TEXT_MIN, hi = App.DrawingEngine.LINE_TEXT_MAX;
+        t.size = Math.max(lo, Math.min(hi, t.size + (evt.key === "ArrowUp" ? 1 : -1)));
+        dom.dcmTextSize.value = String(t.size);
+        App.DrawingEngine.lineTextTouched();
+      }
+    });
+  }
+  if (dom.dcmTextPlace) dom.dcmTextPlace.addEventListener("change", function () {
+    var t = lineTextOf(App.activeMenuObject);
+    if (t) { t.place = dom.dcmTextPlace.value; persistChange(); }
+  });
+  if (dom.dcmTextAlign) dom.dcmTextAlign.addEventListener("change", function () {
+    var t = lineTextOf(App.activeMenuObject);
+    if (t) { t.align = dom.dcmTextAlign.value; persistChange(); }
+  });
 
   // v40: minimal Hide/Lock/Delete menu for a right-click that landed on an
   // object which is part of a multi-selection (see drawing-engine.js's
@@ -610,6 +701,12 @@
     var style = App.StyleDefaults.getPreset(App.activeMenuObject.type, presetId);
     if (!style) return;
     App.activeMenuObject.style = style;
+    // v108: a preset saved with text also creates that text (size, placement
+    // and position included) on the object.
+    var presetText = App.StyleDefaults.getPresetLineText ? App.StyleDefaults.getPresetLineText(App.activeMenuObject.type, presetId) : null;
+    if (presetText && App.DrawingEngine && App.DrawingEngine.supportsLineText(App.activeMenuObject)) {
+      App.activeMenuObject.lineText = presetText;
+    }
     // Re-populate every style field from the newly applied style so the
     // panel reflects it right away.
     openContextMenuStyleFieldsOnly(App.activeMenuObject);
@@ -647,7 +744,7 @@
     if (!App.activeMenuObject || !App.StyleDefaults || !dom.dcmPresetSaveInput) return;
     var name = dom.dcmPresetSaveInput.value.trim();
     if (!name) { closePresetSaveBox(); return; }
-    var id = App.StyleDefaults.savePreset(App.activeMenuObject.type, name, App.activeMenuObject.style, editingPresetId);
+    var id = App.StyleDefaults.savePreset(App.activeMenuObject.type, name, App.activeMenuObject.style, editingPresetId, App.activeMenuObject.lineText);
     closePresetSaveBox();
     if (id === null) return;
     refreshPresetOptions(App.activeMenuObject.type);
@@ -696,6 +793,8 @@
       if (dom.dcmFibEnableDescription) dom.dcmFibEnableDescription.checked = !!obj.style.showDescription;
       renderFibLevelTable(obj);
     }
+    // v108: refresh the Text section (a preset may have set the text).
+    if (App.DrawingEngine && App.DrawingEngine.supportsLineText(obj)) syncTextFields(obj, true);
   }
 
   // v33.2 fix 2: commit on Enter/blur, same as the panel's inline rename —
@@ -933,5 +1032,7 @@
     close: closeContextMenu,
     openGroup: openGroupContextMenu,
     closeGroup: closeGroupContextMenu,
+    // v108: refresh the Text section after the chart changed the text/size.
+    syncText: function () { if (App.activeMenuObject) syncTextFields(App.activeMenuObject, false); },
   };
 })();
