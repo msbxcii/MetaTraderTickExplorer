@@ -196,6 +196,14 @@
     return '<svg viewBox="0 0 122.88 121.51" fill="currentColor" stroke="none"><path d="M28.66,1.64H58.88L44.46,16.71H28.66a13.52,13.52,0,0,0-9.59,4l0,0a13.52,13.52,0,0,0-4,9.59v76.14H91.21a13.5,13.5,0,0,0,9.59-4l0,0a13.5,13.5,0,0,0,4-9.59V77.3l15.07-15.74V92.85a28.6,28.6,0,0,1-8.41,20.22l0,.05a28.58,28.58,0,0,1-20.2,8.39H11.5a11.47,11.47,0,0,1-8.1-3.37l0,0A11.52,11.52,0,0,1,0,110V30.3A28.58,28.58,0,0,1,8.41,10.09L8.46,10a28.58,28.58,0,0,1,20.2-8.4ZM73,76.47l-29.42,6,4.25-31.31L73,76.47ZM57.13,41.68,96.3.91A2.74,2.74,0,0,1,99.69.38l22.48,21.76a2.39,2.39,0,0,1-.19,3.57L82.28,67,57.13,41.68Z"/></svg>';
   }
 
+  // v110: Price Data / Economic News source buttons (Setting > Market Data Overview).
+  function iconSrcPrice() {
+    return '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 1.8v2.4M5 11.8v2.4M11 1.8v3M11 10.2v4"/><rect x="3.6" y="4.2" width="2.8" height="7.6" rx=".6"/><rect x="9.6" y="4.8" width="2.8" height="5.4" rx=".6"/></svg>';
+  }
+  function iconSrcNews() {
+    return '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="2.2" y="2.4" width="11.6" height="11.2" rx="1.4"/><path d="M5 5.6h6M5 8h6M5 10.4h3.6"/></svg>';
+  }
+
   function iconClock() {
     return '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 4.6V8l2.6 1.6"/></svg>';
   }
@@ -237,5 +245,7 @@
     tabConfiguration: iconTabConfiguration,
     tabAbout: iconTabAbout,
     clock: iconClock,
+    srcPrice: iconSrcPrice,
+    srcNews: iconSrcNews,
   };
 })();

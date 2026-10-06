@@ -1,4 +1,6 @@
 // =============================================================================
+// v124: Replay start/TF-change now shows only the partial candle up to the playhead;
+// building no longer aliases the window candle (ticks were ignored until next bucket).
 // replay-bar.js — v41: Bar Replay + Sliding Window parity.
 //
 // Lets the user pick a point in the past, hides every candle after it, and
@@ -95,18 +97,21 @@
     hasSelection = false;
     setToggleActive(true);
     dom.replayBar.classList.add("rb-waiting");
+    if (App.DrawingEngine && App.DrawingEngine.setReplayFolderHidden) App.DrawingEngine.setReplayFolderHidden(false); // v120
     // v40 Update 4: the reference timeframe dropdown stays fully usable
     // while Replay is active/playing — see App.ReplayBar.changeTimeframe()
     // and buildTfDropdown()'s click handler in chart-core.js.
     setPlayIcon(false);
     // v40 Update 6: jump straight into Select Date so the user isn't left
     // looking at an empty "waiting" bar with no obvious next step.
-    openSelectDate();
+    openSelectDate(true);
   }
 
   function exitReplayMode() {
     if (!App.replayActive) return;
     stopPlayback();
+    // v120: remember the playhead so the next Replay can resume from it.
+    if (hasSelection && lastFedTime !== null && App.ReplayTrade) App.ReplayTrade.saveLast(lastFedTime);
     App.replayActive = false;
     hasSelection = false;
     building = null;
@@ -123,7 +128,7 @@
     // and drop every object the user drew WHILE Replay was active — both
     // are scoped to the replay session that's now ending.
     restoreObjectVisibility();
-    purgeReplayTempObjects();
+    if (App.DrawingEngine && App.DrawingEngine.setReplayFolderHidden) App.DrawingEngine.setReplayFolderHidden(true); // v120
     restoreLiveData();
     document.dispatchEvent(new CustomEvent("App:replayExited"));
   }
@@ -155,6 +160,7 @@
   // =====================================================================
   var calYear = null, calMonth = null;   // month currently shown (0-indexed)
   var calSelectedTs = null;              // seconds, floored to the day
+  var resumeTs = null;                   // v120: proposed resume time (broker time)
   var bounds = null;                     // {first_time, last_time} for tf=1
 
   var WEEKDAY_LABELS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
@@ -254,12 +260,18 @@
     return ok ? ts : null;
   }
 
-  function openSelectDate() {
+  function openSelectDate(fromToggle) {
     if (!App.replayActive || App.currentTf === null || !window.pywebview) return;
     App.DrawingContextMenu && App.DrawingContextMenu.close && App.DrawingContextMenu.close();
 
     var current = App.candlesByTf[App.currentTf] || [];
     var seedTs = current.length ? current[current.length - 1].time : Math.floor(Date.now() / 1000);
+    // v120: opening Replay proposes the previous replay's last time (resume).
+    var last = fromToggle === true && App.ReplayTrade ? App.ReplayTrade.getLast() : null;
+    resumeTs = last;
+    if (last) seedTs = last;
+    var titleEl = document.getElementById("rbd-title");
+    if (titleEl) titleEl.textContent = last ? "Resume previous replay" : "Select date";
     if (App.Tz) seedTs = App.Tz.toUser(seedTs);  // v92
     dom.rbdDateInput.value = fmtDate(seedTs);
     dom.rbdTimeInput.value = fmtTime(seedTs);
@@ -273,6 +285,15 @@
 
     window.pywebview.api.get_history_bounds(1).then(function (b) {
       bounds = b || null;
+      // v120: saved time outside the cached data -> fall back to the normal default.
+      if (resumeTs && !dayBoundsOk(App.Tz ? App.Tz.toUser(resumeTs) : resumeTs)) {
+        resumeTs = null;
+        var t0 = current.length ? current[current.length - 1].time : Math.floor(Date.now() / 1000);
+        if (App.Tz) t0 = App.Tz.toUser(t0);
+        dom.rbdDateInput.value = fmtDate(t0); dom.rbdTimeInput.value = fmtTime(t0);
+        calSelectedTs = t0;
+        if (titleEl) titleEl.textContent = "Select date";
+      }
       renderCalendar();
       validateFields();
     }).catch(function () {
@@ -322,12 +343,16 @@
   function applyObjectVisibility(cutoffTime) {
     restoreObjectVisibility();
     if (!App.DrawingEngine || !App.DrawingEngine.getAnchorTime) return;
+    var rf = {};
+    App.objectFolders.forEach(function (f) { if (f.replay) rf[f.id] = true; });
     App.drawObjects.forEach(function (obj) {
       if (obj.hidden) return; // already hidden by the user - leave it alone
+      if (rf[obj.folderId]) return; // v120: "On Replay" objects are always visible
       var t = App.DrawingEngine.getAnchorTime(obj);
       if (t === null || t === undefined) return;
       if (t > cutoffTime) {
         obj.hidden = true;
+        obj._replayHid = true; // v126: temporary Replay hiding is never saved to disk
         forceHiddenIds.push(obj.id);
       }
     });
@@ -338,18 +363,12 @@
     if (!forceHiddenIds.length) return;
     forceHiddenIds.forEach(function (id) {
       for (var i = 0; i < App.drawObjects.length; i++) {
-        if (App.drawObjects[i].id === id) { App.drawObjects[i].hidden = false; break; }
+        if (App.drawObjects[i].id === id) { if (App.drawObjects[i]._replayHid) App.drawObjects[i].hidden = false; App.drawObjects[i]._replayHid = false; break; } // v126
       }
     });
     forceHiddenIds = [];
+    if (App.DrawingPersistence) App.DrawingPersistence.scheduleSave(); // v126
     if (App.ObjectsPanel && App.ObjectsPanel.refresh) App.ObjectsPanel.refresh();
-  }
-
-  function purgeReplayTempObjects() {
-    if (!App.DrawingEngine || !App.DrawingEngine.removeObject) return;
-    App.drawObjects.slice().forEach(function (obj) {
-      if (obj._replayTemp) App.DrawingEngine.removeObject(obj);
-    });
   }
 
   // v41: convert the bounded Jump-Time result into the same two-slot
@@ -388,53 +407,98 @@
   // them — Select Date's "hide the future, land on this moment" is just
   // that same jump, plus one truncation of the freshly-loaded array.
   // =====================================================================
+  // v124: the candle containing the playhead must hold only 1s data up to
+  // `ts`. Rebuilds that last candle (as a NEW object) from <=tf 1s rows.
+  function fitTailToPlayhead(tf, candles, ts) {
+    var target = Math.floor(ts / tf) * tf;
+    var api = window.pywebview && window.pywebview.api;
+    var last = candles.length ? candles[candles.length - 1] : null;
+    if (tf <= 1 || !last || last.time !== target || !api || !api.get_history_page_after) {
+      return Promise.resolve(candles);
+    }
+    return api.get_history_page_after(1, target - 1, Math.min(tf, ts - target + 1)).then(function (payload) {
+      var cs = Array.isArray(payload) ? payload : ((payload && payload.candles) || []);
+      cs = cs.filter(function (c) { return c.time >= target && c.time <= ts; });
+      var out = candles.slice(0, -1);
+      if (cs.length) {
+        var n = { time: target, open: cs[0].open, high: cs[0].high, low: cs[0].low, close: cs[cs.length - 1].close };
+        for (var k = 1; k < cs.length; k++) {
+          if (cs[k].high > n.high) n.high = cs[k].high;
+          if (cs[k].low < n.low) n.low = cs[k].low;
+        }
+        out.push(n);
+      }
+      return out;
+    }).catch(function () { return candles; });
+  }
+
+  function cloneC(c) {
+    return c ? { time: c.time, open: c.open, high: c.high, low: c.low, close: c.close } : null;
+  }
+
+  // v126: Replay start no longer uses the Jump Time jump (it painted the future candles for a moment
+  // and centred the playhead). Like Multichart panels 2/3, only history up to the playhead is read
+  // and drawn, and the playhead sits at the right edge from the very first paint.
   function beginReplayAt(ts) {
-    var tf = App.currentTf;
-    if (tf === null || !App.JumpTime) return;
+    var tf = App.currentTf, api = window.pywebview && window.pywebview.api;
+    if (tf === null || !api || !api.get_history_page) return;
     stopPlayback();
 
-    App.JumpTime.jumpToTimestamp(ts).then(function (ok) {
-      if (!ok || App.currentTf !== tf) return;
+    var target = Math.floor(ts / tf) * tf;
+    var reqGen = ++App.historyGeneration;          // cancels in-flight history loads / jumps
+    ++App.jumpTimeRequestGeneration;
+    var token = (App.ChartCore && App.ChartCore.acquireLoadingLock)
+      ? App.ChartCore.acquireLoadingLock(tf, "jump") : (App.loadingDirectionByTf[tf] = "jump", null);
+    function unlock() {
+      if (token !== null && App.ChartCore && App.ChartCore.releaseLoadingLock) App.ChartCore.releaseLoadingLock(tf, token);
+      else App.loadingDirectionByTf[tf] = null;
+    }
 
-      var target = Math.floor(ts / tf) * tf;
-      var arr = (App.candlesByTf[tf] || []).filter(function (c) { return c.time <= target; });
-
-      // v41: Replay is now rebased into the exact same two resident slots as
-      // normal history. The selected point is the temporary "live edge";
-      // walking left invokes the battle-tested SlidingWindow edge loader,
-      // and walking right can only return through pages bounded by the
-      // current Replay playhead.
-      rebaseReplayWindow(tf, arr, App.windowByTf[tf], false);
-      arr = App.candlesByTf[tf];
+    api.get_history_page(tf, Number(ts) + 1, App.LAZY_LOAD_CHUNK).then(function (payload) {
+      var cs = Array.isArray(payload) ? payload : ((payload && payload.candles) || []);
+      var isOldest = !!(payload && !Array.isArray(payload) && payload.is_oldest);
+      cs = cs.filter(function (c) { return c.time <= target; });   // never any future candle
+      if (!cs.length || reqGen !== App.historyGeneration || App.currentTf !== tf || !App.replayActive) { unlock(); return null; }
+      return fitTailToPlayhead(tf, cs, ts).then(function (fitted) { return { fitted: fitted, isOldest: isOldest }; });
+    }).then(function (r) {
+      if (!r) return;
+      if (reqGen !== App.historyGeneration || App.currentTf !== tf || !App.replayActive) { unlock(); return; }
+      var DE = App.DrawingEngine, hide = !!(DE && DE.setJumpRenderSuppressed);
+      App.jumpTransactionActive = true;             // edge loader stays quiet during this one move
+      if (App.ChartCore && App.ChartCore.setAutoFit) App.ChartCore.setAutoFit(true);
+      if (hide) DE.setJumpRenderSuppressed(true);
+      rebaseReplayWindow(tf, r.fitted, null, r.isOldest);
+      var arr = App.candlesByTf[tf];
       if (App.series) App.series.setData(arr);
-      // v40 Update 1: seed the dashed live-price line from the replayed
-      // point itself, not whatever the real market happened to be doing
-      // the moment Replay was opened.
-      if (arr.length && App.ChartCore && App.ChartCore.setLivePrice) {
-        App.ChartCore.setLivePrice(arr[arr.length - 1].close);
-      }
-
-      App.replayTf = tf;
-      if (!App.replayCutoffByTf) App.replayCutoffByTf = {};
-      App.replayCutoffByTf[tf] = target;
-      building = arr.length ? arr[arr.length - 1] : null;
-      queue = [];
-      reachedLive = false;
-      fetching = false;
-      // The next 1-second candle to stream in is the first one AFTER this
-      // timeframe's already-complete bucket, i.e. after (target + tf - 1).
-      cursorTime = target + tf - 1;
-      lastFedTime = cursorTime;
-      hasSelection = true;
-      dom.replayBar.classList.remove("rb-waiting");
-      // v40 Update 5: hide every object anchored after this point for the
-      // rest of the replay session.
-      applyObjectVisibility(target);
-      // v40 Update 2: let multi-panel.js reload every companion panel at
-      // this same point, on each companion's own timeframe.
-      document.dispatchEvent(new CustomEvent("App:replayStarted", { detail: { ts: target, tf: tf } }));
-      prefetch();
+      if (arr.length && App.chart) App.chart.timeScale().scrollToRealTime();
+      finishBegin(tf, target, tf > 1 ? ts : target, arr);   // hides future objects before the reveal
+      unlock();
+      if (hide && DE.revealAfterJumpSettles) DE.revealAfterJumpSettles(function () { App.jumpTransactionActive = false; });
+      else { if (hide) DE.setJumpRenderSuppressed(false); App.jumpTransactionActive = false; }
+    }).catch(function (err) {
+      unlock();
+      App.jumpTransactionActive = false;
+      console.error("Bar Replay: start failed:", err);
     });
+  }
+
+  function finishBegin(tf, target, at, arr) {
+    if (arr.length && App.ChartCore && App.ChartCore.setLivePrice) App.ChartCore.setLivePrice(arr[arr.length - 1].close);
+    App.replayTf = tf;
+    if (!App.replayCutoffByTf) App.replayCutoffByTf = {};
+    App.replayCutoffByTf[tf] = target;
+    building = arr.length && arr[arr.length - 1].time === target ? cloneC(arr[arr.length - 1]) : null; // v124: never alias window candle
+    queue = [];
+    reachedLive = false;
+    fetching = false;
+    // Next 1s candle to stream in is the first one after `at`.
+    cursorTime = tf > 1 ? at : target + tf - 1;
+    lastFedTime = cursorTime;
+    hasSelection = true;
+    dom.replayBar.classList.remove("rb-waiting");
+    applyObjectVisibility(at);
+    document.dispatchEvent(new CustomEvent("App:replayStarted", { detail: { ts: target, tf: tf, at: at, price: arr.length ? arr[arr.length - 1].close : undefined } }));
+    prefetch();
   }
 
   // =====================================================================
@@ -459,8 +523,20 @@
     });
   }
 
+  // v126: the playhead is also saved while Replay runs (at most every 5 s) and when the window
+  // closes, so quitting with Replay still on resumes from the last position.
+  var lastPosSaveAt = 0;
+  function savePlayhead(now) {
+    if (!App.replayActive || !hasSelection || lastFedTime === null || !App.ReplayTrade) return;
+    lastPosSaveAt = Date.now();
+    App.ReplayTrade.saveLast(lastFedTime, now);
+  }
+  window.addEventListener("beforeunload", function () { savePlayhead(true); });
+  window.addEventListener("pagehide", function () { savePlayhead(true); });
+
   function feedOneCandle(c) {
     lastFedTime = c.time;
+    if (Date.now() - lastPosSaveAt > 5000) savePlayhead(false);
     var tf = App.replayTf;
     if (tf !== null) {
       if (!App.replayCutoffByTf) App.replayCutoffByTf = {};
@@ -578,7 +654,7 @@
     var w = App.windowByTf[tf];
     if (!w || !w.newer || !w.newer.length) return;
     if (w.newer[w.newer.length - 1] && building && w.newer[w.newer.length - 1].time === building.time) {
-      building = w.newer[w.newer.length - 1];
+      building = cloneC(w.newer[w.newer.length - 1]); // v124
     }
     if (building && w.newer[w.newer.length - 1].time < building.time) {
       // Same reasoning as feedOneCandle() above: hand the merge a snapshot,
@@ -693,16 +769,21 @@
     }
 
     var cutoff = lastFedTime;
+    var pageOldest = false;
     window.pywebview.api.get_history_page(newTf, cutoff + 1, App.LAZY_LOAD_CHUNK).then(function (payload) {
-      if (App.replayTf !== newTf) return; // superseded by another change meanwhile
+      if (App.replayTf !== newTf) return null; // superseded
       var candles = Array.isArray(payload) ? payload : ((payload && payload.candles) || []);
-      rebaseReplayWindow(newTf, candles, null, !!(payload && !Array.isArray(payload) && payload.is_oldest));
+      pageOldest = !!(payload && !Array.isArray(payload) && payload.is_oldest);
+      return fitTailToPlayhead(newTf, candles, cutoff); // v124: trim to playhead
+    }).then(function (candles) {
+      if (!candles || App.replayTf !== newTf) return;
+      rebaseReplayWindow(newTf, candles, null, pageOldest);
       if (App.replayCutoffByTf) App.replayCutoffByTf[newTf] = cutoff;
       candles = App.candlesByTf[newTf];
       if (App.series) App.series.setData(candles);
       var bucketStart = Math.floor(cutoff / newTf) * newTf;
       building = (candles.length && candles[candles.length - 1].time === bucketStart)
-        ? candles[candles.length - 1] : null;
+        ? cloneC(candles[candles.length - 1]) : null;
       if (candles.length) {
         if (App.chart) App.chart.timeScale().scrollToRealTime();
         if (App.ChartCore && App.ChartCore.setLivePrice) {
@@ -767,6 +848,7 @@
     // whenever Replay is active, instead of a real backend tf switch.
     changeTimeframe: changeTimeframe,
     syncPrimaryWindow: syncPrimaryWindow,
+    fitTailToPlayhead: fitTailToPlayhead, // v124: shared with multi-panel.js
     // v40 Update 2: lets multi-panel.js seed a companion panel opened (or
     // switched to a new timeframe) mid-replay at the correct point.
     getReplayPointTime: function () { return lastFedTime !== null ? lastFedTime : cursorTime; },

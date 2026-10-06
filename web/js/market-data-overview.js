@@ -916,7 +916,7 @@
 
   function attachLogView() {
     if (!App.LogFeed || !dom.mdoLogBox) return;
-    if (!logView) logView = App.LogFeed.createView(dom.mdoLogBox, "DATABASE");
+    if (!logView) logView = App.LogFeed.createView(dom.mdoLogBox, "DATABASE", { exclude: "[NEWS]" });  // v110
     App.LogFeed.attach(logView);
     logView.scrollToEnd(); // the box only has a scroll height once it is displayed
   }
@@ -953,7 +953,7 @@
   // once the Setting backdrop is showing and the user has switched to (or
   // opened straight onto) this tab. No longer owns the backdrop/toggle
   // itself; just (re)loads data and starts the live overview poll.
-  function activate() {
+  function priceActivate() {
     // v63: every time the tab is opened it starts on Chart (the default).
     if (viewMode !== "chart") setViewMode("chart");
     if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.get_db_overview) return;
@@ -992,7 +992,7 @@
 
   // v50: "deactivate" replaces the old close() — called when the Setting
   // panel closes entirely or the user switches to a different tab.
-  function deactivate() {
+  function priceDeactivate() {
     isOpen = false;
     // v65.1: don't let a debounced dropdown-change load fire after the tab
     // has been switched away from/closed — harmless (it's guarded by isOpen
@@ -1008,7 +1008,44 @@
     if (!extendRunning) closeExtendBox();
   }
 
+  // v110: Price Data / Economic News switch. Only one section is active at a time;
+  // the News section lives in economic-news.js (App.EconomicNews).
+  var source = "price";
+  var News = App.EconomicNews;
+
+  function applySourceUI() {
+    dom.mdoSrcPriceBtn.classList.toggle("active", source === "price");
+    dom.mdoSrcNewsBtn.classList.toggle("active", source === "news");
+    dom.mdoSrcNews.style.display = source === "news" ? "" : "none";
+    dom.mdoSrcPricePane.style.display = source === "news" ? "none" : "";
+  }
+
+  function setSource(next) {
+    if (next === source || (next === "news" && !News)) return;
+    if (source === "news") News.deactivate(); else priceDeactivate();
+    source = next;
+    applySourceUI();
+    if (source === "news") News.activate(); else priceActivate();
+  }
+
+  function activate() {
+    dom.mdoSrcSwitch.style.display = "flex";
+    applySourceUI();
+    if (source === "news") News.activate(); else priceActivate();
+  }
+
+  function deactivate() {
+    dom.mdoSrcSwitch.style.display = "none";
+    if (source === "news") News.deactivate(); else priceDeactivate();
+  }
+
   App.MarketDataOverview = { activate: activate, deactivate: deactivate };
+  Array.prototype.forEach.call(dom.mdoSrcSwitch.querySelectorAll("[data-ic]"), function (el) {
+    var f = App.Icons[el.getAttribute("data-ic")];
+    if (f) el.innerHTML = f();
+  });
+  dom.mdoSrcPriceBtn.addEventListener("click", function () { setSource("price"); });
+  dom.mdoSrcNewsBtn.addEventListener("click", function () { setSource("news"); });
 
   // v63: Chart / Log switch buttons (icons: chart.svg glyph / the header's
   // Log glyph, both currentColor so .mdo-view-btn's states colour them).

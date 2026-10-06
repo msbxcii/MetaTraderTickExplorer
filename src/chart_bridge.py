@@ -276,6 +276,7 @@ class ChartBridge:
         # request and returns immediately. Optional for the same reason as
         # the stores above.
         self._backfill_cmd_queue = backfill_cmd_queue
+        self._news = None  # v110: Economic News service, created on first use
 
         self._conn = _open_readonly_connection(db_path)
 
@@ -500,10 +501,67 @@ class ChartBridge:
             return False
         return st.save(data.get("settings") or {}, data.get("presets") or [])
 
-    def get_time_offset(self):
-        """v92: display offset in seconds (system - broker); 0 if unknown."""
+    # v113: News tab filters survive restarts (small JSON file next to the other app settings)
+    def _news_filters_file(self):
+        p = getattr(self, "_news_filters_path", None)
+        return p or os.path.join(os.path.dirname(os.path.abspath(self._db_path)), "news_filters.json")
+
+    def get_news_filters(self):
+        try:
+            with open(self._news_filters_file(), "r", encoding="utf-8") as f:
+                d = json.load(f)
+            return d if isinstance(d, dict) else None
+        except FileNotFoundError:
+            return None
+        except Exception as e:
+            self._logger.warning(f"get_news_filters: failed: {e}")
+            return None
+
+    def save_news_filters(self, data):
+        try:
+            if not isinstance(data, dict):
+                return False
+            path = self._news_filters_file()
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            tmp = path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+            os.replace(tmp, path)
+            return True
+        except Exception as e:
+            self._logger.warning(f"save_news_filters: failed: {e}")
+            return False
+
+    # v116: broker clock rule (Sessions & Timezone tab)
+    def get_tz_state(self):
         tz = getattr(self, "_time_offset_store", None)
-        return tz.offset_seconds if tz is not None else 0
+        if tz is None:
+            return {"mode": "auto", "rule": None, "manual": {}, "detected": None, "stale": False}
+        st = tz.get_state(self._server)
+        st["server_known"] = bool(self._server and self._server != "unknown-server")
+        return st
+
+    def set_tz_mode(self, mode, params=None):
+        tz = getattr(self, "_time_offset_store", None)
+        if tz is None:
+            return self.get_tz_state()
+        st = tz.set_mode(self._server, str(mode or "auto"), params)
+        st["server_known"] = bool(self._server and self._server != "unknown-server")
+        return st
+
+    def start_tz_detect(self, symbol, auto=False):
+        """Ask the sync process (the only MT5 owner) to measure the broker clock
+        on ``symbol``; progress/result come back through the live queue."""
+        symbol = str(symbol or "").strip()
+        if not symbol:
+            return {"ok": False, "error": "Pick a forex symbol first."}
+        known = [x.get("symbol") for x in self._symbol_list if isinstance(x, dict)]
+        if known and symbol not in known:
+            return {"ok": False, "error": "Symbol is not in this broker's list."}
+        r = self._enqueue_trade_cmd({"type": "tz_detect_request", "symbol": symbol, "auto": bool(auto)})
+        if not r.get("ok"):
+            r["error"] = "Not connected to the MT5 sync process."
+        return r
 
     def get_live_ask(self):
         """Newest known ASK for the selected symbol, or None (JS: page start-up)."""
@@ -1338,6 +1396,88 @@ class ChartBridge:
             self._logger.warning(f"start_backfill: failed to enqueue request: {e}")
             return {"ok": False}
 
+    # ---- v110: Setting > Market Data Overview > Economic News ---------------
+    def _news_service(self):
+        if self._news is None:
+            from news_service import NewsService
+            def push(js):
+                if self._window is not None:
+                    self._window.evaluate_js(js)
+            self._news = NewsService(os.path.dirname(os.path.abspath(self._db_path)), self._logger, push)
+        return self._news
+
+    def get_news_overview(self, year=0):
+        try:
+            return self._news_service().overview(year)
+        except Exception as e:
+            self._logger.warning(f"get_news_overview: failed: {e}")
+            return {"ok": False}
+
+    def start_news_backfill(self, week_keys, proxy):
+        try:
+            return self._news_service().start_backfill(week_keys, proxy)
+        except Exception as e:
+            self._logger.warning(f"start_news_backfill: failed: {e}")
+            return {"ok": False}
+
+    def start_news_extend(self, target_date, proxy):
+        try:
+            return self._news_service().start_extend(target_date, proxy)
+        except Exception as e:
+            self._logger.warning(f"start_news_extend: failed: {e}")
+            return {"ok": False}
+
+    # v111: chart news lines + Trade-panel News tab (read-only SQLite, see news_service.py)
+    def get_news_chart(self, ts0, ts1):
+        try:
+            return self._news_service().chart_rows(ts0, ts1)
+        except Exception as e:
+            self._logger.warning(f"get_news_chart: failed: {e}")
+            return {"ok": False, "rows": []}
+
+    def get_news_rows(self, ts0, ts1, d0, d1, imp, cur):
+        try:
+            return self._news_service().list_rows(ts0, ts1, d0, d1, imp, cur)
+        except Exception as e:
+            self._logger.warning(f"get_news_rows: failed: {e}")
+            return {"ok": False, "rows": []}
+
+    def get_news_meta(self):
+        try:
+            return self._news_service().meta()
+        except Exception as e:
+            self._logger.warning(f"get_news_meta: failed: {e}")
+            return {"ok": False}
+
+    def get_news_days(self, d0, d1, imp, cur):
+        try:
+            return self._news_service().days_with_news(d0, d1, imp, cur)
+        except Exception as e:
+            self._logger.warning(f"get_news_days: failed: {e}")
+            return {"ok": False, "days": []}
+
+    def start_news_autosync(self, proxy):   # v126: weekly auto-sync of missed news weeks
+        try:
+            return self._news_service().auto_sync(proxy)
+        except Exception as e:
+            self._logger.warning(f"start_news_autosync: failed: {e}")
+            return {"ok": False}
+
+    def refresh_news_week(self, day_iso, proxy):
+        try:
+            return self._news_service().refresh_week(day_iso, proxy)
+        except Exception as e:
+            self._logger.warning(f"refresh_news_week: failed: {e}")
+            return {"ok": False}
+
+    def stop_news_job(self):
+        try:
+            self._news_service().stop()
+            return {"ok": True}
+        except Exception as e:
+            self._logger.warning(f"stop_news_job: failed: {e}")
+            return {"ok": False}
+
     # V83: Trade panel. Like start_backfill, these only enqueue a command
     # for the sync process (the only MT5 owner); results come back as
     # window.onTradePositions / window.onTradeHistory via live_queue.
@@ -1790,6 +1930,8 @@ class ChartBridge:
         }
 
     def close(self):
+        if self._news is not None:
+            self._news.stop()  # v110
         with self._lock:
             try:
                 self._conn.close()

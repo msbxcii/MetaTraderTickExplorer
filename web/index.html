@@ -1971,10 +1971,11 @@
     tab-size: 4;
   }
   .mdo-log-box::-webkit-scrollbar-track { background: var(--panel); }
-  #settings-pane-market-data-overview.mdo-log-mode .mdo-log-box { display: block; }
-  #settings-pane-market-data-overview.mdo-log-mode .mdo-chart-box,
-  #settings-pane-market-data-overview.mdo-log-mode .mdo-checkbox-row-wrap { display: none; }
-  #settings-pane-market-data-overview.mdo-log-mode .mdo-hover-info { visibility: hidden; }
+  .mdo-src.mdo-log-mode .mdo-log-box { display: block; }
+  .mdo-src.mdo-log-mode .mdo-chart-box,
+  .mdo-src.mdo-log-mode .mdo-checkbox-row-wrap,
+  .mdo-src.mdo-log-mode .nws-lgd { display: none; }
+  .mdo-src.mdo-log-mode .mdo-hover-info { visibility: hidden; }
 
   /* Histogram box: fixed height, auto-scaled bars inside it — spec calls
      for this box to never grow into the controls row above it, so its
@@ -2179,6 +2180,10 @@
      `disabled` attribute — unlike BackFill it doesn't depend on any day
      being checked, so it stays clickable at all times. */
   .mdo-extend-btn.active {
+    border-color: var(--gold);
+    color: var(--text);
+  }
+  #nws-extend-btn.stop {
     border-color: var(--gold);
     color: var(--text);
   }
@@ -2963,6 +2968,32 @@
     cursor: pointer;
   }
   .sess-add-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+  /* ---- v116: Broker clock (Sessions & Timezone tab) -------------------- */
+  .tzb { margin: 2px 0 10px; }
+  .tzb-row { margin-bottom: 8px; flex-wrap: wrap; }
+  .tzb-row > label { color: var(--muted); min-width: 108px; cursor: default; }
+  .tzb-row input[type="text"] {
+    min-width: 0; width: 120px; background: var(--bg); color: var(--text); font-family: inherit; font-size: 12px;
+    border: 1px solid var(--border); border-radius: 4px; padding: 5px 6px;
+  }
+  .tzb-row input[type="text"]:focus { outline: none; border-color: var(--gold); }
+  .tzb-row input.sess-invalid { border-color: var(--down); }
+  .tzb-row select { width: auto; max-width: 220px; }
+  .tzb-symdd { flex: 0 0 150px; width: 150px; }   /* v123: themed symbol dropdown (replaces native datalist) */
+  .tzb-btn { margin-top: 0; }
+  .tzb-btn:disabled { color: var(--muted); opacity: .6; cursor: default; }
+  .tzb-now { color: var(--muted); font-size: 12px; }
+  .tzb-status { color: var(--muted); font-size: 12px; min-height: 16px; margin: 0 0 6px; }
+  .tzb-status.bad { color: var(--down); }
+  .tzb-report { max-height: 190px; overflow: auto; font-size: 11.5px; }
+  .tzb-report:empty { display: none; }
+  .tzb-report table { border-collapse: collapse; width: 100%; font-family: "Inter", "Segoe UI", system-ui, sans-serif; }
+  .tzb-report th, .tzb-report td { text-align: left; padding: 3px 8px 3px 0; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .tzb-report th { color: var(--muted); font-weight: 400; position: sticky; top: 0; background: var(--panel); }
+  .tzb-report td.ok { color: var(--up); }
+  .tzb-report td.no { color: var(--down); }
+  .tzb-report td.na { color: var(--muted); }
 
   /* ---- Canvas tab ------------------------------------------------------ */
   .canvas-settings-columns {
@@ -3805,6 +3836,25 @@
   .tp-tab.active { color: var(--text); border-bottom-color: var(--tp-accent); }
   .tp-content { flex: 1 1 auto; min-height: 0; padding: 12px; display: flex; flex-direction: column; overflow: hidden; }
   .tp-settings { flex: 0 0 auto; }
+  /* v119: Replay Trading */
+  .tp-replay-only { display: none; }
+  .trade-panel.tp-replay .tp-replay-only { display: block; }
+  .trade-panel.tp-replay .tp-live-only { display: none; }
+  /* v120: account strip, fixed-width unit boxes, tabular numbers */
+  .trade-panel.tp-replay .tp-rp-acct.tp-replay-only { display: flex; }
+  .tp-rp-acct { align-items: baseline; gap: 14px; padding: 2px 2px 0; margin-bottom: 10px; font-size: 11.5px; }
+  .tp-rp-it { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+  .tp-rp-it .k { color: var(--muted); font-size: 11px; }
+  .tp-rp-acct b { font: 400 12px "InterTab", var(--font-ui); color: var(--text); white-space: nowrap; }
+  .tp-rp-acct b.tp-pos { color: var(--up); } .tp-rp-acct b.tp-neg { color: var(--down); }
+  .tp-rp-acct button { margin-left: auto; border: 0; background: transparent; color: var(--muted); font-size: 11px; padding: 0 2px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--border); }
+  .tp-rp-acct button:hover { color: var(--text); text-decoration-color: var(--text); }
+  .tp-rp-sep { height: 1px; background: var(--border); margin: 2px 0 10px; opacity: .7; }
+  #tp-rp-box .tp-field-row:last-child { margin-bottom: 0; }
+  .trade-panel .tp-unit-toggle { width: 70px; flex: 0 0 70px; }
+  .trade-panel .tp-unit-toggle button { flex: 1; padding: 0; }
+  .trade-panel .tp-unit-toggle button + button { border-left: 1px solid var(--border); }
+  .tp-input-wrap input, .tp-kv .v, .tp-gauge-labels { font-family: "InterTab", var(--font-ui); font-variant-numeric: tabular-nums; }
   .tp-field-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
   .tp-field-label { width: 84px; flex-shrink: 0; color: var(--muted); font-size: 11.5px; }
   .tp-input-wrap { flex: 1; display: flex; border: 1px solid var(--border); border-radius: 4px; background: var(--tp-panel2); overflow: hidden; }
@@ -3844,9 +3894,9 @@
   .tp-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
   .tp-item { background: var(--tp-panel2); border: 1px solid var(--border); border-radius: 5px; padding: 8px 9px; flex: 0 0 auto; }
   .tp-row1 { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-  .tp-row1 > span { display: flex; align-items: center; gap: 6px; }
+  .tp-row1 > span { display: flex; align-items: center; gap: 6px; min-width: 0; } /* v112: lets long titles shrink */
   .tp-sym { font-weight: 700; font-size: 12px; }
-  .tp-side { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 3px; }
+  .tp-side { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 3px; flex: none; }
   .tp-side.buy { background: var(--tp-up-bg); color: var(--up); }
   .tp-side.sell { background: var(--tp-down-bg); color: var(--down); }
   .tp-pl { font-weight: 700; font-size: 12px; }
@@ -3866,6 +3916,73 @@
   .tp-lots { color: var(--tp-accent); }
   .tp-row2 .tp-be { color: inherit; } /* V87: BE styled like entry */
   .trade-panel input[type=checkbox] { accent-color: var(--text); }
+  /* v111: News tab (Trade panel) + chart tooltip. Colors come from theme-colors.css (--imp-*). */
+  .nw-head { display:flex; justify-content:space-between; align-items:center; padding:0 2px; margin-bottom:8px; font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); flex:0 0 auto; }
+  .nw-quick { display:flex; gap:10px; }
+  .nw-quick span { cursor:pointer; text-transform:none; letter-spacing:0; font-size:10.5px; }
+  .nw-quick span:hover { color:var(--text); }
+  .nw-imp { display:flex; gap:6px; margin-bottom:12px; flex:0 0 auto; }
+  .nw-imp .tp-chip { display:flex; align-items:center; justify-content:center; gap:5px; user-select:none; }
+  .nw-cur { display:grid; grid-template-columns:repeat(5,1fr); gap:5px; margin-bottom:12px; flex:0 0 auto; }
+  .nw-cur .tp-chip { padding:5px 0; font-size:11px; user-select:none; }
+  .nw-imp .tp-chip:not(.selected), .nw-cur .tp-chip:not(.selected) { opacity:.55; background:transparent; }
+  .nw-imp .tp-chip.selected, .nw-cur .tp-chip.selected { border-color:var(--text); color:var(--text); background:var(--ov8); }
+  .nw-sq { width:8px; height:8px; border-radius:2px; display:inline-block; flex:none; background:var(--c); }
+  .nw-lists { flex:1 1 auto; min-height:0; border-top:1px solid var(--border); padding-top:6px; display:flex; flex-direction:column; position:relative; }
+  .nw-list { margin-right:-12px; padding-right:10px; scrollbar-gutter:stable; overflow-y:scroll; position:relative; }
+  .nw-item { border-radius:0; box-shadow:inset 3px 0 0 var(--c); padding-left:13px; transition:background .12s; }
+  .nw-item:hover, .nw-item.hl { background:color-mix(in srgb, var(--tp-panel2) 90%, var(--text)); }
+  .nw-name { font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+  .tp-sym { flex:none; }
+  .nw-tag { background:color-mix(in srgb, var(--c) 16%, transparent); color:var(--c); }
+  .nw-time { color:var(--text); }
+  .nw-vals { display:flex; gap:10px; }
+  .nw-vals i { font-style:normal; margin-right:3px; opacity:.75; }
+  .nw-vals b { font-weight:600; color:var(--text); }
+  .nw-vals .pend { font-style:italic; font-weight:400; color:var(--muted); }
+  .nw-vals .none { font-weight:400; color:var(--muted); }
+  .nw-vals b.upd { animation:nwupd 2.2s ease-out; border-radius:3px; }
+  @keyframes nwupd { 0%{background:color-mix(in srgb, var(--up) 38%, transparent); color:var(--up);} 100%{background:transparent;} }
+  .nw-pdot { width:7px; height:7px; border-radius:50%; background:var(--c); flex:none; }
+  .nw-day { font-size:10.5px; color:var(--muted); letter-spacing:.4px; margin:6px 0 0; padding:3px 2px; flex:0 0 auto; }
+  .nw-day.flash { animation:nwflash 1.3s ease-out; }
+  @keyframes nwflash { 0%{background:color-mix(in srgb, var(--text) 22%, transparent);} 100%{background:transparent;} }
+  .nw-empty { color:var(--muted); text-align:center; padding:24px 8px; font-size:11.5px; }
+  .nw-jump { display:flex; gap:5px; align-items:center; margin-bottom:6px; flex:0 0 auto; }
+  .nw-jb { width:26px; height:28px; flex:none; border:1px solid var(--border); background:var(--tp-panel2); color:var(--muted); border-radius:4px; cursor:pointer; font-size:15px; line-height:1; padding:0; }
+  .nw-jb:hover { color:var(--text); background:var(--ov8); }
+  .nw-jin { height:28px; align-items:center; }
+  .nw-jin input { flex:1; min-width:0; width:100%; background:transparent; border:0; outline:0; color:var(--text); font:inherit; font-size:12px; padding:0 8px; font-variant-numeric:tabular-nums; }
+  .nw-jin input::placeholder { color:var(--muted); }
+  .nw-jin:focus-within { border-color:var(--muted); }
+  .nw-jin.bad { border-color:var(--down); }
+  .nw-cal { border:0; border-left:1px solid var(--border); background:transparent; color:var(--muted); width:28px; align-self:stretch; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; }
+  .nw-cal:hover, .nw-cal.on { color:var(--text); background:var(--ov8); }
+  .nw-cal svg { width:14px; height:14px; }
+  .nw-today { flex:none; flex-grow:0; padding:0 10px; height:28px; display:flex; align-items:center; }
+  .nw-jstat { font-size:10.5px; color:var(--muted); margin-bottom:6px; flex:0 0 auto; }
+  .nw-jstat:empty { display:none; }
+  .nw-pop { position:absolute; left:0; right:0; top:34px; z-index:6; background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:8px; box-shadow:0 8px 24px var(--shadow-popover); display:none; }
+  .nw-pop.open { display:block; }
+  .nw-pop .rbd-cal-grid { margin-bottom:6px; }
+  .nw-pop .rbd-cal-day { position:relative; }
+  .nw-pop .rbd-cal-day.nw-has:after { content:""; position:absolute; bottom:2px; left:50%; margin-left:-1.5px; width:3px; height:3px; border-radius:50%; background:currentColor; opacity:.55; }
+  .nw-pop .rbd-cal-day.nw-today-d { box-shadow:inset 0 0 0 1px var(--muted); }
+  .nw-pop .rbd-cal-day.nw-off { opacity:.3; pointer-events:none; }
+  .nw-ref { position:relative; width:28px; height:28px; flex:none; border:1px solid var(--border); background:var(--tp-panel2); color:var(--muted); border-radius:4px; cursor:pointer; padding:0; display:flex; align-items:center; justify-content:center; }
+  .nw-ref:hover { color:var(--text); background:var(--ov8); }
+  .nw-ref svg { width:14px; height:14px; }
+  .nw-ref.spin svg { animation:nwspin .7s linear infinite; }
+  .nw-ref.spin { pointer-events:none; }
+  @keyframes nwspin { to { transform:rotate(360deg); } }
+  .nw-bd { position:absolute; top:-5px; right:-5px; min-width:14px; height:14px; padding:0 3px; border-radius:7px; background:var(--gold); color:var(--on-accent); font-size:9px; font-weight:700; display:none; align-items:center; justify-content:center; font-variant-numeric:tabular-nums; }
+  .nw-ref.has .nw-bd { display:flex; }
+  .nw-tip { position:fixed; display:none; pointer-events:none; z-index:60; background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:8px 10px; min-width:170px; max-width:280px; line-height:1.55; font-size:12px; box-shadow:0 8px 24px var(--shadow-popover); }
+  .nw-tip .r1 { display:flex; align-items:center; gap:6px; font-weight:600; }
+  .nw-tip .r2 { color:var(--muted); margin:1px 0 5px; }
+  .nw-tip .r3 { display:flex; gap:12px; font-variant-numeric:tabular-nums; }
+  .nw-tip .r3 i { font-style:normal; color:var(--muted); margin-right:3px; }
+  .nw-tip .r4 { margin-top:4px; padding-top:4px; border-top:1px solid var(--border); color:var(--muted); }
   .tp-input-wrap:focus-within { border-color: var(--muted); }
   /* V87: BE right after entry; hover focus dims the other trades */
   .tp-row2 .tp-be { margin-left: 8px; }
@@ -3939,10 +4056,15 @@
   .tl-box-r { background: color-mix(in srgb, var(--down) 16%, transparent); }
   .tl-box-g { background: color-mix(in srgb, var(--up) 16%, transparent); }
   /* V91: History card hover (as history.html) + chart overlay for the hovered trade */
-  #tp-hist-list .tp-item { cursor: pointer; transition: background .12s, border-color .12s, box-shadow .12s; }
+  #tp-hist-list .tp-item { cursor: pointer; transition: background .12s; border-radius: 0; box-shadow: inset 3px 0 0 var(--hc); padding-left: 13px; } /* v112: like News */
   #tp-hist-list .tp-item.tp-h-win { --hc: var(--up); }
   #tp-hist-list .tp-item.tp-h-loss { --hc: var(--down); }
-  #tp-hist-list .tp-item.tp-h-on { background: color-mix(in srgb, var(--tp-panel2) 93%, var(--text)); border-color: var(--hc); box-shadow: inset 3px 0 0 var(--hc); }
+  #tp-hist-list .tp-item.tp-h-on { background: color-mix(in srgb, var(--tp-panel2) 90%, var(--text)); }
+  /* v117: Open trades = sharp boxes + left bar like History (green profit / red loss / yellow break-even = hover BE colour) */
+  #tp-open-list .tp-item { border-radius: 0; box-shadow: inset 3px 0 0 var(--hc, transparent); padding-left: 13px; }
+  #tp-open-list .tp-item.tp-h-win { --hc: var(--up); }
+  #tp-open-list .tp-item.tp-h-loss { --hc: var(--down); }
+  #tp-open-list .tp-item.tp-h-be { --hc: #f0a030; }
   .th-canvas { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 4; }
   .tp-muted { color: var(--muted); font-weight: 500; font-size: 11px; }
   .tl-armed, .tl-armed * { cursor: crosshair !important; }
@@ -4060,7 +4182,9 @@
   .tr:last-child, .tbl-scroll .tr:last-child { border-bottom: 0; }
   .tr.head { height: 28px; background: var(--ctl); color: var(--muted); font-size: 12px; position: sticky; top: 0; z-index: 1; }
   .tr.chart { grid-template-columns: 22px minmax(0, 1fr) 56px 120px 84px; }
-  .tr.sess { grid-template-columns: 22px minmax(0, 1fr) 64px 64px 52px 24px; }
+  .tr.sess { grid-template-columns: 22px minmax(0, 1fr) 64px 64px 112px 52px 24px; }
+  .tr.sess select { min-width: 0; width: 100%; background: var(--ctl); color: var(--ctl-text); border: 1px solid transparent; border-radius: 6px; padding: 3px 4px; min-height: 22px; font-size: 12px; }
+  .tr.sess select:focus { outline: none; border-color: var(--gold); }
   .tbl-scroll.sc { max-height: 360px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; scrollbar-gutter: stable; }
   /* v95: the Sessions header reserves the exact same (invisible) scrollbar gutter as the
      rows below it, so Name / Start / End / Color columns line up with their titles whether
@@ -4144,6 +4268,40 @@
   .mdo-chart-box { border-radius: 8px; }
   .mdo-view-btn, .mdo-refresh-btn { background: var(--ctl); border: 1px solid var(--border); border-radius: 6px; }
   .mdo-view-btn.active, .mdo-view-btn.active:hover { background: var(--seg-active-bg); color: var(--seg-active-text); border-color: var(--seg-active-bg); }
+
+  /* v110: Price Data / Economic News switch + the News section. Both sections use the same
+     mdo-* classes and fixed heights, so switching between them moves nothing.
+     Only existing theme variables are used. */
+  .mdo-src-switch { display: none; align-items: center; gap: 6px; margin: 0 auto 0 22px; }
+  .mdo-src-btn { height: 26px; padding: 0 12px; display: flex; align-items: center; gap: 6px; font: inherit; font-size: 12px; color: var(--muted); background: var(--ctl); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; transition: color .15s ease, border-color .15s ease; }
+  .mdo-src-btn svg { width: 14px; height: 14px; display: block; }
+  .mdo-src-btn:hover { color: var(--text); border-color: var(--muted); }
+  .mdo-src-btn.active, .mdo-src-btn.active:hover { background: var(--seg-active-bg); color: var(--seg-active-text); border-color: var(--seg-active-bg); cursor: default; }
+  .mdo-controls-row { min-height: 26px; flex-wrap: nowrap; }
+  .mdo-control select, .mdo-control .mdo-port { height: 26px; box-sizing: border-box; }
+  .mdo-control select:disabled, .mdo-control .mdo-port:disabled { opacity: .5; cursor: not-allowed; }
+  .mdo-port { width: 64px; padding: 0 8px; font-family: inherit; font-size: 13px; border: 0; border-radius: 6px; outline: 0; background-color: var(--mdo-select-bg, var(--ctl)); color: var(--mdo-select-text, var(--ctl-text)); }
+  .mdo-port:focus { box-shadow: 0 0 0 1px var(--gold); }
+  .nws-box { display: grid; grid-template-columns: repeat(20, 22px); column-gap: calc((100% - 440px) / 19); row-gap: 10px; align-content: start; align-items: start; padding: 16px 14px; }
+  .nws-sq { width: 22px; height: 22px; box-sizing: border-box; border-radius: 6px; border: 1px solid var(--muted); background: var(--muted); position: relative; }
+  .nws-sq.e { background: transparent; cursor: pointer; }
+  .nws-sq:hover { border-color: var(--text); }
+  .nws-sq:not(.e):hover { background: var(--text); }
+  .nws-sq.e.s { border-color: var(--text); }
+  /* running week: has data but is not final -> lighter tint of the Downloaded color, selectable for BackFill */
+  .nws-sq.p { background: transparent; cursor: pointer; }
+  .nws-sq.p::before { content: ""; position: absolute; inset: 0; border-radius: 5px; background: var(--muted); opacity: .28; }
+  .nws-sq.p:hover { background: transparent; }
+  .nws-sq.p:hover::before { opacity: .45; }
+  .nws-sq.p.s { border-color: var(--text); }
+  .nws-sq.s::after, .nws-lgd .sel::after { content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 11px; border: solid var(--text); border-width: 0 2px 2px 0; transform: translate(-50%, -62%) rotate(45deg); }
+  .nws-lgd { display: flex; align-items: center; gap: 18px; margin-top: 8px; height: 14px; font-size: 12px; color: var(--muted); }
+  .nws-lgd span { display: flex; align-items: center; gap: 6px; }
+  .nws-lgd b { display: block; position: relative; box-sizing: border-box; width: 12px; height: 12px; border-radius: 4px; border: 1px solid var(--muted); }
+  .nws-lgd .dl { background: var(--muted); }
+  .nws-lgd .part::before { content: ""; position: absolute; inset: 0; border-radius: 3px; background: var(--muted); opacity: .28; }
+  .nws-lgd .sel { border-color: var(--text); }
+  .nws-lgd .sel::after { width: 3px; height: 6px; border-width: 0 1.5px 1.5px 0; }
 
   /* =========================================================================
      Toolbar redesign — minimal, borderless, single flat bar.
@@ -4249,25 +4407,7 @@
     color: var(--tb-accent);
     font-weight: inherit;
   }
-  header :is(.pill-btn, #replay-bar-toggle, #trade-panel-toggle,
-             #objects-panel-toggle, #settings-toggle, #log-toggle)::after {
-    content: "";
-    position: absolute;
-    left: 8px;
-    right: 8px;
-    bottom: 1px;
-    height: 2px;
-    border-radius: 2px;
-    background: var(--tb-accent);
-    transform: scaleX(0);
-    opacity: 0;
-    transition: transform .18s ease, opacity .18s ease;
-  }
-  header :is(.pill-btn, #replay-bar-toggle, #trade-panel-toggle,
-             #objects-panel-toggle, #settings-toggle, #log-toggle).active::after {
-    transform: scaleX(1);
-    opacity: 1;
-  }
+  /* v121: selected-icon underline removed */
 
   /* custom tooltip (replaces the native title bubble in the header) */
   #tb-tip {
@@ -4753,6 +4893,38 @@
     .symbol-dropdown.open > .tf-dropdown-list,
     .symbol-dropdown .symbol-options .symbol-option.active::before { animation: none; transition: none; }
   }
+
+  /* v125: themed select popup (see settings-panel.js) */
+  .sel-pop {
+    position: fixed; z-index: 700; overflow-y: auto; overscroll-behavior: contain;
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 3px; box-shadow: 0 8px 24px var(--shadow-dropdown, rgba(0,0,0,.25));
+    font-size: 13px; scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  .sel-pop-item { padding: 5px 9px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+  .sel-pop-item:hover { background: color-mix(in srgb, var(--gold) 14%, transparent); }
+  .sel-pop-item.on { background: color-mix(in srgb, var(--gold) 22%, transparent); }
+  .sel-pop-item.dis { opacity: .45; cursor: default; }
+  /* v125: Lavender - date-picker glyph in the same color as the X next to it */
+  body.theme-ivory-white .mdo-extend-date-input::-webkit-calendar-picker-indicator {
+    background: var(--muted);
+    -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zm-2 8h14v10H5V10z'/></svg>") no-repeat center / 16px 16px;
+    mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zm-2 8h14v10H5V10z'/></svg>") no-repeat center / 16px 16px;
+    cursor: pointer;
+  }
+  body.theme-ivory-white .mdo-extend-date-input::-webkit-calendar-picker-indicator:hover { background: var(--text); }
+  /* v125: dark native calendar glyph on light themes (Extend date boxes) */
+  body.light-theme .mdo-extend-date-input { color-scheme: light; }
+  /* v125: Lavender - accent-tinted selected/hover item in Settings dropdowns */
+  body.theme-ivory-white .settings-modal select option:checked,
+  body.theme-ivory-white .mdo-control select option:checked {
+    background: linear-gradient(color-mix(in srgb, var(--gold) 20%, var(--panel)), color-mix(in srgb, var(--gold) 20%, var(--panel)));
+    color: var(--text);
+  }
+  body.theme-ivory-white .settings-modal .canvas-preset-dropdown-item:hover,
+  body.theme-ivory-white .settings-modal .canvas-preset-dropdown-item:focus-within {
+    background: color-mix(in srgb, var(--gold) 14%, transparent);
+  }
 </style>
 </head>
 <body>
@@ -4884,11 +5056,21 @@
           <div class="tp-tabs">
             <div class="tp-tab active" data-tab="trade">Trade</div>
             <div class="tp-tab" data-tab="history">History</div>
+            <div class="tp-tab" data-tab="news">News</div>
           </div>
 
           <div class="tp-content" id="tp-tab-trade">
             <div class="tp-settings">
-              <div class="tp-field-row">
+              <!-- v119: Replay Trading account (only while Bar Replay is on). Empty field = Auto. -->
+              <div class="tp-box tp-replay-only" id="tp-rp-box">
+                <div class="tp-field-row"><div class="tp-field-label" title="Start balance of the practice account">Balance</div><div class="tp-input-wrap"><input type="text" id="tp-rp-balance" inputmode="decimal"><div class="tp-unit-toggle"><button type="button" class="active" tabindex="-1">$</button></div></div></div>
+                <div class="tp-field-row"><div class="tp-field-label" title="Empty = Auto (your real MT5 account leverage)">Leverage</div><div class="tp-input-wrap"><input type="text" id="tp-rp-lev" placeholder="Auto" inputmode="numeric"><div class="tp-unit-toggle"><button type="button" class="active" tabindex="-1">1:x</button></div></div></div>
+                <div class="tp-field-row"><div class="tp-field-label" title="Round trip, $/lot or % of position value. Empty = Auto (unit and value learned from your real trade history / live Commission)">Commission</div><div class="tp-input-wrap"><input type="text" id="tp-rp-comm" placeholder="Auto" inputmode="decimal"><div class="tp-unit-toggle" id="tp-rp-comm-unit"><button type="button" class="active" data-u="lot">$/lot</button><button type="button" data-u="pct">%</button></div></div></div>
+                <div class="tp-field-row"><div class="tp-field-label" title="Fixed ASK - BID distance in points. Empty = Auto (current live spread)">Spread</div><div class="tp-input-wrap"><input type="text" id="tp-rp-spread" placeholder="Auto" inputmode="decimal"><div class="tp-unit-toggle"><button type="button" class="active" tabindex="-1">pts</button></div></div></div>
+                <div class="tp-rp-sep"></div>
+                <div id="tp-rp-slot"></div>
+              </div>
+              <div class="tp-field-row" id="tp-row-risk">
                 <div class="tp-field-label">Risk</div>
                 <div class="tp-input-wrap">
                   <input type="text" id="tp-risk-input" value="1.0" inputmode="decimal">
@@ -4896,23 +5078,23 @@
                 </div>
               </div>
               <!-- V85: commission ROUND TRIP (entry+exit), $/lot or % of trade value, saved per symbol. Empty = auto. -->
-              <div class="tp-field-row">
+              <div class="tp-field-row tp-live-only" id="tp-live-comm">
                 <div class="tp-field-label" title="Round trip (entry + exit), per symbol. $/lot = fixed money per lot, % = percent of trade value. Leave empty to auto-detect from your deals on this symbol.">Commission</div>
                 <div class="tp-input-wrap">
                   <input type="text" id="tp-comm-input" value="" placeholder="Auto" inputmode="decimal">
                   <div class="tp-unit-toggle" id="tp-comm-unit"><button type="button" class="active" data-u="lot">$/lot</button><button type="button" data-u="pct">%</button></div>
                 </div>
               </div>
-              <div class="tp-box tp-risk-summary">
+              <div class="tp-field-row" id="tp-row-tp">
+                <div class="tp-field-label">Take profit lock</div><!-- v121: Off removed, row moved under Commission -->
+                <div class="tp-chip-row" id="tp-chip-row">
+                  <div class="tp-chip" data-rr="1">TP1</div><div class="tp-chip selected" data-rr="2">TP2</div><div class="tp-chip" data-rr="3">TP3</div><div class="tp-chip" data-rr="4">TP4</div>
+                </div>
+              </div>
+              <div class="tp-box tp-risk-summary" id="tp-calc-box">
                 <div class="tp-kv"><span class="k">Calculated lot</span><span class="v tp-lots" id="tp-calc-lot">—</span></div>
                 <div class="tp-kv"><span class="k">Risk amount</span><span class="v tp-money-risk" id="tp-risk-amount">—</span></div>
                 <div class="tp-hint" id="tp-lot-hint">Middle-click the chart, then left-click to place the stop loss.</div>
-              </div>
-              <div class="tp-field-row">
-                <div class="tp-field-label">Take profit lock</div>
-                <div class="tp-chip-row" id="tp-chip-row">
-                  <div class="tp-chip" data-rr="0" title="No TP">Off</div><div class="tp-chip" data-rr="1">TP1</div><div class="tp-chip selected" data-rr="2">TP2</div><div class="tp-chip" data-rr="3">TP3</div><div class="tp-chip" data-rr="4">TP4</div>
-                </div>
               </div>
               <div class="tp-box">
                 <div class="tp-field-row" style="margin-bottom:0">
@@ -4927,6 +5109,8 @@
                 <div class="tp-gauge-labels"><span id="tp-open-risk">Open risk —</span><span id="tp-risk-limit">Limit 5.0%</span></div>
                 <div class="tp-hint">New trades are blocked once combined open risk (Daily DrawDown: + today's realized loss) reaches the limit above (0 = off).</div>
               </div>
+              <!-- v120: Replay account strip (one line, between Max risk and Open trades) -->
+              <div class="tp-rp-acct tp-replay-only" id="tp-rp-acct"><span class="tp-rp-it"><span class="k">Balance</span><b class="num" id="tp-rp-bal">—</b></span><span class="tp-rp-it"><span class="k">Equity</span><b class="num" id="tp-rp-eq">—</b></span><button type="button" id="tp-rp-reset" title="Restart the practice account: clears trades and history of this replay session">Reset</button></div>
             </div>
 
             <div class="tp-open-box" id="tp-open-box"><!-- V90: redesigned (Select Positions + bulk 25/50%, Net profit header) -->
@@ -4962,6 +5146,29 @@
             </div>
             <div class="tp-fee-box"><span>Total fees this period</span><span class="tp-fee-tag big" id="tp-hist-fees">—</span></div>
             <div class="tp-list" id="tp-hist-list"></div>
+          </div>
+
+          <!-- v111: News tab (see news.js) -->
+          <div class="tp-content" id="tp-tab-news" style="display:none">
+            <div class="nw-head"><span>Expected impact</span><span class="nw-quick"><span data-a="imp-all">All</span><span data-a="imp-none">None</span></span></div>
+            <div class="nw-imp" id="nw-imp"></div>
+            <div class="nw-head"><span>Currencies</span><span class="nw-quick"><span data-a="cur-all">All</span><span data-a="cur-none">None</span></span></div>
+            <div class="nw-cur" id="nw-cur"></div>
+            <div class="nw-lists">
+              <div class="nw-jump">
+                <button type="button" class="nw-jb" id="nw-prev" title="Previous day with news">&#8249;</button>
+                <div class="tp-input-wrap nw-jin" id="nw-jin">
+                  <input type="text" id="nw-date" placeholder="YYYY-MM-DD" inputmode="numeric" autocomplete="off" spellcheck="false" />
+                  <button type="button" class="nw-cal" id="nw-cal" title="Pick a date"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></button>
+                </div>
+                <button type="button" class="nw-jb" id="nw-next" title="Next day with news">&#8250;</button>
+                <div class="tp-chip nw-today" id="nw-today">Today</div>
+                <button type="button" class="nw-ref" id="nw-ref" title="Refresh actual values"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.5-4.2M4 4v4h4M4 13a8 8 0 0 0 14.5 4.2M20 20v-4h-4"/></svg><span class="nw-bd" id="nw-bd"></span></button>
+              </div>
+              <div class="nw-jstat" id="nw-jstat"></div>
+              <div class="nw-pop" id="nw-pop"></div>
+              <div class="tp-list nw-list" id="nw-list"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -5024,7 +5231,7 @@
   <div id="rbd-backdrop" class="rbd-backdrop">
     <div class="rbd-modal" role="dialog" aria-modal="true" aria-label="Select date">
       <div class="rbd-header">
-        <span>Select date</span>
+        <span id="rbd-title">Select date</span>
         <span class="rbd-close" id="rbd-close">✕</span>
       </div>
       <div class="rbd-fields">
@@ -5115,6 +5322,10 @@
       <div class="settings-content">
         <div class="settings-content-header">
           <span class="settings-content-title" id="settings-content-title">Market Data Overview</span>
+          <div class="mdo-src-switch" id="mdo-src-switch" role="group" aria-label="Source">
+            <button type="button" class="mdo-src-btn active" id="mdo-src-price-btn"><span data-ic="srcPrice"></span>Price Data</button>
+            <button type="button" class="mdo-src-btn" id="mdo-src-news-btn"><span data-ic="srcNews"></span>Economic News</button>
+          </div>
           <span class="settings-close" id="settings-close">✕</span>
         </div>
         <div class="settings-panes">
@@ -5124,6 +5335,7 @@
                unchanged from v38.1 other than losing its own modal
                header/padding, both now supplied by .settings-content. -->
           <div class="settings-pane" id="settings-pane-market-data-overview">
+          <div class="mdo-src" id="mdo-src-price">
             <div class="mdo-body">
               <div class="mdo-stat-row">Oldest Data Available : <span class="mdo-value" id="mdo-oldest-data">—</span> <span class="mdo-value" id="mdo-oldest-days"></span></div>
               <div class="mdo-controls-row">
@@ -5174,6 +5386,55 @@
               </div>
             </div>
             <span class="mdo-backfill-status" id="mdo-backfill-status">&nbsp;</span>
+          </div>
+
+          <!-- v110: Economic News — same structure/classes/heights as Price Data (see economic-news.js). -->
+          <div class="mdo-src" id="mdo-src-news" style="display:none">
+            <div class="mdo-body">
+              <div class="mdo-stat-row">Oldest News Available : <span class="mdo-value" id="nws-oldest">—</span></div>
+              <div class="mdo-controls-row">
+                <div class="mdo-control">
+                  <label for="nws-year-select">Year :</label>
+                  <select id="nws-year-select"></select>
+                </div>
+                <div class="mdo-control">
+                  <label for="nws-proxy-select">Proxy :</label>
+                  <select id="nws-proxy-select"><option value="auto">Auto</option><option value="manual">Manual</option></select>
+                </div>
+                <div class="mdo-control">
+                  <label for="nws-type-select">Type :</label>
+                  <select id="nws-type-select"><option value="socks5">Socks5</option><option value="http">HTTP</option></select>
+                </div>
+                <div class="mdo-control">
+                  <label for="nws-port-input">Port:</label>
+                  <input type="text" inputmode="numeric" maxlength="5" class="mdo-port" id="nws-port-input" value="1080" spellcheck="false" />
+                  <button type="button" class="mdo-refresh-btn" id="nws-refresh-btn" title="Re-read weeks from the database"></button>
+                </div>
+              </div>
+              <div class="mdo-view-row">
+                <div class="mdo-hover-info" id="nws-hover-info">&nbsp;</div>
+                <div class="mdo-view-switch" role="group" aria-label="View">
+                  <button type="button" class="mdo-view-btn active" id="nws-view-chart-btn" title="Chart" aria-pressed="true"></button>
+                  <button type="button" class="mdo-view-btn" id="nws-view-log-btn" title="Log" aria-pressed="false"></button>
+                </div>
+              </div>
+              <div class="mdo-chart-box nws-box" id="nws-box"></div>
+              <pre class="mdo-log-box" id="nws-log-box"></pre>
+              <div class="nws-lgd">
+                <span><b class="dl"></b>Downloaded</span><span><b></b>Missing</span><span><b class="part"></b>In Progress</span><span><b class="sel"></b>Selected</span>
+              </div>
+            </div>
+            <div class="mdo-footer">
+              <button type="button" class="mdo-backfill-btn" id="nws-backfill-btn" disabled>BackFill</button>
+              <button type="button" class="mdo-backfill-btn mdo-extend-btn" id="nws-extend-btn">Extend</button>
+              <div class="mdo-extend-date-box" id="nws-extend-date-box">
+                <input type="date" class="mdo-extend-date-input" id="nws-extend-date-input" />
+                <span class="mdo-extend-icon" id="nws-extend-cancel" title="Cancel">&#10005;</span>
+                <span class="mdo-extend-icon mdo-extend-confirm" id="nws-extend-confirm" title="Start Extend">&#10003;</span>
+              </div>
+            </div>
+            <span class="mdo-backfill-status" id="nws-status">&nbsp;</span>
+          </div>
           </div>
 
           <!-- v50: Canvas — chart theme (background/crosshair/text/candle
@@ -5232,13 +5493,54 @@
           <!-- v93: Sessions & Timezone (see sessions.js). -->
           <div class="settings-pane" id="settings-pane-sessions">
             <div class="frow">
-              <input type="checkbox" id="sess-local-tz" checked />
-              <label for="sess-local-tz">Enable Local Timezone</label>
+              <input type="checkbox" id="sess-local-tz" disabled />
+              <label for="sess-local-tz" id="sess-local-tz-label">Enable Local Timezone</label>
+              <span class="tzb-now" id="sess-local-tz-hint"></span>
+            </div>
+            <!-- v116: how the broker server clock is built (replaces the daily clock check; see sessions.js / broker_tz.py) -->
+            <div class="tzb" id="tzb">
+              <div class="frow tzb-row">
+                <label for="tzb-mode">Broker clock</label>
+                <select id="tzb-mode">
+                  <option value="auto">Auto (detect)</option>
+                  <option value="us">US rule (NY+7)</option>
+                  <option value="eu">Europe (EET, UTC+2/+3)</option>
+                  <option value="fixed">Fixed UTC</option>
+                  <option value="custom">Custom</option>
+                </select>
+                <span class="tzb-now" id="tzb-now"></span>
+              </div>
+              <div class="frow tzb-row" id="tzb-fixed-row">
+                <label for="tzb-fixed">UTC offset (hours)</label>
+                <input type="text" id="tzb-fixed" inputmode="decimal" autocomplete="off" value="3" />
+              </div>
+              <div class="frow tzb-row" id="tzb-custom-row">
+                <label for="tzb-ref">Based on</label>
+                <select id="tzb-ref">
+                  <option value="ny">New York (US DST)</option>
+                  <option value="eu">Europe (EU DST)</option>
+                  <option value="utc">UTC (no DST)</option>
+                </select>
+                <label for="tzb-shift">+ hours</label>
+                <input type="text" id="tzb-shift" inputmode="decimal" autocomplete="off" value="7" />
+              </div>
+              <div class="frow tzb-row" id="tzb-auto-row">
+                <label for="tzb-sym">Forex symbol</label>
+                <input type="hidden" id="tzb-sym" value="" />
+                <div class="canvas-preset-dropdown tzb-symdd" id="tzb-symdd">
+                  <button type="button" class="canvas-preset-dropdown-btn" id="tzb-sym-btn"><span id="tzb-sym-label">EURUSD</span><span class="caret">&#9660;</span></button>
+                  <div class="canvas-preset-dropdown-list" id="tzb-sym-list"></div>
+                </div>
+                <button type="button" class="sess-add-btn tzb-btn" id="tzb-detect">Detect</button>
+              </div>
+              <div class="tzb-status" id="tzb-status"></div>
+              <div class="tzb-report sc" id="tzb-report"></div>
             </div>
             <div class="tbl">
-              <div class="tr sess head"><span></span><span>Name</span><span>Start</span><span>End</span><span>Color</span><span></span></div>
+              <div class="tr sess head"><span></span><span>Name</span><span>Start</span><span>End</span><span>Timezone</span><span>Color</span><span></span></div>
               <div class="tbl-scroll sc" id="sess-rows"></div>
             </div>
+            <div class="tzb-status" id="sess-tz-hint"></div>
             <div class="btns"><button type="button" class="sess-add-btn" id="sess-add">+ Add Session</button></div>
 
             <div class="canvas-preset-block">
@@ -5562,8 +5864,10 @@
 <script src="js/drawing-persistence.js"></script>
 <script src="js/object-panel.js"></script>
 <script src="js/trade-panel.js"></script>
+<script src="js/news.js"></script>
 <script src="js/trade-lines.js"></script>
 <script src="js/trade-hover.js"></script>
+<script src="js/replay-trading.js"></script>
 <script src="js/free-crosshair.js"></script>
 <script src="js/chart-core.js"></script>
 <script src="js/candle-countdown.js"></script>
@@ -5572,6 +5876,7 @@
 <script src="js/keyboard-shortcuts.js"></script>
 <script src="js/jump-time.js"></script>
 <script src="js/replay-bar.js"></script>
+<script src="js/economic-news.js"></script>
 <script src="js/market-data-overview.js"></script>
 <script src="js/canvas-settings.js"></script>
 <script src="js/ui-scale.js"></script>

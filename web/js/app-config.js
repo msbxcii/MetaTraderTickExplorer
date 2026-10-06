@@ -72,6 +72,12 @@
           key: "HISTORY_BACKFILL_MAX_DAYS", type: "int", step: "1", unit: "days",
           title: "Max Prefill Days",
           description: "Maximum number of broker days downloaded automatically during initial setup. Increase for more history, decrease for a faster first launch."
+        },
+        {
+          // two inputs on one row: [min] [max], stored as two config keys
+          type: "pair", keys: ["NEWS_DELAY_MIN", "NEWS_DELAY_MAX"], step: "0.5", unit: "sec",
+          title: "News Request Interval",
+          description: "Random wait between two weeks while Economic News downloads (Extend / BackFill): a new random value between Min and Max seconds is used after every week. Lower values are faster but increase the chance of the site rate-limiting or blocking you; if you see HTTP 429 / 403 errors in the [NEWS] log, raise them. Takes effect from the next Extend / BackFill."
         }
       ],
     },
@@ -119,7 +125,10 @@
 
   var FIELD_BY_KEY = {};
   SECTIONS.forEach(function (s) {
-    s.fields.forEach(function (f) { FIELD_BY_KEY[f.key] = f; });
+    s.fields.forEach(function (f) {
+      if (f.type === "pair") f.keys.forEach(function (k) { FIELD_BY_KEY[k] = f; });
+      else FIELD_BY_KEY[f.key] = f;
+    });
   });
 
   var defaults = {};   // configKey -> original hardcoded value (from config.py)
@@ -186,6 +195,8 @@
     Object.keys(FIELD_BY_KEY).forEach(function (k) {
       var type = FIELD_BY_KEY[k].type;
       d[k] = type === "intlist" ? [] : (type === "bool" ? false : "");
+      if (k === "NEWS_DELAY_MIN") d[k] = 1;                 // v111
+      if (k === "NEWS_DELAY_MAX") d[k] = 3;
       if (k === "DISABLE_CONNECTION_ALERTS") d[k] = true;   // v101
     });
     return d;
@@ -239,7 +250,10 @@
   function renderAll() {
     body.innerHTML = "";
     SECTIONS.forEach(function (section) {
-      var visibleFields = section.fields.filter(function (f) { return f.key in defaults || f.key in current; });
+      var visibleFields = section.fields.filter(function (f) {
+        var k = f.type === "pair" ? f.keys[0] : f.key;
+        return k in defaults || k in current;
+      });
       if (!visibleFields.length) return;
 
       var sectionEl = document.createElement("div");
@@ -255,7 +269,64 @@
     });
   }
 
+  // v111: one row with TWO number inputs side by side ([min] [max]) + a shared
+  // unit. Same classes as a normal numeric row, so size/theme/alignment match;
+  // the Max input sits where a single input would, Min sits to its left.
+  function renderPairRow(field) {
+    var row = document.createElement("div");
+    row.className = "appcfg-row";
+
+    var labelWrap = document.createElement("div");
+    labelWrap.className = "appcfg-label-wrap";
+    var label = document.createElement("span");
+    label.className = "appcfg-label";
+    label.textContent = field.title;
+    labelWrap.appendChild(label);
+    row.appendChild(labelWrap);
+
+    var inputs = field.keys.map(function (key) {
+      var input = document.createElement("input");
+      input.dataset.key = key;
+      input.type = "text";
+      input.className = "appcfg-input appcfg-input-num";
+      input.autocomplete = "off";
+      input.spellcheck = false;
+      input.value = valueToInputString({ type: "float" }, current[key]);
+      row.appendChild(input);
+      return input;
+    });
+
+    function onInput(idx) {
+      var input = inputs[idx];
+      var parsed = parseInputString({ type: "float" }, input.value);
+      if (parsed === null || parsed < 0) {
+        input.classList.add("appcfg-input-invalid");
+        return;                               // don't persist an unparsable value
+      }
+      input.classList.remove("appcfg-input-invalid");
+      current[field.keys[idx]] = parsed;
+      var lo = Number(current[field.keys[0]]), hi = Number(current[field.keys[1]]);
+      var bad = lo > hi;                       // Min must not exceed Max
+      inputs.forEach(function (el) { el.classList.toggle("appcfg-input-invalid", bad); });
+      if (!bad) scheduleSave();
+    }
+    inputs.forEach(function (input, idx) {
+      input.addEventListener("input", function () { onInput(idx); });
+      input.addEventListener("focus", function () { showDescription(field); });
+    });
+
+    var unit = document.createElement("span");
+    unit.className = "appcfg-unit";
+    unit.textContent = field.unit || "";
+    row.appendChild(unit);
+
+    row.addEventListener("mouseenter", function () { showDescription(field); });
+    row.addEventListener("mouseleave", function () { clearDescription(); });
+    return row;
+  }
+
   function renderRow(field) {
+    if (field.type === "pair") return renderPairRow(field);
     var row = document.createElement("div");
     row.className = "appcfg-row";
 
@@ -439,11 +510,20 @@
     };
   }
 
+  // v111: live Min/Max wait between Economic News weeks (read when a job starts,
+  // so a change applies to the very next Extend / BackFill). null = not loaded/invalid.
+  function getNewsDelay() {
+    if (!loaded) return null;
+    var lo = Number(current.NEWS_DELAY_MIN), hi = Number(current.NEWS_DELAY_MAX);
+    if (!(lo >= 0) || !(hi >= 0)) return null;
+    return lo <= hi ? { min: lo, max: hi } : { min: hi, max: lo };
+  }
+
   // Load once at startup (not only when the tab is opened) so the saved notification
   // settings are already in effect for the first notification of the session.
   function preload() { if (!loaded) load(); }
   if (hasBridge("get_app_config")) preload();
   else window.addEventListener("pywebviewready", preload);
 
-  App.AppConfig = { activate: activate, deactivate: deactivate, isToolHintEnabled: isToolHintEnabled, getAlertSettings: getAlertSettings };
+  App.AppConfig = { activate: activate, deactivate: deactivate, isToolHintEnabled: isToolHintEnabled, getAlertSettings: getAlertSettings, getNewsDelay: getNewsDelay };
 })();

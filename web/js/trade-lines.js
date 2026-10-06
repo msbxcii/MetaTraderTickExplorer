@@ -46,8 +46,11 @@
   function colors() { return { sl: cssVar("--down", "#ef5350"), tp: cssVar("--up", "#26a69a"), entry: cssVar("--muted", "#8b95a5"), be: cssVar("--gold", "#d4a017") }; }
   function digits() { var s = T() && T().specs(); return s ? s.digits : 5; }
   function fmt(p) { return Number(p).toFixed(digits()); }
-  function bid() { return Number(App.livePrice); }
-  function ask() { var a = Number(App.liveAsk), b = bid(); return isFinite(a) && a >= b ? a : b; }
+  // v119: Replay Trading = simulated BID/ASK; lines blocked only while no replay date is set
+  function sim() { return App.replayActive && App.ReplayTrade ? App.ReplayTrade : null; }
+  function blocked() { return App.replayActive && !(sim() && sim().ready()); }
+  function bid() { return sim() ? sim().bid() : Number(App.livePrice); }
+  function ask() { if (sim()) return sim().ask(); var a = Number(App.liveAsk), b = bid(); return isFinite(a) && a >= b ? a : b; }
   function series() { return App.series || null; }
 
   // ---- V88: panels + mirrored lines ----------------------------------------
@@ -205,7 +208,7 @@
   }
 
   function arm(e, pending) {
-    if (App.replayActive) { T().toast("Trading is disabled in Bar Replay", "info"); return; }
+    if (blocked()) { T().toast("Select a replay date first", "info"); return; }
     if (!T().specs()) { T().toast("Waiting for MT5 symbol data…", "info"); return; }
     if (!isFinite(bid())) { T().toast("No live price yet", "info"); return; }
     armed = true;
@@ -263,6 +266,7 @@
       var L = posLines[t]; rmLine(L.entry, linesSeries); rmLine(L.sl, linesSeries); rmLine(L.tp, linesSeries);
     });
     posLines = {};
+    if (lockT != null) { lockT = null; focusT = null; document.dispatchEvent(new CustomEvent("App:tradeLock", { detail: null })); }
     if (beLine) { rmLine(beLine); beLine = null; } // V90
   }
   // V86: TP label = reward/initial-risk multiple, e.g. "TP#2.54".
@@ -291,7 +295,7 @@
   }
   // Called on every live price change; only touches a line whose label text changed.
   function refreshEntryTitles() {
-    if (App.replayActive) return;
+    if (blocked()) return;
     for (var k in posLines) {
       var L = posLines[k], p = L.p;
       if (!L.entry || !L.titles || !p || p.kind === "pending" || (drag && drag.key === k)) continue;
@@ -303,7 +307,7 @@
   }
   function renderPositions() {
     var s = series();
-    if (!s || App.replayActive) { if (linesSeries) clearPositionLines(); return; }
+    if (!s || blocked()) { if (linesSeries) clearPositionLines(); return; }
     linesSeries = s; // V88: lines follow all panels on their own
     var col = colors(), seen = {};
     positions.forEach(function (p) {
@@ -328,7 +332,7 @@
       if (focusT != null) styleLines(k);
     });
     Object.keys(posLines).forEach(function (t) {
-      if (!seen[t]) { var L = posLines[t]; rmLine(L.entry, linesSeries); rmLine(L.sl, linesSeries); rmLine(L.tp, linesSeries); delete posLines[t]; }
+      if (!seen[t]) { var L = posLines[t]; rmLine(L.entry, linesSeries); rmLine(L.sl, linesSeries); rmLine(L.tp, linesSeries); delete posLines[t]; if (t === lockT) setLock(null); }
     });
     syncBE(); // V90: BE follows partial closes / swap, gone with the trade
   }
@@ -343,27 +347,42 @@
   }
   function styleLines(t) {
     var L = posLines[t]; if (!L || !L.titles) return;
-    var col = colors(), dim = focusT != null && t !== focusT;
+    var col = colors(), dim = focusT != null && t !== focusT, sel = lockT != null && t === lockT;
     [["entry", col.entry], ["sl", col.sl], ["tp", col.tp]].forEach(function (d) {
       if (!L[d[0]]) return;
-      L[d[0]].applyOptions({ color: dim ? fade(d[1]) : d[1], title: dim ? "" : L.titles[d[0]], axisLabelVisible: !dim });
+      // v121: locked trade = SL/TP (and a pending entry) drawn selected (thicker)
+      var w = sel && (d[0] !== "entry" || (L.p && L.p.kind === "pending")) ? 2 : 1;
+      L[d[0]].applyOptions({ color: dim ? fade(d[1]) : d[1], title: dim ? "" : L.titles[d[0]], axisLabelVisible: !dim, lineWidth: w });
     });
   }
   // V90: one shared BE line, shown only for the hovered open trade.
   var beLine = null, BE_COL = "#f0a030";
   function syncBE() {
     var L = focusT != null ? posLines[focusT] : null, p = L && L.p;
-    var be = p && p.kind !== "pending" && !App.replayActive ? Number(p.be) || 0 : 0;
+    var be = p && p.kind !== "pending" && !blocked() ? Number(p.be) || 0 : 0;
     if (!(be > 0)) { if (beLine) { rmLine(beLine); beLine = null; } return; }
     if (!beLine) beLine = mkLine(be, BE_COL, DASHED, "BE");
     else if (Number(beLine.options().price) !== be) beLine.applyOptions({ price: be });
   }
   function setFocus(t) {
+    if (lockT != null) return;                 // v121: hover is ignored while a trade is locked
     t = t == null ? null : String(t);
     if (t === focusT) return;
     focusT = t;
     Object.keys(posLines).forEach(styleLines);
     syncBE();
+  }
+  // v121: Focus Lock - one trade at a time; only its lines can be selected/dragged.
+  var lockT = null;
+  function setLock(k) {
+    k = k == null ? null : String(k);
+    if (k !== null && !posLines[k]) k = null;
+    if (k === lockT) return;
+    lockT = k;
+    focusT = k;
+    Object.keys(posLines).forEach(styleLines);
+    syncBE();
+    document.dispatchEvent(new CustomEvent("App:tradeLock", { detail: k }));
   }
 
   function hitTest(clientY) {
@@ -372,6 +391,7 @@
     s = pnl.series;
     var y = clientY - pnl.el.getBoundingClientRect().top, best = null;
     Object.keys(posLines).forEach(function (t) {
+      if (lockT != null && t !== lockT) return;   // v121: other trades are untouchable while locked
       var L = posLines[t];
       (L.p && L.p.kind === "pending" ? ["entry", "sl", "tp"] : ["sl", "tp"]).forEach(function (w) {
         if (!L[w] || !L.p) return;
@@ -449,6 +469,14 @@
   window.addEventListener("pointerdown", function (e) {
     if (e.pointerType && e.pointerType !== "mouse") return;
     if (e.button !== 2) ctxBlock = false;
+    if (lockT != null && !armed) {   // v121: right-click, or left-click away from its SL/TP, ends the lock
+      if (e.button === 2) setLock(null);
+      else if (e.button === 0 && !(e.target.closest && e.target.closest(".tp-item"))) {
+        var pn0 = panelAt(e), keep = false;
+        if (pn0) { active = pn0; keep = !!hitTest(e.clientY) && !drawingOwns(e); }
+        if (!keep) setLock(null);
+      }
+    }
     var pn = panelAt(e);
     if (!pn) { if (armed && e.button === 2) disarm(); return; }
     // Trade trigger buttons come from Settings > Keyboard Shortcuts
@@ -462,7 +490,7 @@
     if (tradeBtn) { if (armed) disarm(); else arm(e, tradeAct === "pending"); handled = true; }
     else if (armed && e.button === 0) { place(e); handled = true; }
     else if (armed && e.button === 2) { disarm(); handled = true; }
-    else if (e.button === 0 && !App.replayActive) {
+    else if (e.button === 0 && !blocked()) {
       var h = hitTest(e.clientY);
       if (h && drawingOwns(e)) h = null; // v89 Update 5
       if (h) { drag = { key: h.key, ticket: h.ticket, which: h.which, line: h.line, price: null }; handled = true; }
@@ -566,5 +594,7 @@
     isArmed: function () { return armed; },
     toggleArm: toggleArm,
     focus: setFocus,
+    lock: setLock,
+    locked: function () { return lockT; },
   };
 })();

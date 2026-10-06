@@ -219,6 +219,12 @@ MT5_RECONNECT_INTERVAL_SECONDS = 15.0
 SYNC_PROCESS_WATCHDOG_CHECK_INTERVAL_SECONDS = 5.0
 SYNC_PROCESS_RESPAWN_COOLDOWN_SECONDS = 15.0
 
+# v111: Economic News downloader (Extend / BackFill) waits a random time in
+# [NEWS_DELAY_MIN, NEWS_DELAY_MAX] seconds between two weeks. Lower = faster
+# but a higher chance of being rate-limited / blocked by the site.
+NEWS_DELAY_MIN = 1.0
+NEWS_DELAY_MAX = 3.0
+
 
 # =============================================================================
 # v52: Configuration tab persistence -----------------------------------------

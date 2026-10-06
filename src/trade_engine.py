@@ -254,6 +254,9 @@ def specs(mt5, symbol):
         "open_risk": risk, "unbounded": unbounded,
         "day_loss": day_loss(mt5, symbol),  # V90
         "margin_free": float(acc.margin_free), "margin_1lot": _margin_1lot(mt5, info, tick) if tick is not None else 0.0,
+        # v119: live spread + account leverage (Replay Trading "Auto" values)
+        "spread": float(tick.ask - tick.bid) if tick is not None and tick.ask and tick.bid else 0.0,
+        "leverage": int(getattr(acc, "leverage", 0) or 0),
         "connected": bool(term.connected) if term is not None else False,
         "trade_allowed": bool(term is not None and term.trade_allowed and acc.trade_allowed and acc.trade_expert),
     }

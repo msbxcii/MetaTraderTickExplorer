@@ -23,7 +23,7 @@ tag and the version it reports always match.
 """
 
 APP_NAME = "mt-tick.explorer"
-VERSION = "v4.1.0"
+VERSION = "v5.0.0"
 
 
 # Official distribution notice. Shown in the startup log, the Get Started
@@ -32,8 +32,7 @@ VERSION = "v4.1.0"
 OFFICIAL_REPO_URL = "https://github.com/msbxcii/MetaTraderTickExplorer"
 FREE_NOTICE = (
     "MetaTrader Tick Explorer is free and open-source software. "
-    "Official builds are distributed only at " + OFFICIAL_REPO_URL + "/releases. "
-    "If you paid for this software, you have been scammed."
+    "Official builds are distributed only at " + OFFICIAL_REPO_URL + "/releases."
 )
 
 

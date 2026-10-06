@@ -55,15 +55,12 @@
   var saveAgainAfterInFlight = false;
 
   function serializeObjects() {
-    // v57 Update 13: objects drawn WHILE Bar Replay is active are explicitly
-    // scratch - drawing-engine.js tags them `_replayTemp` and replay-bar.js
-    // deletes them the moment Replay mode closes. They were still being
-    // written to <symbol>.json on every debounced save in the meantime, so
-    // closing the app (or a crash) mid-Replay left them behind permanently,
-    // with no Replay session running any more to clean them up.
-    return App.drawObjects.filter(function (obj) {
-      return !obj._replayTemp;
-    }).map(function (obj) {
+    // v120: Replay objects are saved too (folder "On Replay"); while Replay is
+    // active they are written as hidden, so a crash mid-Replay leaves them
+    // hidden outside Replay.
+    var replayIds = {};
+    App.objectFolders.forEach(function (f) { if (f.replay) replayIds[f.id] = true; });
+    return App.drawObjects.map(function (obj) {
       return {
         id: obj.id,
         type: obj.type,
@@ -103,7 +100,7 @@
           showDescription: obj.style.levels ? !!obj.style.showDescription : undefined,
         },
         locked: !!obj.locked,
-        hidden: !!obj.hidden,
+        hidden: (!!obj.hidden && !obj._replayHid) || (App.replayActive && !!replayIds[obj.folderId]), // v126: Replay's temporary hide is not saved
         // v33.1 Fix 3/4
         name: typeof obj.name === "string" ? obj.name : "",
         folderId: (obj.folderId === null || obj.folderId === undefined) ? null : Number(obj.folderId),
@@ -129,7 +126,7 @@
 
   function serializeFolders() {
     return App.objectFolders.map(function (f) {
-      return { id: f.id, name: typeof f.name === "string" ? f.name : "Folder" };
+      return { id: f.id, name: typeof f.name === "string" ? f.name : "Folder", replay: f.replay ? true : undefined };
     });
   }
 
@@ -141,7 +138,9 @@
       var id = Number(raw && raw.id);
       if (!Number.isFinite(id) || id <= 0) return null;
       if (id > maxId) maxId = id;
-      return { id: id, name: (raw && typeof raw.name === "string" && raw.name) || "Folder" };
+      var fo = { id: id, name: (raw && typeof raw.name === "string" && raw.name) || "Folder" };
+      if (raw && raw.replay) { fo.replay = true; fo.name = "Replay Objects"; } // v120; v126: also renames saved "On Replay"
+      return fo;
     }).filter(Boolean);
     return { folders: folders, maxId: maxId };
   }

@@ -189,5 +189,67 @@
     if (panes) panes.addEventListener("scroll", refit, { passive: true });
   })();
 
+  // v125: themed popup for native <select>s in Setting (the OS popup paints a
+  // grey hover/selected row that can't be themed). Closed look stays native.
+  (function () {
+    var modal = dom.settingsBackdrop.querySelector(".settings-modal");
+    if (!modal) return;
+    var pop = null, owner = null;
+    function close() {
+      if (pop) { pop.remove(); pop = null; }
+      owner = null;
+    }
+    function open(sel) {
+      close();
+      owner = sel;
+      pop = document.createElement("div");
+      pop.className = "sel-pop";
+      var b = sel.getBoundingClientRect();
+      Array.prototype.forEach.call(sel.options, function (o, i) {
+        var it = document.createElement("div");
+        it.className = "sel-pop-item" + (i === sel.selectedIndex ? " on" : "");
+        it.textContent = o.textContent;
+        if (o.disabled) it.classList.add("dis");
+        it.addEventListener("mousedown", function (e) { e.preventDefault(); e.stopPropagation(); });
+        it.addEventListener("click", function () {
+          if (o.disabled) return;
+          var changed = sel.selectedIndex !== i;
+          sel.selectedIndex = i;
+          close();
+          if (changed) {
+            sel.dispatchEvent(new Event("input", { bubbles: true }));
+            sel.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        });
+        pop.appendChild(it);
+      });
+      pop.style.left = b.left + "px";
+      pop.style.minWidth = b.width + "px";
+      modal.appendChild(pop);
+      var below = window.innerHeight - b.bottom - 8, above = b.top - 8;
+      var h = Math.min(pop.scrollHeight, 260);
+      if (h > below && above > below) { pop.style.bottom = (window.innerHeight - b.top + 2) + "px"; pop.style.maxHeight = Math.min(260, above) + "px"; }
+      else { pop.style.top = (b.bottom + 2) + "px"; pop.style.maxHeight = Math.min(260, below) + "px"; }
+      var on = pop.querySelector(".on");
+      if (on) on.scrollIntoView({ block: "nearest" });
+    }
+    modal.addEventListener("mousedown", function (e) {
+      var sel = e.target.closest && e.target.closest("select");
+      if (sel && !sel.disabled && modal.contains(sel)) {
+        e.preventDefault();
+        sel.focus();
+        if (owner === sel) close(); else open(sel);
+        return;
+      }
+      if (pop && !pop.contains(e.target)) close();
+    }, true);
+    document.addEventListener("mousedown", function (e) { if (pop && !modal.contains(e.target)) close(); });
+    window.addEventListener("resize", close);
+    window.addEventListener("blur", close);
+    document.addEventListener("keydown", function (e) { if (pop && e.key === "Escape") { e.stopPropagation(); close(); } }, true);
+    var panes = modal.querySelector(".settings-panes");
+    if (panes) panes.addEventListener("scroll", close, { passive: true });
+  })();
+
   App.SettingsPanel = { open: open, close: close, showTab: showTab };
 })();

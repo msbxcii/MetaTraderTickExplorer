@@ -34,6 +34,8 @@
   var selected = {};      // ticket -> true
 
   function api() { return window.pywebview && window.pywebview.api; }
+  // v119: Replay Trading simulator (replay-trading.js) while Bar Replay is on
+  function rt() { return App.replayActive && App.ReplayTrade ? App.ReplayTrade : null; }
   function call(name, arg) {
     var a = api();
     if (a && typeof a[name] === "function") { try { a[name](arg); } catch (e) {} }
@@ -65,6 +67,12 @@
       var a = api(); if (a && a.save_trade_settings) { try { a.save_trade_settings(settings); } catch (e) {} }
     }, 400);
   }
+  // v126: no-debounce save (window closing) - localStorage is sync, the disk call is sent at once
+  function saveSettingsNow() {
+    try { localStorage.setItem(SKEY, JSON.stringify(settings)); } catch (e) {}
+    clearTimeout(saveTimer);
+    var a = api(); if (a && a.save_trade_settings) { try { a.save_trade_settings(settings); } catch (e) {} }
+  }
   function curSym() { return (App.symbol || (specs && specs.symbol) || "").toString(); }
   function loadComm() {
     var c = (settings.comm || {})[curSym()];
@@ -84,6 +92,7 @@
   function stepDigits(step) { var s = String(step); return s.indexOf(".") < 0 ? 0 : s.split(".")[1].length; }
   // V85: round-trip commission for 1 lot at `price`.
   function commissionPerLot(price) {
+    if (rt()) return rt().commPerLot(price); // v119
     var c = num(settings.commission), cs = specs ? Number(specs.contract_size) || 0 : 0;
     price = Number(price) || Number(App.livePrice) || 0;
     if (isFinite(c) && c >= 0) return settings.commMode === "pct" ? c / 100 * cs * price : c;
@@ -132,7 +141,8 @@
       lotEl.textContent = "—"; lotEl.title = ""; lotEl.style.color = "";
       amtEl.textContent = isFinite(rm) ? rm.toFixed(2) + cur : "—";
     }
-    if (hint && specs && specs.ok) {
+    if (hint && specs && specs.ok && specs.replay) hint.textContent = rt() ? rt().hint() : ""; // v119
+    else if (hint && specs && specs.ok) {
       var ca = num(settings.commission);
       var m = specs.comm_model || {};
       var auto = isFinite(ca) ? "" : (m.n ? " (auto" + (m.mode === "pct" ? " %" : "") + (m.out_lot || m.out_pct ? (m.in_lot || m.in_pct ? ", both sides" : ", exit only") : ", entry only") + ")" : " (auto: no history)");
@@ -154,12 +164,17 @@
 
   window.onTradeSpecs = function (d) {
     if (!d || !d.ok) return;
+    if (App.ReplayTrade) App.ReplayTrade.setBase(d); // v119: live specs = simulator base
+    if (App.replayActive) { lastFeedMsg = Date.now(); return; }
+    applySpecs(d);
+  };
+  function applySpecs(d) {
     if (App.symbol && d.symbol && d.symbol !== App.symbol) return; // stale (symbol switch)
     specs = d;
     lastFeedMsg = Date.now();
     refreshSummary();
     if (App.TradeLines && App.TradeLines.onSpecs) App.TradeLines.onSpecs(d);
-  };
+  }
 
   // V99: notification stack (bottom-left). Newest toast enters at the bottom and
   // older ones slide up; identical consecutive messages merge into one with a
@@ -244,6 +259,13 @@
   // Request tracking: every action gets an id; no answer in 10 s = warn.
   var pending = {}, reqSeq = 0;
   function send(apiName, params, label) {
+    if (rt()) { // v119: simulated fill, answered like an MT5 result
+      var rid = "r" + (++reqSeq); params.req_id = rid;
+      var res = rt().handle(apiName, params) || { ok: false, msg: "Failed" };
+      res.req_id = rid; res.kind = apiName;
+      setTimeout(function () { applyResult(res); }, 0);
+      return rid;
+    }
     if (App.backendStatus === "offline") { toast("MT5 offline: " + label + " not sent", "err"); return null; }
     var a = api();
     if (!a || typeof a[apiName] !== "function") { toast("Backend not ready", "err"); return null; }
@@ -268,11 +290,15 @@
   }
   window.onTradeResult = function (r) {
     r = r || {};
+    if (App.replayActive && !pending[r.req_id]) return; // v119
+    applyResult(r);
+  };
+  function applyResult(r) {
     var p = pending[r.req_id];
     if (p) { clearTimeout(p.timer); delete pending[r.req_id]; }
     if (r.msg !== "No change") toast(r.msg || (r.ok ? "Done" : "Failed"), r.ok ? "" : "err");
     if (App.TradeLines && App.TradeLines.onResult) App.TradeLines.onResult(r);
-  };
+  }
 
   function selectedTickets() { return Object.keys(selected).map(Number); }
   function doClose(tickets, fraction) {
@@ -351,8 +377,9 @@
       pl: el.querySelector(".tp-pl"), fee: el.querySelector(".tp-fee-tag"), be: el.querySelector(".tp-be"), rw: el.querySelector(".tp-rw"), entry: el.querySelector(".tp-entry"), key: "" };
   }
 
-  var focusEl = null;
+  var focusEl = null, lockedKey = null;
   function focusTicket(t, el) {
+    if (lockedKey) return;   // v121: hover does nothing while a trade is focus-locked
     if (t == null && focusEl !== el) return;
     if (focusEl) focusEl.classList.remove("tp-focused");
     focusEl = t == null ? null : el;
@@ -360,6 +387,21 @@
     openList.classList.toggle("tp-focus", !!focusEl);
     if (App.TradeLines && App.TradeLines.focus) App.TradeLines.focus(t);
   }
+
+  // v121: left-click a trade box = Focus Lock (chart side lives in trade-lines.js)
+  openList.addEventListener("click", function (e) {
+    if (e.target.closest("button, input, label")) return;
+    var item = e.target.closest(".tp-item"); if (!item) return;
+    for (var k in rows) if (rows[k].el === item) { if (App.TradeLines && App.TradeLines.lock) App.TradeLines.lock(k); return; }
+  });
+  document.addEventListener("App:tradeLock", function (e) {
+    var k = e.detail || null;
+    if (focusEl) focusEl.classList.remove("tp-focused", "tp-locked");
+    lockedKey = k;
+    focusEl = k && rows[k] ? rows[k].el : null;
+    if (focusEl) focusEl.classList.add("tp-focused", "tp-locked");
+    openList.classList.toggle("tp-focus", !!focusEl);
+  });
 
   // V90: focus clears only when the mouse leaves the whole Open Positions box.
   openBox.addEventListener("mouseleave", function () { if (focusEl) focusTicket(null, focusEl); });
@@ -396,6 +438,7 @@
     if (r.pl.textContent !== pl) {
       r.pl.textContent = pl;
       r.pl.className = "tp-pl " + (tot >= 0 ? "tp-pos" : "tp-neg");
+      r.el.className = "tp-item " + (Math.round(tot * 100) === 0 ? "tp-h-be" : tot > 0 ? "tp-h-win" : "tp-h-loss") + (r.el.classList.contains("tp-focused") ? " tp-focused" : "");   // v117
       r.pl.title = rz ? "Open " + money(p.profit) + " · banked by partial close " + money(rz) : "";
     }
     r.cb.checked = !!selected[p.ticket];
@@ -414,7 +457,7 @@
       var k = pkey(p);
       seen[k] = true;
       var r = rows[k];
-      if (!r) { r = rows[k] = p.kind === "pending" ? buildPendingRow(p) : buildRow(p); }
+      if (!r) { r = rows[k] = p.kind === "pending" ? buildPendingRow(p) : buildRow(p); if (p.kind !== "pending") selected[p.ticket] = true; }   // v122: a newly opened trade starts selected
       r.ticket = p.ticket;
       if (r.pending) updatePendingRow(r, p); else updateRow(r, p);
       order.push(r.el);
@@ -423,7 +466,7 @@
     if (!nPend || nPend === list.length) grpLive.remove();
     order.forEach(function (el, i) { if (openList.children[i] !== el) openList.insertBefore(el, openList.children[i] || null); });
     Object.keys(rows).forEach(function (t) {
-      if (!seen[t]) { if (focusEl === rows[t].el) focusTicket(null, focusEl); rows[t].el.remove(); delete selected[rows[t].ticket]; delete rows[t]; }
+      if (!seen[t]) { if (lockedKey === t) lockedKey = null; if (focusEl === rows[t].el) focusTicket(null, focusEl); rows[t].el.remove(); delete selected[rows[t].ticket]; delete rows[t]; }
     });
     var net = 0, nLive = 0;
     list.forEach(function (p) { if (p.kind !== "pending") { nLive++; net += (Number(p.profit) || 0) + (Number(p.realized) || 0) + (Number(p.swap) || 0) - (Number(p.fee) || 0); } });
@@ -455,9 +498,12 @@
 
   window.onTradePositions = function (list) {
     lastFeedMsg = Date.now();
+    if (!App.replayActive) applyPositions(list); // v119
+  };
+  function applyPositions(list) {
     if (App.TradeLines && App.TradeLines.onPositions) App.TradeLines.onPositions(list || []);
     if (isOpen) renderPositions(list);
-  };
+  }
   $("tp-bulk-close").addEventListener("click", function () { doClose(selectedTickets(), 1); });
   $("tp-bulk-rf").addEventListener("click", function () { var t = bulkPick(pastBE, "past break-even"); if (t) doRiskFree(t); });
   $("tp-bulk-25").addEventListener("click", function () { var t = bulkPick(inProfit, "in profit"); if (t) doClose(t, 0.25); });
@@ -468,9 +514,11 @@
   // getters (no local-timezone shift) and compare days against broker "now".
   var brokerNow = 0;
   function dayLabel(ts) {
-    var o = App.Tz ? App.Tz.offset() : 0;  // v92: system-time display
+    // v92: system-time display; v116: shift taken at each timestamp (DST-aware)
+    var o = App.Tz ? App.Tz.offset(ts) : 0;
+    var oNow = App.Tz && brokerNow ? App.Tz.offset(brokerNow) : o;
     ts += o;
-    var day = Math.floor(ts / 86400), today = Math.floor((brokerNow ? brokerNow + o : ts) / 86400);
+    var day = Math.floor(ts / 86400), today = Math.floor((brokerNow ? brokerNow + oNow : ts) / 86400);
     if (day === today) return "TODAY";
     if (day === today - 1) return "YESTERDAY";
     return new Date(ts * 1000).toLocaleDateString("en-US", { timeZone: "UTC", year: "numeric", month: "short", day: "numeric" }).toUpperCase();
@@ -529,7 +577,7 @@
   histList.addEventListener("mouseleave", function () { histSet(null); });
   histList.addEventListener("click", function (e) {
     var el = e.target.closest ? e.target.closest(".tp-item") : null, t = histTrade(el);
-    if (t && App.TradeHover) App.TradeHover.jump(t);
+    if (t && App.TradeHover && !App.replayActive) App.TradeHover.jump(t); // v119: no jump past the replay playhead
   });
 
   // V90: minimal cumulative net P/L chart (one SVG path per fetch, hover = one point).
@@ -569,6 +617,9 @@
   });
 
   window.onTradeHistory = function (data) {
+    if (!App.replayActive) applyHistory(data); // v119
+  };
+  function applyHistory(data) {
     data = data || {};
     histSet(null); // V91: rows are rebuilt
     brokerNow = Number(data.broker_now) || 0;
@@ -591,9 +642,10 @@
     }
     histList.innerHTML = "";
     renderHistChunk();
-  };
+  }
 
   function loadHistory() {
+    if (rt()) { applyHistory(rt().history(histPeriod)); return; } // v119
     if (!histData) histList.innerHTML = '<div class="tp-empty">Loading…</div>';
     call("request_trade_history", histPeriod);
   }
@@ -617,7 +669,9 @@
     panel.querySelectorAll(".tp-tab").forEach(function (t) { t.classList.toggle("active", t.getAttribute("data-tab") === name); });
     $("tp-tab-trade").style.display = name === "trade" ? "" : "none";
     $("tp-tab-history").style.display = name === "history" ? "" : "none";
+    if ($("tp-tab-news")) $("tp-tab-news").style.display = name === "news" ? "" : "none";  // v111
     if (name === "history") loadHistory();
+    if (App.News) App.News.setTabActive(name === "news" && isOpen);  // v111
   }
   // V84: live risk controls (saved locally, used by the fast market order).
   function bindUnit(id, key) {
@@ -685,6 +739,7 @@
     settings.maxBasis = c.getAttribute("data-b"); syncBasis(); saveSettings(); refreshSummary();
   });
   var chipRow = $("tp-chip-row");
+  if (!(Number(settings.rr) >= 1)) settings.rr = 2;   // v121: "Off" removed
   chipRow.querySelectorAll(".tp-chip").forEach(function (x) { x.classList.toggle("selected", Number(x.getAttribute("data-rr")) === Number(settings.rr)); });
   chipRow.addEventListener("click", function (e) {
     var c = e.target.closest(".tp-chip"); if (!c) return;
@@ -699,6 +754,7 @@
     panel.classList.add("open");
     toggleBtn.classList.add("active");
     setFeed();
+    if (rt()) rt().refresh(); // v119
     showTab("trade"); // V87: always opens on the Trade tab
   }
   function close() {
@@ -708,6 +764,7 @@
     if (focusEl) focusTicket(null, focusEl);
     histSet(null); // V91
     setFeed();
+    if (App.News) App.News.setTabActive(false);  // v111
   }
 
   toggleBtn.innerHTML = App.Icons && App.Icons.trade ? App.Icons.trade() : "T";
@@ -720,7 +777,7 @@
   // reconnect lost the flag).
   function setFeed() {
     var a = api();
-    if (a && typeof a.set_trade_feed === "function") { try { a.set_trade_feed(isOpen, true, settings.comm || {}); } catch (e) {} }
+    if (a && typeof a.set_trade_feed === "function") { try { a.set_trade_feed(isOpen && !App.replayActive, true, settings.comm || {}); } catch (e) {} }
     lastFeedMsg = Date.now();
   }
   watchdog = setInterval(function () {
@@ -739,6 +796,13 @@
     setPreview: function (entry, sl) { previewEntry = entry; previewSL = sl; refreshSummary(); },
     send: send,
     toast: toast,
+    // v119: Replay Trading hooks
+    save: saveSettings,
+    saveNow: saveSettingsNow, // v126
+    isOpen: function () { return isOpen; },
+    feed: { specs: applySpecs, positions: applyPositions, history: applyHistory },
+    refreshHistory: function () { if (isOpen && activeTab === "history") loadHistory(); },
+    reset: function () { specs = null; histData = null; applyPositions([]); refreshSummary(); setFeed(); if (isOpen && activeTab === "history") loadHistory(); },
   };
 
   App.TradePanel = { open: open, close: close, toggle: function () { if (isOpen) close(); else open(); } };

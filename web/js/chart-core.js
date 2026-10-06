@@ -297,12 +297,24 @@
     if (App.MultiPanel && App.MultiPanel.clearAsk) App.MultiPanel.clearAsk();
   }
 
+  // v120: in Replay the ASK is the Replay Trading ASK (replay BID + spread).
+  App.currentAsk = function () {
+    if (!App.replayActive) return App.liveAsk;
+    var R = App.ReplayTrade;
+    return R && R.ready() ? R.ask() : NaN;
+  };
+
+  function scheduleAsk() {
+    if (!App.askTheme.enabled || askFlushPending) return;
+    askFlushPending = true;
+    window.requestAnimationFrame(flushLiveAsk);
+  }
+
   function flushLiveAsk() {
     askFlushPending = false;
-    var price = App.liveAsk;
-    // Bar Replay shows a past moment: there is no live ASK to draw then.
+    var price = App.currentAsk();
     // V64.1: nothing is drawn unless "Enable Ask Price" is checked.
-    if (App.replayActive || !App.askTheme.enabled || !Number.isFinite(price) || !App.series) return;
+    if (!App.askTheme.enabled || !Number.isFinite(price) || !App.series) return;
     if (price === askDrawnPrice) return;
     askDrawnPrice = price;
     if (!App.liveAskLine) {
@@ -322,9 +334,7 @@
     if (App.TradeLines && App.TradeLines.onPrice) App.TradeLines.onPrice(); // v103: Sell reward uses ASK
     // The newest ASK is always remembered (one number), so ticking the
     // checkbox shows the line at once; while it is off nothing is scheduled.
-    if (!App.askTheme.enabled || App.replayActive || askFlushPending) return;
-    askFlushPending = true;
-    window.requestAnimationFrame(flushLiveAsk);
+    if (!App.replayActive) scheduleAsk();
   }
 
   window.onLiveAsk = setLiveAsk;
@@ -342,15 +352,17 @@
     }
     // Lines that do not exist yet (just enabled, or a panel opened while the
     // switch was off) are created at the newest known ASK.
-    if (Number.isFinite(App.liveAsk) && !App.replayActive) {
+    if (Number.isFinite(App.currentAsk())) {
       askDrawnPrice = null;
-      setLiveAsk(App.liveAsk);
+      scheduleAsk();
     }
   }
 
-  // Replay hides the ASK line; leaving Replay brings it back at the newest ASK.
-  document.addEventListener("App:replayStarted", removeLiveAskLines);
+  // v120: Replay draws its own ASK (see replay-trading.js); the live line is
+  // dropped on exit and comes back at the newest live ASK.
+  document.addEventListener("App:replayStarted", removeLiveAskLines); // redrawn next frame
   document.addEventListener("App:replayExited", function () {
+    removeLiveAskLines();
     if (Number.isFinite(App.liveAsk)) setLiveAsk(App.liveAsk);
   });
 
@@ -1195,6 +1207,7 @@
   window.onStatus = function (status) {
     App.backendStatus = status;
     updateStatusDot();
+    document.dispatchEvent(new CustomEvent("App:backendStatus", { detail: status }));   // v126
   };
 
   // v62: the sync process (the only place that talks to MT5) discovered the
@@ -1560,6 +1573,7 @@
     viewportLostData: viewportLostData, // V79
     missedLiveCandles: missedLiveCandles, // V79
     syncAskLine: syncAskLine,
+    scheduleAsk: scheduleAsk, // v120
     loadInitialLiveAsk: loadInitialLiveAsk,
     // v40 Update 4: lets replay-bar.js update the timeframe dropdown's
     // label/active-state after it changes App.currentTf itself (bypassing

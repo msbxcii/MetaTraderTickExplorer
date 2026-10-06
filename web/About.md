@@ -7,11 +7,14 @@ MetaTrader Tick Explorer is a Windows application that extracts tick data from a
 - Replay Mode: view charts at real live-market speed (1 tick per second), giving you a realistic simulation environment for practice.
 - Multi-Chart Mode: view the chart across several different timeframes at once, in both Live and Replay modes.
 - Offline Operation: practice on historical data using only the stored database, with no connection required.
-- Trading Panel: place and manage real trades directly from the chart. You are solely responsible for your trades, so always test on a Demo account first.
+- Replay Trading: practice trades on historical data inside Replay Mode with a simulated account; no broker needed.
+- Economic News: economic calendar events shown on the chart and in a News tab of the Trade panel.
+- Trading Panel: place and manage trades directly from the chart.
 
 ## Security & Privacy
 
 - Local terminal only: market data and trading go only through your local MetaTrader terminal. No external server is required.
+- Economic News download: the news calendar is downloaded from a public website; no personal or account data is sent.
 - Update check: "Check for Updates" makes a single read-only request to GitHub to see whether a newer version exists. Nothing else is sent.
 - No access to account credentials: no username, password, or other login information is ever needed; it stays with the MetaTrader terminal itself.
 - Data stays local: all tick/candle data and settings are stored only on your own machine.

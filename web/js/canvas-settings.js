@@ -796,7 +796,29 @@
   // commitPresetSave(), so picking, saving or deleting a preset itself
   // never re-triggers this.
   function markPresetDirty() {
-    setPresetDropdownLabel("-");
+    // v121: label shows the preset name again when the settings match one exactly
+    if (markRaf) return;
+    var run = function () { markRaf = 0; setPresetDropdownLabel(matchingPresetName() || "-"); };
+    markRaf = window.requestAnimationFrame ? window.requestAnimationFrame(run) : (run(), 0);
+  }
+  var markRaf = 0;
+  function sigOf(o) {
+    return JSON.stringify(Object.keys(o).sort().map(function (k) {
+      var v = o[k];
+      return [k, typeof v === "string" ? v.toLowerCase() : v];
+    }));
+  }
+  function matchingPresetName() {
+    var cur = sigOf(state), i, p;
+    for (i = 0; i < BUILTIN_PRESETS.length; i++) {
+      p = BUILTIN_PRESETS[i];
+      if (sigOf(sanitizeSettings(p.settings)) === cur) return p.name;
+    }
+    for (i = 0; i < presetsCache.length; i++) {
+      p = presetsCache[i];
+      if (sigOf(sanitizeSettings(p.settings)) === cur) return p.name;
+    }
+    return "";
   }
 
   function nextPresetId() {

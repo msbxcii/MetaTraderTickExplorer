@@ -367,7 +367,32 @@ window.App = {
     mdoViewLogBtn: document.getElementById("mdo-view-log-btn"),
     mdoLogBox: document.getElementById("mdo-log-box"),
     mdoCheckboxRowWrap: document.getElementById("mdo-checkbox-row-wrap"),
-    mdoPane: document.getElementById("settings-pane-market-data-overview"),
+    mdoPane: document.getElementById("mdo-src-price"),  // v110: the Price Data section (Chart/Log mode class lives here)
+
+    // v110: Economic News section + the Price Data / Economic News switch
+    mdoSrcSwitch: document.getElementById("mdo-src-switch"),
+    mdoSrcPriceBtn: document.getElementById("mdo-src-price-btn"),
+    mdoSrcNewsBtn: document.getElementById("mdo-src-news-btn"),
+    mdoSrcPricePane: document.getElementById("mdo-src-price"),
+    mdoSrcNews: document.getElementById("mdo-src-news"),
+    nwsOldest: document.getElementById("nws-oldest"),
+    nwsYearSelect: document.getElementById("nws-year-select"),
+    nwsProxySelect: document.getElementById("nws-proxy-select"),
+    nwsTypeSelect: document.getElementById("nws-type-select"),
+    nwsPortInput: document.getElementById("nws-port-input"),
+    nwsRefreshBtn: document.getElementById("nws-refresh-btn"),
+    nwsHoverInfo: document.getElementById("nws-hover-info"),
+    nwsViewChartBtn: document.getElementById("nws-view-chart-btn"),
+    nwsViewLogBtn: document.getElementById("nws-view-log-btn"),
+    nwsBox: document.getElementById("nws-box"),
+    nwsLogBox: document.getElementById("nws-log-box"),
+    nwsBackfillBtn: document.getElementById("nws-backfill-btn"),
+    nwsExtendBtn: document.getElementById("nws-extend-btn"),
+    nwsExtendDateBox: document.getElementById("nws-extend-date-box"),
+    nwsExtendDateInput: document.getElementById("nws-extend-date-input"),
+    nwsExtendCancel: document.getElementById("nws-extend-cancel"),
+    nwsExtendConfirm: document.getElementById("nws-extend-confirm"),
+    nwsStatus: document.getElementById("nws-status"),
 
     // v50: Setting panel — replaces the old direct Market-Data-Overview
     // modal. One toggle button opens a tabbed panel; Market Data Overview

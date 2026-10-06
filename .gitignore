@@ -9,7 +9,8 @@ REPOMAP.md
 run.cmd
 root-location.json
 colors-mockup.html
-
+README-fa.docx
+TUTORIAL-fa.docx
 # Python bytecode / caches
 *.py[cod]
 *.pyo

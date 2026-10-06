@@ -168,7 +168,7 @@
   // ONE text node with appendData(), so a poll that brings a few lines
   // touches only those lines, instead of re-serializing the whole text the
   // way `el.textContent += ...` does.
-  function createView(el, initialCategory) {
+  function createView(el, initialCategory, opts) {  // v110: opts {include, exclude} = text markers
     var category = initialCategory || "ALL";
     var node = document.createTextNode("");
     var domEntries = 0;
@@ -176,7 +176,12 @@
     el.appendChild(node);
 
     function matches(entry) {
-      return category === "ALL" || entry.category === category;
+      if (category !== "ALL" && entry.category !== category) return false;
+      if (opts) {  // v110: Economic News lines carry "[NEWS]"; Price Data hides them
+        if (opts.include && entry.text.indexOf(opts.include) === -1) return false;
+        if (opts.exclude && entry.text.indexOf(opts.exclude) !== -1) return false;
+      }
+      return true;
     }
 
     function isPinnedToBottom() {

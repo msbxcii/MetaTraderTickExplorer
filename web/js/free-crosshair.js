@@ -10,7 +10,7 @@
   var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   function pad(n) { return n < 10 ? "0" + n : "" + n; }
   function fmt(sec, tf) {
-    var d = new Date((Math.floor(sec) + (window.App && App.Tz && tf < 86400 ? App.Tz.offset() : 0)) * 1000);  // v92
+    var d = new Date((Math.floor(sec) + (window.App && App.Tz && tf < 86400 ? App.Tz.offset(Math.floor(sec)) : 0)) * 1000);  // v92, v116: shift at that time
     var s = d.getUTCDate() + " " + MONTHS[d.getUTCMonth()] + " '" + pad(d.getUTCFullYear() % 100);
     if (tf < 86400) {
       s += "  " + pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()) + ":" + pad(d.getUTCSeconds());

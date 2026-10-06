@@ -101,6 +101,8 @@ def has_market_data(output_dir):
     for name in names:
         if any(name.endswith(suffix) for suffix in _SIDECAR_SUFFIXES):
             continue
+        if name.startswith("ff_news"):  # v110: Economic News database is not a symbol database
+            continue
         full = os.path.join(output_dir, name)
         try:
             if os.path.isfile(full) and os.path.getsize(full) > 0:

@@ -527,7 +527,7 @@
       Object.assign({ price: 0 }, App.priceLineOptionsFromTheme())
     );
     // V64: a panel created after the ASK arrived starts with the ASK line too.
-    if (App.askTheme.enabled && Number.isFinite(App.liveAsk) && !App.replayActive) setPanelAskLine(panel, App.liveAsk);
+    if (App.askTheme.enabled && Number.isFinite(App.currentAsk())) setPanelAskLine(panel, App.currentAsk()); // v120
   }
 
   // ---- V64: live ASK line, one per companion panel ---------------------------
@@ -743,14 +743,22 @@
 
     var requestGeneration = ++panel.requestGeneration;
     panel.loadingDirection = "newer";
+    var pageIsOldest = false;
     window.pywebview.api.get_history_page(tf, Number(cutoff) + 1, App.LAZY_LOAD_CHUNK).then(function (payload) {
-      if (requestGeneration !== panel.requestGeneration) return;
-      if (!App.replayActive || panel.tf !== tf) return;
+      if (requestGeneration !== panel.requestGeneration) return null;
+      if (!App.replayActive || panel.tf !== tf) return null;
       var candles = Array.isArray(payload) ? payload : ((payload && payload.candles) || []);
-      var pageIsOldest = !!(payload && !Array.isArray(payload) && payload.is_oldest);
+      pageIsOldest = !!(payload && !Array.isArray(payload) && payload.is_oldest);
+      // v124: last candle = 1s data only up to the playhead
+      return App.ReplayBar.fitTailToPlayhead ? App.ReplayBar.fitTailToPlayhead(tf, candles, Number(cutoff)) : candles;
+    }).then(function (candles) {
+      if (!candles || requestGeneration !== panel.requestGeneration) return;
+      if (!App.replayActive || panel.tf !== tf) return;
       panel.replayCutoff = Number(cutoff);
       setCompanionReplayWindow(panel, candles, true, pageIsOldest);
-      panel.replayBuilding = candles.length ? candles[candles.length - 1] : null;
+      var lastC = candles.length ? candles[candles.length - 1] : null;
+      // v124: copy, so it never aliases the window candle (ticks were ignored)
+      panel.replayBuilding = lastC ? { time: lastC.time, open: lastC.open, high: lastC.high, low: lastC.low, close: lastC.close } : null;
       panel.series.setData(panel.candles);
       if (panel.candles.length) {
         panel.chart.timeScale().scrollToRealTime();
@@ -951,7 +959,7 @@
     if (!App.replayActive || !panel.window || !panel.window.newer || !panel.window.newer.length || !panel.replayBuilding) return;
     var last = panel.window.newer[panel.window.newer.length - 1];
     if (last && last.time === panel.replayBuilding.time) {
-      panel.replayBuilding = last;
+      panel.replayBuilding = { time: last.time, open: last.open, high: last.high, low: last.low, close: last.close }; // v124
       return;
     }
     if (last && last.time < panel.replayBuilding.time) {

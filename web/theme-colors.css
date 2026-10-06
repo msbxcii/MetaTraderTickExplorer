@@ -50,6 +50,11 @@
   /* ── Trade Panel ── */
   --tp-blue: #3b82f6;  /* Blue for links/Refresh in the Trade panel */
   --tp-accent: #e0b23a;  /* Trade panel accent color */
+  /* v111 News impact colors (chart lines + News tab) */
+  --imp-high: var(--down);
+  --imp-medium: #f0993a;
+  --imp-low: #e3c53a;
+  --imp-none: #7d8797;
   /* ── Window Buttons ── */
   --titlebar-close-text: #ffffff;  /* Close icon on hover (background is --down) */
   --autofit-active-bg: #ffffff;  /* Active Auto-fit button background */
@@ -101,6 +106,9 @@ body.light-theme {
   --dcm-chk-b: #ffffff;
   --tp-blue: #1d5fd6;
   --tp-accent: #9a6a00;
+  --imp-medium: #c9660a;  /* v111 */
+  --imp-low: #a98600;
+  --imp-none: #7b8493;
   --shadow-symbol-list: rgba(26,36,56,0.18);
   --dcm-shadow-color: rgba(0,0,0,0.14);
 }
@@ -127,6 +135,9 @@ body.theme-ivory-white {
   --dcm-ctl: #e7e7f3;
   --tp-blue: #4318c0;
   --tp-accent: #4318c0;
+  --imp-medium: #c9660a;  /* v111 */
+  --imp-low: #a98600;
+  --imp-none: #7b8493;
   --pulse-sync: rgba(68,15,225,0.6);
   --shadow-soft: rgba(0,0,0,0.05);
   --shadow-dropdown: rgba(0,0,0,0.09);

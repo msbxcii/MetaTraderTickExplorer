@@ -705,6 +705,8 @@
     dom.objectsPanelEl.classList.add("open");
     App.objectsPanelOpen = true;
     dom.objectsPanelToggle.classList.add("active");
+    // v121: every folder starts closed whenever the panel opens
+    App.objectFolders.forEach(function (f) { f.collapsed = true; });
     // App.objectsPanelOpen is set BEFORE this call on purpose - refresh()
     // reads it to decide whether to build rows (see v57 Update 12 above).
     refresh();

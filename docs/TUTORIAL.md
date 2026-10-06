@@ -4,8 +4,6 @@ English | [فارسی](TUTORIAL-fa.md)
 
 A step-by-step guide from first launch to trading from the chart. Takes about 10 minutes to read.
 
-> ⚠️ **Test the Trading Panel on a Demo account first.** Orders sent from the app are real orders on the account your terminal is logged into.
-
 ---
 
 ## 1. Before you start
@@ -15,6 +13,7 @@ You need:
 1. **Windows 10 or 11**
 2. **MetaTrader 5**, open and **logged in** to an account (demo or real).
 3. **Python Integration enabled** in MT5: `Tools › Options › Community` → tick **Python integration**.
+4. **Algo Trading enabled** (toolbar button), so orders sent from the app can be placed in MT5.
 
 ![Python integration](../assets/prepare.png)
 
@@ -66,7 +65,16 @@ You can keep using the chart while it downloads. Data is saved on disk, so it on
 
 ---
 
-## 5. Drawing tools
+## 5. Economic News
+
+1. Open **Setting** → **Market Data Overview** → **Economic News**. Each square is one week: solid = downloaded, hollow = missing.
+2. Select missing weeks and press **BackFill**, or use **Extend** to download older weeks back to a chosen date. A proxy can be set if the news site can't be reached.
+3. News appears on the chart as vertical lines with dots, colored by impact. Hover a dot for details.
+4. Open the **News** tab in the Trade panel for the full list. Filter by **Impact** and **Currency**, jump to a date, or press **Today**. Click an item to jump the chart to it.
+
+---
+
+## 6. Drawing tools
 
 Trend line, horizontal/vertical line, rectangle, Fib retracement, Fib expansion.
 
@@ -85,26 +93,34 @@ Trend line, horizontal/vertical line, rectangle, Fib retracement, Fib expansion.
 
 ---
 
-## 6. Multi-Chart
+## 7. Multi-Chart
 
 Open 2 or 3 panels of the **same symbol** with different timeframes (e.g. 1m + 15s + 1h). Each panel has its own timeframe, drawings and crosshair. **Maximize** a panel to focus on it; **Esc** restores it. Works in both Live and Replay.
 
 ---
 
-## 7. Replay (practice on history)
+## 8. Replay (practice on history)
 
 1. Open **Replay** and **Select Date** for the starting point. Every candle after that point is hidden.
 2. Press **Play**. By default candles form at real market speed.
 3. Change **Replay Speed**: `1x`, `5x`, `10x`, `30x`, `60x`.
 4. **Close Replay** to go back to live.
 
-> Trading and **End** (jump to latest) are disabled during Replay, so live data can't leak into your practice session.
+> Real trading and **End** (jump to latest) are disabled during Replay, so live data can't leak into your practice session.
+
+### Replay Trading
+
+While Replay is on, the Trade panel switches to a simulated account, so you can practice trading (section 9) without a broker:
+
+- Set **Balance**, **Leverage**, **Commission** and **Spread**. Leave a field empty for **Auto** (taken from your real account and the live market).
+- Market and pending orders, SL/TP, History and Cumulative P/L work the same way. Orders fill at the replay price (ASK = BID + spread).
+- The simulated session ends when you close Replay.
 
 ---
 
-## 8. Trading from the chart
+## 9. Trading from the chart
 
-### 8.1 Set your risk (Trade panel)
+### 9.1 Set your risk (Trade panel)
 
 Open the **Trade** panel (header icon) → **Trade** tab:
 
@@ -113,19 +129,19 @@ Open the **Trade** panel (header icon) → **Trade** tab:
 - **R:R**: the take profit distance as a multiple of the stop loss distance.
 - **Max risk**: a limit on the total open risk. New orders beyond it are blocked.
 
-### 8.2 Market order
+### 9.2 Market order
 
 1. **Middle Mouse** click on the chart → the stop loss line follows your mouse, and the take profit line follows at your R:R.
    - Stop loss **below** price = **Buy**, **above** price = **Sell**.
 2. **Left Click** → the order is sent.
 3. To cancel: **Right Click**, **Esc**, or **Middle Mouse** again.
 
-### 8.3 Pending order
+### 9.3 Pending order
 
 1. **Shift + Middle Mouse** click.
 2. First **Left Click** fixes the entry price. The second **Left Click** sets the stop loss and places the order. The order type (Limit/Stop) is picked automatically.
 
-### 8.4 Managing positions
+### 9.4 Managing positions
 
 - **Drag** the SL/TP lines of an open position on the chart. The change is sent to MT5 when you release the mouse.
 - In the Trade panel, each position has **Risk-free**, **Close 25%**, **Close 50%** and **Close** buttons. Pending orders have **Cancel**.
@@ -133,17 +149,15 @@ Open the **Trade** panel (header icon) → **Trade** tab:
 
 Orders are tagged `mt-tick.explorer` in your MT5 history.
 
-> Always double-check your positions in the MT5 terminal.
-
 ---
 
-## 9. Customizing
+## 10. Customizing
 
 **Setting** (gear icon):
 
 | Tab | What it does |
 |---|---|
-| **Market Data Overview** | History, Extend, Backfill |
+| **Market Data Overview** | Price history and Economic News: Extend, Backfill |
 | **Canvas** | Chart colors and theme, saved as presets |
 | **Keyboard Shortcuts** | Change any shortcut, including **Middle Mouse** / **Shift + Middle Mouse** for trading (keys or Middle/Back/Forward mouse buttons) |
 | **Configuration** | App options |
@@ -153,7 +167,7 @@ To change a shortcut: click ✎, press the new key or mouse button, then click �
 
 ---
 
-## 10. Shortcut cheat sheet
+## 11. Shortcuts
 
 | Shortcut | Action |
 |---|---|
@@ -169,14 +183,14 @@ To change a shortcut: click ✎, press the new key or mouse button, then click �
 
 ---
 
-## 11. Troubleshooting
+## 12. Troubleshooting
 
 | Problem | Fix |
 |---|---|
 | "Cannot connect" / no symbols | Open MT5, log in, and enable Python Integration |
 | No live price | Market closed, or MT5 lost its connection to the broker |
 | Chart has only a few days | Use **Extend** (section 4) |
-| Trade buttons do nothing | Check that trading is allowed on the account and that Replay is closed |
+| Trade buttons do nothing | Check that Algo Trading is enabled in MT5, trading is allowed on the account, and Replay is closed |
 | Something else | Open **Log** (header). Share the log in an [issue](https://github.com/msbxcii/MetaTraderTickExplorer/issues) |
 
 Data and logs are stored in `%LOCALAPPDATA%\MT-TickExplorer\`.

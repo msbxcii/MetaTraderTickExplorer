@@ -1147,6 +1147,15 @@ def run(db_path, live_queue, stop_event, backfill_cmd_queue=None, symbol=None, e
                 _process_backfill_request(mt5, conn, logger, live_queue, cmd, symbol=symbol)
             elif cmd_type == "extend_request":
                 _process_extend_request(mt5, conn, logger, live_queue, cmd, symbol=symbol)
+            elif cmd_type == "tz_detect_request":
+                # v116: broker clock detection (a few H1 history reads; one job per pass like backfill)
+                import broker_tz
+                sym = str(cmd.get("symbol") or "").strip()
+                push_msg({"type": "tz_detect_status", "data": {"state": "running", "done": 0, "total": 1, "text": "Starting..."}})
+                rep = broker_tz.detect(mt5, sym, time.time(), logger=logger,
+                                       progress=lambda d: push_msg({"type": "tz_detect_status", "data": d}))
+                rep["auto"] = bool(cmd.get("auto"))
+                push_msg({"type": "tz_detect_result", "data": rep})
             # v57 Update 4 note (memo drop after backfill) kept below.
 
         tick_explorer.sync_ticks_forward(

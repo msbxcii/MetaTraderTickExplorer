@@ -53,12 +53,26 @@ def _handle_live_queue_message(window, bridge, message, logger, identity_callbac
             payload_json = json.dumps(message.get("data") or {})
             server_msc = json.dumps(message.get("server_msc"))  # V81: broker clock
             window.evaluate_js(f"window.onLiveCandles && window.onLiveCandles({payload_json}, {server_msc})")
-            # v92: daily broker/system offset check from a live tick.
+            # v116/v117: with a rule the offset comes from the rule and only a cheap
+            # sanity check of the live tick runs. Without a rule nothing is shifted.
             tz = getattr(bridge, "_time_offset_store", None)
             if tz is not None and message.get("server_msc") is not None:
-                new_off = tz.observe(message.get("server_msc"))
-                if new_off is not None:
-                    window.evaluate_js(f"window.onTimeOffset && window.onTimeOffset({int(new_off)})")
+                srv = getattr(bridge, "_server", None)
+                if tz.effective_rule(srv) is not None and tz.validate(srv, message.get("server_msc")):
+                    window.evaluate_js(f"window.onTzState && window.onTzState({json.dumps(bridge.get_tz_state())})")
+                    det = (tz.get_state(srv).get("detected") or {})
+                    if tz.get_state(srv).get("mode") == "auto" and det.get("symbol") and tz.can_redetect(srv):
+                        logger.warning("Broker clock rule mismatch: re-running automatic detection.")
+                        bridge.start_tz_detect(det.get("symbol"), auto=True)
+        elif kind == "tz_detect_status":  # v116
+            window.evaluate_js(f"window.onTzDetectStatus && window.onTzDetectStatus({json.dumps(message.get('data') or {})})")
+        elif kind == "tz_detect_result":  # v116
+            rep = message.get("data") or {}
+            tz = getattr(bridge, "_time_offset_store", None)
+            if tz is not None:
+                tz.apply_detection(getattr(bridge, "_server", None), rep)
+                window.evaluate_js(f"window.onTzState && window.onTzState({json.dumps(bridge.get_tz_state())})")
+            window.evaluate_js(f"window.onTzDetectResult && window.onTzDetectResult({json.dumps(rep)})")
         elif kind == "ask":
             # V64: display-only live ASK. The bridge keeps the newest value in RAM
             # (for a page that loads while the market is quiet) and rejects a
@@ -100,6 +114,8 @@ def _handle_live_queue_message(window, bridge, message, logger, identity_callbac
             # reports the real broker server / a freshly discovered symbol list.
             if identity_callback is not None:
                 identity_callback(message.get("data") or {})
+                # v116: the broker clock rule is stored per server, so re-push it after a server swap
+                window.evaluate_js(f"window.onTzState && window.onTzState({json.dumps(bridge.get_tz_state())})")
         else:
             logger.debug(f"Unknown live_queue message type: {kind!r}")
     except Exception as e:
@@ -482,6 +498,7 @@ def main():
     )
     bridge._time_offset_store = time_offset_store  # v92
     bridge._sessions_store = sessions_store  # v93
+    bridge._news_filters_path = os.path.join(app_config_dir, "news_filters.json")  # v113
 
     # v55.4: frameless window with a custom, theme-matched title bar drawn in
     # the page itself. easy_drag=False is intentional: movement is handled

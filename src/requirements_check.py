@@ -29,6 +29,7 @@ _REQUIREMENTS_FILE = _PROJECT_ROOT / "requirements.txt"
 _REQ_NAME_RE = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9_.-]*)")
 _IMPORT_NAMES = {
     "pywebview": "webview",
+    "beautifulsoup4": "bs4",  # v110
 }
 _VERSION_RE = re.compile(r"^\s*([A-Za-z0-9_.-]+)\s*(==|>=|<=|~=|>|<)\s*([^\s;]+)")
 

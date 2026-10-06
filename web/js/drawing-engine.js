@@ -469,8 +469,8 @@
   // v93: trading sessions = low-opacity background bands under the candles
   // (no top strip / name label). Edges use the same time->logical->pixel
   // path as rectangle boxes (C.timeToLogical + C.logicalToX), so a boundary
-  // sits exactly on its time at every timeframe. Session times are display
-  // time (system time when Local Timezone is on, broker time otherwise).
+  // sits exactly on its time at every timeframe. Session times are the session's own
+  // zone (v117, x.z) or, for rows without a zone, display time (system time when Local Timezone is on, broker time otherwise).
   var SESSION_MAX_TF = 3600;
   function paintSessions(surface, ctx, w, h) {
     var list = App.sessions;
@@ -485,9 +485,11 @@
     var C = surface.C, n = arr.length;
     var tMin = C.logicalToTime(range.from - 1), tMax = C.logicalToTime(range.to + 1);
     if (tMin === null || tMax === null) return;
-    var off = App.Tz ? App.Tz.offset() : 0;
+    // v116: the display shift now varies with DST, so day buckets/borders go through App.Tz
+    var toUser = App.Tz ? App.Tz.toUser : function (t) { return t; };
+    var toBroker = App.Tz ? App.Tz.toBroker : function (t) { return t; };
     var gapMax = Math.max(tf * 2, 3600);
-    var d0 = Math.floor((tMin + off) / 86400) - 1, d1 = Math.floor((tMax + off) / 86400);
+    var d0 = Math.floor(toUser(tMin) / 86400) - 1, d1 = Math.floor(toUser(tMax) / 86400) + 1;
 
     // Time -> logical like boxes do; a time inside a market-closed gap
     // snaps to the joint between the two candles around it. Clamped to the
@@ -504,8 +506,19 @@
     for (var k = 0; k < list.length; k++) {
       var x = list[k], len = (x.s < x.e ? x.e - x.s : x.e + 1440 - x.s) * 60;
       ctx.fillStyle = hexToRgba(x.color, x.opacity);
-      for (var d = d0; d <= d1; d++) {
-        var t0 = d * 86400 - off + x.s * 60, t1 = t0 + len;
+      // v117: x.z = the session's own zone (e.g. Europe/London): start/end are that zone's wall clock,
+      // converted per day (its DST included) to broker time. Needs the broker clock rule.
+      var dA = d0, dB = d1;
+      if (x.z) { dA = Math.floor(tMin / 86400) - 2; dB = Math.floor(tMax / 86400) + 2; }
+      for (var d = dA; d <= dB; d++) {
+        var t0, t1;
+        if (x.z) {
+          t0 = App.Tz ? App.Tz.zoneWallToBroker(x.z, d * 86400 + x.s * 60) : null;
+          t1 = App.Tz ? App.Tz.zoneWallToBroker(x.z, d * 86400 + x.s * 60 + len) : null;
+          if (t0 === null || t1 === null) break;   // no broker rule yet / unknown zone: nothing to draw
+        } else {
+          t0 = toBroker(d * 86400 + x.s * 60); t1 = toBroker(d * 86400 + x.s * 60 + len);
+        }
         if (t1 < tMin || t0 > tMax) continue;
         var la = edge(t0), lb = edge(t1);
         if (la === null || lb === null || lb <= la) continue;
@@ -1293,6 +1306,7 @@
     if (evt.altKey) {
       workObj = cloneObjectDeep(hit.obj);
       workObj.id = App.nextObjectId++;
+      if (App.replayActive) workObj.folderId = ensureReplayFolder().id; // v120
       App.drawObjects.push(workObj);
       App.selectedObject = workObj;
       App.panelSelectedObjects = [workObj];
@@ -2065,6 +2079,7 @@
     ctx.clip();
     // V64.2: Daily Break lines sit underneath every drawn object.
     drawDailyBreaks(surface, ctx, plot.w, plot.h);
+    if (App.News) App.News.paint(surface, ctx, plot.w, plot.h);  // v111: news lines + dots
     var panelTf = surfaceTf(surface);
     App.drawObjects.forEach(function (obj) {
       if (!obj.hidden && isObjectVisibleAtTf(obj, panelTf)) drawOneObject(surface, ctx, obj, cssW, cssH);
@@ -2369,12 +2384,9 @@
     // type label) and a folder slot (top-level until dragged into one).
     if (obj.name === undefined) obj.name = TYPE_LABELS[obj.type] || obj.type;
     if (obj.folderId === undefined) obj.folderId = null;
-    // v40 Bar Replay Update 5: an object created WHILE Replay is active is
-    // scratch/temporary for that replay session only — it is deleted the
-    // moment Replay mode is closed (see replay-bar.js's
-    // purgeReplayTempObjects()). An object created outside Replay is
-    // permanent, as always.
-    if (obj._replayTemp === undefined) obj._replayTemp = !!App.replayActive;
+    // v120: objects drawn during Replay are kept (no longer temporary) in
+    // the shared "On Replay" folder (hidden outside Replay, see below).
+    if (App.replayActive) obj.folderId = ensureReplayFolder().id;
     // v71 Update 1/2: placement just finished (this is the exact "not
     // during drawing, only after confirmation" moment spec calls for) —
     // if Auto is on for this object, compute its timeframe map now, once.
@@ -2382,6 +2394,33 @@
     App.drawObjects.push(obj);
     App.pendingObject = null;
     App.dragStart = null;
+    persistChange();
+  }
+
+  // v120: the single "On Replay" folder (created once, reused by every replay).
+  function ensureReplayFolder() {
+    var list = App.objectFolders, i;
+    for (i = 0; i < list.length; i++) if (list[i].replay) return list[i];
+    var f = { id: App.nextFolderId++, name: "Replay Objects", collapsed: false, replay: true };
+    list.push(f);
+    return f;
+  }
+
+  // v120: Replay on -> folder objects visible; Replay off -> hidden.
+  function setReplayFolderHidden(hidden) {
+    var ids = {}, any = false, i;
+    App.objectFolders.forEach(function (f) { if (f.replay) { ids[f.id] = true; any = true; } });
+    if (!any) return;
+    for (i = 0; i < App.drawObjects.length; i++) {
+      var o = App.drawObjects[i];
+      if (ids[o.folderId] && !!o.hidden !== hidden) {
+        o.hidden = hidden;
+        if (hidden) {
+          if (App.selectedObject === o) { App.selectedObject = null; App.interaction = null; }
+          if (App.activeMenuObject === o) App.DrawingContextMenu.close();
+        }
+      }
+    }
     persistChange();
   }
 
@@ -2409,6 +2448,7 @@
 
   function setHidden(obj, hidden) {
     obj.hidden = !!hidden;
+    obj._replayHid = false; // v126: the user's own choice replaces Replay's temporary hide
     if (obj.hidden) {
       if (App.selectedObject === obj) { App.selectedObject = null; App.interaction = null; }
       if (App.activeMenuObject === obj) App.DrawingContextMenu.close();
@@ -2895,6 +2935,7 @@
     removeObject: removeObject,
     setLocked: setLocked,
     setHidden: setHidden,
+    setReplayFolderHidden: setReplayFolderHidden, // v120
     getAnchorTime: getAnchorTime,
     // v41 perf: any external code that changes what should appear on the
     // overlay (chart pan/zoom range changes, live/replay ticks landing,
@@ -2903,6 +2944,7 @@
     // actually repaints. See the dirty-render note above `surfaces`.
     requestRender: requestRender,
     refreshSessions: refreshSessions,  // v93
+    getSurfaces: function () { return surfaces; },  // v111
     // v70.7 Update 2: Timeframe Based Hidden/Show — used by drawing-
     // context-menu.js's new Timeframes editor to read/mutate an object's
     // per-timeframe visibility map and get it re-rendered everywhere.

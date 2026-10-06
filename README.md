@@ -12,9 +12,7 @@ English | [فارسی](README-fa.md)
 
 ## Table of Contents
 
-- [Official Distribution & Anti-Scam Notice](#-official-distribution--anti-scam-notice)
 - [Features](#features)
-- [Risk Warning](#-risk-warning)
 - [Security & Privacy](#-security--privacy)
 - [Where Data and Logs Are Stored](#-where-data-and-logs-are-stored)
 - [Requirements](#requirements)
@@ -48,31 +46,31 @@ Fully offline operation based on the stored database, for practicing on historic
   <img src="assets/history.gif" alt="history" width="85%">
 </p>
 
-### 4) Trading Panel
-Place and manage trades directly from the chart through your MetaTrader terminal: risk-based position sizing (percent or fixed amount), stop loss / take profit with a risk:reward setting, a maximum total-risk limit, pending orders, and live open-position lines on the chart.
+### 4) Replay Trading
+Practice trades on historical data inside Replay Mode with a simulated account, with live P/L and trade history. No broker or real money is involved.
+
+### 5) Economic News
+Economic calendar events are drawn on the chart as lines and dots colored by impact, and are stored locally on your machine.
+
+### 6) Trading Panel
+Trades are placed and managed directly in the app and sent to MetaTrader.
+- Risk-based position sizing
+- Stop loss and take profit assignment
+- Daily risk limit
+- Market, limit and stop orders
+- and more...
 
 <p align="center">
   <img src="assets/trade.gif" alt="trade" width="85%">
 </p>
 
-> ⚠️ Trades sent from this panel are **real orders** on whatever account your terminal is logged into. Read the [Risk Warning](#-risk-warning) first.
-
-## ⚠️ Risk Warning
-
-Trading forex, CFDs and other leveraged instruments carries a high level of risk and may result in the loss of all your capital.
-
-- **You are solely responsible for every order** placed through this application, and for its outcome.
-- **Always test on a Demo account first** before using the Trading Panel on a real account.
-- The software may contain bugs, and connection problems, broker rejections, slippage or terminal errors can cause orders to be executed differently than intended, or not at all. Always verify your positions in the MetaTrader terminal itself.
-- Nothing in this application is financial advice.
-- This software is provided "AS IS", without warranties of any kind (see [LICENSE](LICENSE), sections 7 and 8). The author and contributors accept **no liability** for any trading losses.
-
 ## 🔒 Security & Privacy
 
-- **Local terminal only:** all market data and trading go exclusively through your **local MetaTrader terminal** (via the official MetaTrader 5 Python package). Nothing is sent to any third-party service, and no external server is required.
-- **The one exception, update check:** "Check for Update" makes a single read-only request to the public GitHub API to see if a newer version has been released. No personal data, account information or market data is sent. If you download an update, the new EXE is fetched from the project's GitHub Releases page.
+- **Local terminal only:** all market data and trading go exclusively through your **local MetaTrader terminal** (via the official MetaTrader 5 Python package). No personal data, account information or market data is sent to any third-party service.
+- **Economic News download:** economic news is fetched from the public Forex Factory website. A proxy is optional and only needed if Forex Factory is blocked on your internet connection: the app follows your system proxy automatically, or you can set one manually.
+- **Update check:** "Check for Update" makes a single read-only request to the public GitHub API, and if you download an update, the new EXE is fetched from the project's official GitHub Releases page.
 - **No access to account credentials:** no username, password or other login info is ever needed; that stays with the MetaTrader terminal itself.
-- **Data stays local:** all tick/candle data and settings are stored only on your own machine (see below).
+- **Data stays local:** all price data and settings are stored only on your own machine (see below).
 
 ## 💾 Where Data and Logs Are Stored
 
@@ -100,6 +98,7 @@ Trading forex, CFDs and other leveraged instruments carries a high level of risk
      </p>
 
   - **Logged in to an account** (demo or real). Without this the broker provides no data.
+  - **Algo Trading enabled** in MetaTrader (toolbar button), so trades sent from the app are placed in the terminal.
 
 ## Getting Started
 
@@ -153,12 +152,14 @@ You are free to fork this project and build your own version under the terms of 
 
 ## 📊 How to Use
 
-📘 **Full step-by-step guide: [docs/TUTORIAL.md](docs/TUTORIAL.md)**
+📘 **The full step-by-step guide is in [docs/TUTORIAL.md](docs/TUTORIAL.md); a short summary follows:**
 
 - **Trading:** **Middle Mouse** = market order, **Shift + Middle Mouse** = pending order (re-bindable in **Settings → Keyboard Shortcuts**).
 
 - **First load:** for every new symbol, the app pulls only the **last 3 days** of tick data so the chart is ready quickly.
 - **More history:** open **Market Data Overview** and use **Extend** to backfill older data up to a target date (or **Backfill** for the default range). It runs in the background.
+- **Replay Trading:** in Replay Mode, set Balance, Leverage, Commission and Spread in the Trade panel (empty = Auto) and trade on a simulated account.
+- **Economic News:** open **Market Data Overview → Economic News**, select missing weeks and press **BackFill** (or **Extend** for older weeks). The news then shows on the chart and in the **News** tab of the Trade panel.
 - **Jump to any time:** press **SPACE** to open **Jump Time** and go straight to any date/time, in Live or Replay mode.
 - **Shortcuts** (customizable in **Settings → Keyboard Shortcuts**): jump to latest/oldest candle, undo/clear drawings, and quick keys for drawing tools (trend line, horizontal/vertical line, rectangle, Fib retracement/expansion).
 
