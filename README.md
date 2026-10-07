@@ -25,43 +25,61 @@ English | [فارسی](README-fa.md)
 
 ## Features
 
-### 1) Replay Mode
-View charts at real live-market speed (1 tick per second), a realistic simulation environment for practice.
+### 1) Second Timeframes
+Build candles on second-level timeframes: **1-second, 5-second and 15-second**, on the live market as well as on any date in the past.
+
+### 2) Replay Mode
+Replay historical data at real live-market speed (1 tick per second), a realistic simulation environment for practice.
 
 <p align="center">
   <img src="assets/replay.gif" alt="Replay Mode" width="85%">
 </p>
 
-### 2) Multi-Chart Mode
-View the same symbol across several timeframes at once, in both Live and Replay modes.
+### 3) Demo Trading in Replay Mode
+Practice trades on historical data inside Replay Mode with a simulated account, with live P/L and trade history. No broker account is required.
+
+<p align="center">
+  <img src="assets/replaytrade.gif" alt="replaytrade" width="85%">
+</p>
+
+### 4) Live Trading Inside the App
+Place and manage live trades directly in the app and send them to MetaTrader.
+- Risk-based position sizing
+- Stop loss and take profit assignment
+- Daily risk limit
+- Market, limit and stop orders
+- ...
+
+<p align="center">
+  <img src="assets/trade.gif" alt="trade" width="85%">
+</p>
+
+### 5) Economic News
+Economic calendar events are downloaded automatically from Forex Factory, archived locally on your machine, and drawn on the chart as lines and dots colored by impact.
+
+<p align="center">
+  <img src="assets/news.gif" alt="news" width="85%">
+</p>
+
+### 6) Forex Sessions
+Forex trading sessions are displayed directly on the chart, with no need to adjust for daylight saving time changes.
+
+<p align="center">
+  <img src="assets/sessions.gif" alt="sessions" width="85%">
+</p>
+
+### 7) Multi-Chart Mode
+View the same symbol across several timeframes in parallel, in both Live and Replay modes.
 
 <p align="center">
   <img src="assets/multichart.gif" alt="MultiChart" width="85%">
 </p>
 
-### 3) Offline History
-Fully offline operation based on the stored database, for practicing on historical data.
+### 8) Offline Local Database
+A local, fully offline database with no intermediary server, so you can practice on stored historical data at any time.
 
 <p align="center">
   <img src="assets/history.gif" alt="history" width="85%">
-</p>
-
-### 4) Replay Trading
-Practice trades on historical data inside Replay Mode with a simulated account, with live P/L and trade history. No broker or real money is involved.
-
-### 5) Economic News
-Economic calendar events are drawn on the chart as lines and dots colored by impact, and are stored locally on your machine.
-
-### 6) Trading Panel
-Trades are placed and managed directly in the app and sent to MetaTrader.
-- Risk-based position sizing
-- Stop loss and take profit assignment
-- Daily risk limit
-- Market, limit and stop orders
-- and more...
-
-<p align="center">
-  <img src="assets/trade.gif" alt="trade" width="85%">
 </p>
 
 ## 🔒 Security & Privacy

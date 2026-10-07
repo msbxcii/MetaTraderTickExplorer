@@ -4,12 +4,14 @@ MetaTrader Tick Explorer is a Windows application that extracts tick data from a
 
 ## Features
 
-- Replay Mode: view charts at real live-market speed (1 tick per second), giving you a realistic simulation environment for practice.
-- Multi-Chart Mode: view the chart across several different timeframes at once, in both Live and Replay modes.
-- Offline Operation: practice on historical data using only the stored database, with no connection required.
-- Replay Trading: practice trades on historical data inside Replay Mode with a simulated account; no broker needed.
-- Economic News: economic calendar events shown on the chart and in a News tab of the Trade panel.
-- Trading Panel: place and manage trades directly from the chart.
+- Second Timeframes: build candles on 1-second, 5-second and 15-second timeframes, on the live market as well as on any date in the past.
+- Replay Mode: replay historical data at real live-market speed (1 tick per second), giving you a realistic simulation environment for practice.
+- Demo Trading in Replay Mode: practice trades on historical data inside Replay Mode with a simulated account; no broker account needed.
+- Live Trading Inside the App: place and manage live trades directly in the app and send them to MetaTrader.
+- Economic News: economic calendar events are downloaded automatically from Forex Factory, archived locally, and shown on the chart.
+- Forex Sessions: forex trading sessions are displayed on the chart, with no need to adjust for daylight saving time changes.
+- Multi-Chart Mode: view the same symbol across several timeframes in parallel, in both Live and Replay modes.
+- Offline Local Database: a local, fully offline database with no intermediary server, so you can practice on stored historical data at any time.
 
 ## Security & Privacy
 
