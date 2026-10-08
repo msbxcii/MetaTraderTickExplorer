@@ -6,6 +6,10 @@ English | [فارسی](README-fa.md)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey)
 [![Release](https://img.shields.io/github/v/release/msbxcii/MetaTraderTickExplorer)](https://github.com/msbxcii/MetaTraderTickExplorer/releases)
 
+<p align="center">
+  <img src="assets/banner.png" alt="banner" width="100%">
+</p>
+
 **MetaTrader Tick Explorer** (`mt-tick.explorer`) is a Windows application that extracts tick data from a local MetaTrader 5 terminal on your machine and uses it to build second-level (and higher) candles. The data is stored directly on disk, so you can work with second-resolution charts on the live market as well as on any date in the past. Charts are rendered with the official open-source [TradingView Lightweight Charts™](https://www.tradingview.com/lightweight-charts/) library.
 
 > **Not affiliated with or endorsed by MetaQuotes Ltd.** See [Trademarks](#trademarks).
@@ -13,6 +17,7 @@ English | [فارسی](README-fa.md)
 ## Table of Contents
 
 - [Features](#features)
+- [Video Tutorial](#-video-tutorial)
 - [Security & Privacy](#-security--privacy)
 - [Where Data and Logs Are Stored](#-where-data-and-logs-are-stored)
 - [Requirements](#requirements)
@@ -80,6 +85,14 @@ A local, fully offline database with no intermediary server, so you can practice
 
 <p align="center">
   <img src="assets/history.gif" alt="history" width="85%">
+</p>
+
+## 🎬 Video Tutorial
+
+<p align="center">
+  <a href="https://youtu.be/lzymWirjDJg">
+    <img src="assets/tutorial.png" alt="Watch the MetaTrader Tick Explorer tutorial on YouTube" width="85%">
+  </a>
 </p>
 
 ## 🔒 Security & Privacy
