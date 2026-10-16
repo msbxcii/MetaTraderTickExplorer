@@ -90,7 +90,7 @@ A local, fully offline database with no intermediary server, so you can practice
 ## 🎬 Video Tutorial
 
 <p align="center">
-  <a href="https://youtu.be/lzymWirjDJg">
+  <a href="https://youtu.be/yFJwtNguXd8">
     <img src="assets/tutorial.png" alt="Watch the MetaTrader Tick Explorer tutorial on YouTube" width="85%">
   </a>
 </p>
