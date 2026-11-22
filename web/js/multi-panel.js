@@ -35,6 +35,8 @@
 // also show up correctly on the primary panel's 1s view, and vice versa,
 // exactly like objects already carried over across a timeframe switch on a
 // single chart.
+// v127: crosshair is the one exception - see free-crosshair.js (all panels
+// show a synced crosshair at the hovered chart's time/price).
 // =============================================================================
 
 (function () {

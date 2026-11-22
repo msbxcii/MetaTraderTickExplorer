@@ -17,6 +17,9 @@
     }
     return s;
   }
+  // v127: every attached chart joins this list; the hovered chart broadcasts
+  // its (time, price) so all other charts draw a synced crosshair.
+  var ALL = [];
   var DASH = { 0: "solid", 1: "dotted", 2: "dashed", 3: "dashed", 4: "dotted" };
 
   // getData() -> { candles: [...], tf: seconds }
@@ -35,7 +38,89 @@
     container.appendChild(label);
 
     var pending = null, raf = 0;
+    var remote = null;  // v127: {t, price} pushed by the hovered chart
     function hide() { line.style.display = "none"; label.style.display = "none"; }
+
+    // v127: draw the vertical line + time label at x (shared by local/remote).
+    function showV(x, t) {
+      var ts = chart.timeScale(), paneW = ts.width(), axisH = ts.height();
+      var paneH = container.clientHeight - axisH;
+      var o = chart.options(), v = (o.crosshair && o.crosshair.vertLine) || {};
+      var w = Math.max(1, Number(v.width) || 1);
+      line.style.borderLeft = w + "px " + (DASH[v.style] || "dotted") + " " + (v.color || "#6b7686");
+      line.style.left = (Math.round(x) - Math.floor(w / 2)) + "px";
+      line.style.height = paneH + "px";
+      line.style.display = "block";
+      if (t === null) { label.style.display = "none"; return; }
+      var data = getData();
+      label.textContent = fmt(t, data.tf);
+      label.style.background = v.labelBackgroundColor || "#131722";
+      label.style.font = (o.layout && o.layout.fontSize ? o.layout.fontSize : 12) + "px " +
+        App.FONT_FAMILY;
+      label.style.top = (paneH + 1) + "px";
+      label.style.lineHeight = Math.max(16, axisH - 6) + "px";
+      label.style.display = "block";
+      var half = label.offsetWidth / 2;  // keep inside the time axis
+      label.style.left = Math.max(half, Math.min(paneW - half, x)) + "px";
+    }
+
+    // v127: inverse of timeAt() - time -> x (null if no data).
+    function xAtTime(t) {
+      var d = getData && getData(), arr = d && d.candles, tf = d && d.tf;
+      if (!arr || !arr.length || !tf) return null;
+      var n = arr.length, lo = 0, hi = n - 1, i = -1;
+      while (lo <= hi) {  // last bar with time <= t
+        var m = (lo + hi) >> 1;
+        if (arr[m].time <= t) { i = m; lo = m + 1; } else hi = m - 1;
+      }
+      var logical;
+      if (i < 0) logical = (t - arr[0].time) / tf;
+      else if (i >= n - 1) logical = (n - 1) + (t - arr[n - 1].time) / tf;
+      else logical = i + (t - arr[i].time) / (arr[i + 1].time - arr[i].time);
+      // v127: logicalToCoordinate() is only exact for whole indexes (a
+      // fractional one gave null/snap -> line flickered); interpolate.
+      var ts = chart.timeScale(), f = Math.floor(logical);
+      var xa = ts.logicalToCoordinate(f);
+      if (logical === f) return xa;
+      var xb = ts.logicalToCoordinate(f + 1);
+      if (xa === null || xa === undefined || xb === null || xb === undefined) return null;
+      return xa + (xb - xa) * (logical - f);
+    }
+
+    function clearHorz() { try { chart.clearCrosshairPosition(); } catch (_) {} }
+
+    function paintRemote(force) {
+      if (!remote || pending || !container.offsetWidth) return;
+      var d = getData && getData(), arr = d && d.candles;
+      var ts = chart.timeScale(), paneW = ts.width();
+      var x = xAtTime(remote.t);
+      if (x === null || x === undefined || x < 0 || x > paneW) hide(); else showV(x, remote.t);
+      if (!arr || !arr.length || !d.series || remote.price === null) { clearHorz(); return; }
+      var ref = ts.coordinateToLogical(x === null || x === undefined ? 0 : x);
+      var bi = Math.max(0, Math.min(arr.length - 1, Math.round(ref === null ? arr.length - 1 : ref)));
+      try { chart.setCrosshairPosition(remote.price, arr[bi].time, d.series); } catch (_) {}
+    }
+    var inst = {
+      container: container,
+      set: function (t, price) {
+        if (pending) return;
+        if (remote && remote.t === t && remote.price === price) return;
+        remote = { t: t, price: price };
+        paintRemote();
+      },
+      clear: function () {
+        if (!remote) return;
+        remote = null;
+        if (!pending) { hide(); clearHorz(); }
+      },
+    };
+    ALL.push(inst);
+    function broadcast(t, price) {
+      for (var k = 0; k < ALL.length; k++) {
+        if (!ALL[k].container.isConnected) { ALL.splice(k--, 1); continue; }  // destroyed panel
+        if (ALL[k] !== inst) { if (t === null) ALL[k].clear(); else ALL[k].set(t, price); }
+      }
+    }
 
     function timeAt(x) {
       var data = getData && getData();
@@ -107,27 +192,18 @@
       container._fcWasMagnet = !!mg;
       var paneW = ts.width(), axisH = ts.height();
       var paneH = container.clientHeight - axisH;
-      if (x < 0 || x > paneW || y < 0 || y > container.clientHeight) { hide(); return; }
-      var o = chart.options(), v = (o.crosshair && o.crosshair.vertLine) || {};
-      var w = Math.max(1, Number(v.width) || 1);
+      if (x < 0 || x > paneW || y < 0 || y > container.clientHeight) { hide(); broadcast(null); return; }
       if (mg) x = mx;
-      line.style.borderLeft = w + "px " + (DASH[v.style] || "dotted") + " " + (v.color || "#6b7686");
-      line.style.left = (Math.round(x) - Math.floor(w / 2)) + "px";
-      line.style.height = paneH + "px";
-      line.style.display = "block";
       var t = mg ? mg.time : timeAt(x);
-      if (t === null) { label.style.display = "none"; return; }
-      var data = getData();
-      label.textContent = fmt(t, data.tf);
-      label.style.background = v.labelBackgroundColor || "#131722";
-      label.style.font = (o.layout && o.layout.fontSize ? o.layout.fontSize : 12) + "px " +
-        App.FONT_FAMILY;
-      label.style.top = (paneH + 1) + "px";
-      label.style.lineHeight = Math.max(16, axisH - 6) + "px";
-      label.style.display = "block";
-      // keep inside the time axis
-      var half = label.offsetWidth / 2;
-      label.style.left = Math.max(half, Math.min(paneW - half, x)) + "px";
+      showV(x, t);
+      if (t === null) { broadcast(null); return; }
+      var price = null;  // v127: sync other charts at this time/price
+      if (mg) price = mg.price;
+      else if (y <= paneH) {
+        var sd = getData();
+        if (sd && sd.series) price = sd.series.coordinateToPrice(y);
+      }
+      broadcast(t, price === undefined ? null : price);
     }
 
     container.addEventListener("pointermove", function (e) {
@@ -135,10 +211,11 @@
       pending = { x: e.clientX - r.left, y: e.clientY - r.top };
       if (!raf) raf = requestAnimationFrame(paint);
     });
-    container.addEventListener("pointerleave", function () { pending = null; hide(); });
+    container.addEventListener("pointerleave", function () { pending = null; hide(); broadcast(null); });
     // the view can move under a still mouse (zoom/live scroll): repaint label
     chart.timeScale().subscribeVisibleLogicalRangeChange(function () {
       if (pending && !raf) raf = requestAnimationFrame(paint);
+      else if (remote && !pending) paintRemote(true);  // v127
     });
   }
 
