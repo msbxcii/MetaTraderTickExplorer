@@ -30,7 +30,7 @@
   var ALL = [];
   var DASH = { 0: "solid", 1: "dotted", 2: "dashed", 3: "dashed", 4: "dotted" };
   // v128: vertical line breaks 10px above High / below Low of the nearest candle.
-  var GAP = 10;
+  var GAP = 15;
 
   // Hide only the plain default (arrow) pointer while it is over the plot
   // area, where the crosshair is drawn. Any element that sets its own cursor
