@@ -59,6 +59,8 @@ SHOW_TOOL_HINTS = True
 # can be stacked at once. Both apply immediately (frontend preference).
 ALERT_DISPLAY_SECONDS = 5.0
 ALERT_MAX_COUNT = 2
+# v132: number of price rows of the Market Profile (allowed 2..100; larger values are cut to 100). Applies immediately.
+MARKET_PROFILE_ROWS = 12  # v132: default 12
 # v101: when True, MT5 connection notifications (connection lost / Connected to
 # MT5 / Sync) are not shown. Default True (hidden). Applies immediately.
 DISABLE_CONNECTION_ALERTS = True

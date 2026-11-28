@@ -305,20 +305,29 @@
     dom.rbdBackdrop.classList.remove("open");
   }
 
+  // v132 (bug fix): dismissing the Select Date window (X, Cancel, Esc, click outside) while Replay has no
+  // start point yet used to leave Replay on, with the bar still waiting for a date. It now exits Replay
+  // completely (bar closed, header icon unselected). Re-opening the window mid-replay and cancelling keeps
+  // the running replay, since a start point already exists then.
+  function cancelSelectDate() {
+    closeSelectDate();
+    if (App.replayActive && !hasSelection) exitReplayMode();
+  }
+
   dom.replaySelectDateBtn.addEventListener("click", openSelectDate);
-  dom.rbdClose.addEventListener("click", closeSelectDate);
-  dom.rbdCancelBtn.addEventListener("click", closeSelectDate);
+  dom.rbdClose.addEventListener("click", cancelSelectDate);
+  dom.rbdCancelBtn.addEventListener("click", cancelSelectDate);
   dom.rbdCalPrev.addEventListener("click", function () { shiftMonth(-1); });
   dom.rbdCalNext.addEventListener("click", function () { shiftMonth(1); });
   [dom.rbdDateInput, dom.rbdTimeInput].forEach(function (el) {
     el.addEventListener("input", validateFields);
     el.addEventListener("keydown", function (evt) {
       if (evt.key === "Enter") { evt.preventDefault(); dom.rbdSelectBtn.click(); }
-      else if (evt.key === "Escape") { evt.preventDefault(); closeSelectDate(); }
+      else if (evt.key === "Escape") { evt.preventDefault(); cancelSelectDate(); }
     });
   });
   dom.rbdBackdrop.addEventListener("mousedown", function (evt) {
-    if (evt.target === dom.rbdBackdrop) closeSelectDate();
+    if (evt.target === dom.rbdBackdrop) cancelSelectDate();
   });
 
   dom.rbdSelectBtn.addEventListener("click", function () {
@@ -818,17 +827,26 @@
     else openSpeedMenu();
   });
 
-  Array.prototype.forEach.call(dom.replaySpeedList.querySelectorAll("button"), function (btn) {
-    btn.addEventListener("click", function () {
-      App.replaySpeed = Number(btn.getAttribute("data-speed")) || 1;
-      dom.replaySpeedLabel.textContent = App.replaySpeed + "x";
-      Array.prototype.forEach.call(dom.replaySpeedList.querySelectorAll("button"), function (b) {
-        b.classList.toggle("active", b === btn);
-      });
-      closeSpeedMenu();
-      restartTimerIfPlaying();
-    });
+  var speedBtns = Array.prototype.slice.call(dom.replaySpeedList.querySelectorAll("button"));
+  function applySpeedBtn(btn) {  // shared by the menu and the v132 keyboard shortcuts
+    App.replaySpeed = Number(btn.getAttribute("data-speed")) || 1;
+    dom.replaySpeedLabel.textContent = App.replaySpeed + "x";
+    speedBtns.forEach(function (b) { b.classList.toggle("active", b === btn); });
+    restartTimerIfPlaying();  // speed changes live while playing; never starts/stops playback
+  }
+  speedBtns.forEach(function (btn) {
+    btn.addEventListener("click", function () { applySpeedBtn(btn); closeSpeedMenu(); });
   });
+  // v132: dir -1 = one step slower (stops at the first option, 1x), +1 = one step faster (stops at the last).
+  function stepSpeed(dir) {
+    var i = 0;
+    speedBtns.forEach(function (b, k) { if (b.classList.contains("active")) i = k; });
+    var j = Math.max(0, Math.min(speedBtns.length - 1, i + dir));
+    if (j !== i) applySpeedBtn(speedBtns[j]);
+  }
+  function togglePlay() {  // v132
+    if (App.replayPlaying) pausePlayback(); else startPlayback();
+  }
 
   document.addEventListener("mousedown", function (evt) {
     if (!dom.replaySpeedWrap.contains(evt.target)) closeSpeedMenu();
@@ -848,6 +866,8 @@
     // whenever Replay is active, instead of a real backend tf switch.
     changeTimeframe: changeTimeframe,
     syncPrimaryWindow: syncPrimaryWindow,
+    togglePlay: togglePlay,   // v132: keyboard shortcuts
+    stepSpeed: stepSpeed,
     fitTailToPlayhead: fitTailToPlayhead, // v124: shared with multi-panel.js
     // v40 Update 2: lets multi-panel.js seed a companion panel opened (or
     // switched to a new timeframe) mid-replay at the correct point.

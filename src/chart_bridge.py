@@ -379,6 +379,83 @@ class ChartBridge:
             self._logger.warning(f"set_symbol: failed to switch to {symbol}: {e}")
             return {"ok": False, "error": "switch_failed"}
 
+    def get_market_profile(self, start, end, lo=None, hi=None, levels=8):
+        """v131: TPO counts for [start, end) seconds, split into `levels` equal price bands lo..hi (index 0 = lowest).
+        A 1s candle counts once in every band its low..high touches. Counted in SQL (no row transfer); only the live
+        tail not yet flushed (overlay) is counted in Python.
+        v132: up to 100 bands (was 32); counted with per-candle first/last band + grouped SQL (cost no longer grows
+        with the band count); lo/hi = None -> the range's own Low/High (Ruler profile), returned as "lo"/"hi"."""
+        try:
+            start = int(start); end = int(end)
+            lo = None if lo is None else float(lo)
+            hi = None if hi is None else float(hi)
+            n = max(1, min(int(levels), 100))
+        except (TypeError, ValueError):
+            return None
+        if end <= start or (lo is not None and hi is not None and hi < lo):
+            return None
+        with self._live_overlay_lock:
+            per_tf = self._live_overlay.get(1)
+            ov = {t: (c["low"], c["high"]) for t, c in per_tf.items() if start <= t < end} if per_tf else {}
+        ov_ms = min(ov) * 1000 if ov else None
+        db_end_ms = end * 1000 if ov_ms is None else ov_ms
+        tail = []
+        try:
+            with self._lock:
+                if ov_ms is not None:
+                    rows = {b // 1000: (l, h) for b, l, h in self._conn.execute(
+                        "SELECT bucket_start_ms, low, high FROM candles_1s WHERE bucket_start_ms >= ? AND bucket_start_ms < ?",
+                        (ov_ms, end * 1000))}
+                    rows.update(ov)
+                    tail = list(rows.values())
+                if lo is None or hi is None:  # v132: Ruler range -> its own Low/High
+                    mn = mx = None
+                    if db_end_ms > start * 1000:
+                        mn, mx = self._conn.execute(
+                            "SELECT MIN(low), MAX(high) FROM candles_1s WHERE bucket_start_ms >= ? AND bucket_start_ms < ?",
+                            (start * 1000, db_end_ms)).fetchone()
+                    for l, h in tail:
+                        mn = l if mn is None else min(mn, l)
+                        mx = h if mx is None else max(mx, h)
+                    if mn is None or mx is None:
+                        return None
+                    lo, hi = float(mn), float(mx)
+                step = (hi - lo) / n
+                first = [0] * (n + 1)  # candles whose first touched band is i
+                last = [0] * (n + 1)   # candles whose last touched band is i
+                if step <= 0:  # flat range: every candle touching lo counts in every band
+                    cnt = 0
+                    if db_end_ms > start * 1000:
+                        cnt = self._conn.execute(
+                            "SELECT COUNT(*) FROM candles_1s WHERE bucket_start_ms >= ? AND bucket_start_ms < ? AND low <= ? AND high >= ?",
+                            (start * 1000, db_end_ms, lo, lo)).fetchone()[0] or 0
+                    cnt += sum(1 for l, h in tail if l <= lo <= h)
+                    return {"c": [int(cnt)] * n, "lo": lo, "hi": hi}
+                if db_end_ms > start * 1000:
+                    q = ("SELECT MAX(0, CAST(a AS INT) + (a > CAST(a AS INT)) - 1) AS i0, "
+                         "MAX(0, MIN(?, CAST(b AS INT))) AS i1, COUNT(*) FROM "
+                         "(SELECT (low - ?) / ? - 1e-9 AS a, (high - ?) / ? + 1e-9 AS b FROM candles_1s "
+                         "WHERE bucket_start_ms >= ? AND bucket_start_ms < ?) GROUP BY i0, i1")
+                    for i0, i1, c in self._conn.execute(q, (n - 1, lo, step, lo, step, start * 1000, db_end_ms)):
+                        first[min(int(i0), n - 1)] += c
+                        last[int(i1)] += c
+                for l, h in tail:
+                    a = (l - lo) / step - 1e-9; b = (h - lo) / step + 1e-9  # 1e-9: edge ties count in both bands
+                    i0 = max(0, int(a) + (1 if a > int(a) else 0) - 1)
+                    i1 = max(0, min(n - 1, int(b)))
+                    first[min(i0, n - 1)] += 1
+                    last[i1] += 1
+        except Exception as e:
+            self._logger.warning(f"get_market_profile: failed: {e}")
+            return None
+        counts = []
+        opened = closed = 0  # band i holds the candles with first <= i and last >= i
+        for i in range(n):
+            opened += first[i]
+            counts.append(opened - closed)
+            closed += last[i]
+        return {"c": counts, "lo": lo, "hi": hi}
+
     def get_history_set(self, timeframe_seconds=None, limit=None):
         """Return a bounded latest partition.
 

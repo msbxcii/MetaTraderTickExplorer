@@ -203,6 +203,12 @@
         }
       },
     },
+    // v132: Ruler - fixed gesture, shown for reference only (cannot be re-bound or cleared). Its Shift + Left Click
+    // handling lives in ruler.js, so this entry has no key binding and no run().
+    {
+      id: "objRuler", label: "Object: Ruler", fixedLabel: "Shift + Left Click",
+      default: null,
+    },
     // Per spec: shipped with no key assigned. The user can add one from
     // the table below; whatever they pick is persisted the same way.
     {
@@ -226,6 +232,42 @@
       id: "objFibExt", label: "Object: Fib Expansion",
       default: null,
       run: function () { if (App.DrawingEngine) App.DrawingEngine.setTool("fibext"); },
+    },
+    // v132: Replay-only shortcuts (no effect, and the key is left alone, outside Replay mode).
+    {
+      id: "replayPlayPause", label: "Replay: Play / Pause", noRepeat: true,
+      default: { ctrl: false, shift: false, alt: false, code: "ArrowRight" },
+      run: function () {
+        if (!App.replayActive || !App.ReplayBar || !App.ReplayBar.togglePlay) return false;
+        App.ReplayBar.togglePlay();
+      },
+    },
+    {
+      id: "replaySlower", label: "Replay: Slower Speed",
+      default: { ctrl: false, shift: false, alt: false, code: "ArrowUp" },
+      run: function () {
+        if (!App.replayActive || !App.ReplayBar || !App.ReplayBar.stepSpeed) return false;
+        App.ReplayBar.stepSpeed(-1);
+      },
+    },
+    {
+      id: "replayFaster", label: "Replay: Faster Speed",
+      default: { ctrl: false, shift: false, alt: false, code: "ArrowDown" },
+      run: function () {
+        if (!App.replayActive || !App.ReplayBar || !App.ReplayBar.stepSpeed) return false;
+        App.ReplayBar.stepSpeed(1);
+      },
+    },
+    // v132: Market Profile on/off (same as clicking the toolbar icon). Bound to the physical P key (KeyP),
+    // so it works for upper/lower case and with a Persian layout too.
+    {
+      id: "marketProfile", label: "Market Profile: On / Off", noRepeat: true,
+      default: { ctrl: false, shift: false, alt: false, code: "KeyP" },
+      run: function () {
+        var b = document.getElementById("market-profile-toggle");
+        if (b) b.click();
+        else if (App.MarketProfile && App.MarketProfile.setOn) App.MarketProfile.setOn(!App.MarketProfile.isOn());
+      },
     },
   ];
 
@@ -342,7 +384,10 @@
       console.error("Saving Keyboard Shortcuts failed:", err);
     });
   }
+  // v132: toolbar button tooltips show the current shortcut; tell them whenever a binding changes or loads.
+  function notifyShortcutsChanged() { document.dispatchEvent(new CustomEvent("App:shortcutsChanged")); }
   function scheduleSave() {
+    notifyShortcutsChanged();
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(function () { saveTimer = null; doSave(); }, SAVE_DEBOUNCE_MS);
   }
@@ -351,11 +396,13 @@
     if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.get_keyboard_shortcuts) {
       bindings = sanitizeBindings(readLocalJson(LOCAL_KEY));
       renderTable();
+      notifyShortcutsChanged();
       return Promise.resolve();
     }
     return window.pywebview.api.get_keyboard_shortcuts().then(function (data) {
       bindings = sanitizeBindings(data && data.bindings);
       renderTable();
+      notifyShortcutsChanged();
     }).catch(function (err) {
       console.error("Loading saved Keyboard Shortcuts failed:", err);
     });
@@ -436,8 +483,9 @@
     for (var i = 0; i < ACTIONS.length; i++) {
       var action = ACTIONS[i];
       if (matches(evt, bindings[action.id])) {
-        if (action.run) action.run();
-        evt.preventDefault();
+        if (action.noRepeat && evt.repeat) { evt.preventDefault(); return; }  // v132
+        var res = action.run ? action.run() : undefined;
+        if (res !== false) evt.preventDefault();  // v132: run() -> false = not handled (e.g. not in Replay), key untouched
         return;
       }
     }
@@ -482,6 +530,7 @@
   }
 
   function beginCapture(actionId) {
+    if (ACTION_BY_ID[actionId] && ACTION_BY_ID[actionId].fixedLabel) return;  // v132: fixed shortcut
     if (capturing) cancelCapture();
     capturing = { actionId: actionId, pending: null };
     document.addEventListener("keydown", onCaptureKeydown, true);
@@ -517,6 +566,7 @@
   }
 
   function clearBinding(actionId) {
+    if (ACTION_BY_ID[actionId] && ACTION_BY_ID[actionId].fixedLabel) return;  // v132: fixed shortcut
     if (capturing && capturing.actionId === actionId) cancelCapture();
     bindings[actionId] = null;
     renderRow(actionId);
@@ -533,6 +583,13 @@
   function renderRow(actionId) {
     var refs = rowRefs[actionId];
     if (!refs) return;
+    if (ACTION_BY_ID[actionId] && ACTION_BY_ID[actionId].fixedLabel) {  // v132: fixed gesture, not editable
+      refs.badge.classList.remove("kbd-unassigned", "kbd-listening");
+      refs.badge.textContent = ACTION_BY_ID[actionId].fixedLabel;
+      refs.editBtn.innerHTML = "\u270E"; refs.editBtn.title = "Fixed shortcut"; refs.editBtn.disabled = true;
+      refs.clearBtn.innerHTML = "\u2715"; refs.clearBtn.title = "Fixed shortcut"; refs.clearBtn.disabled = true;
+      return;
+    }
     var isCapturing = capturing && capturing.actionId === actionId;
     var current = bindings[actionId];
 
@@ -635,6 +692,12 @@
     activate: activate,
     deactivate: deactivate,
     load: load,
+    // v132: text of an action's current shortcut (e.g. "Ctrl + H", "Shift + Left Click"), or null when unassigned.
+    getLabel: function (actionId) {
+      var a = ACTION_BY_ID[actionId];
+      if (!a) return null;
+      return a.fixedLabel || formatBinding(bindings[actionId]);
+    },
     tradeActionForMouse: tradeActionForMouse,
     isTradeMouseButton: isTradeMouseButton,
   };

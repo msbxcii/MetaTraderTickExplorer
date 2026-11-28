@@ -1,3 +1,4 @@
+// v131: Market Profile hook - the hovered candle's Low/High + live flag travel with the sync (pf) and are drawn via market-profile.js.
 // v130: multichart - if the hovered panel's tf is HIGHER than a panel's own, that panel shows
 // only the horizontal price line + 2 vertical lines (open/close of the reference candle nearest
 // to the mouse: before the mid-point of two candles the left one, after it the right one; same
@@ -75,6 +76,9 @@
     var bnd = [];
     for (var bi0 = 0; bi0 < 4; bi0++) { var be = line.cloneNode(false); container.appendChild(be); bnd.push(be); }
     container.appendChild(label);
+    // v131: TPO overlay; no-op while the Market Profile icon is off.
+    var mp = window.App && App.MarketProfile ? App.MarketProfile.create(chart, container, getData, function (t) { return xAtTime(t); }) : null;
+    function sameP(a, b) { return a === b || (!!a && !!b && a.hi === b.hi && a.lo === b.lo && a.last === b.last); }
 
     var pending = null, raf = 0;
     var remote = null;  // v127: {t, price} pushed by the hovered chart
@@ -197,9 +201,15 @@
         // so the last existing candle is NOT the boundary: use the theoretical last slot (e - tf, e.g. 13:59:55).
         var inRef = k2 >= 0 && arr2[k2].time >= remote.o;
         var live = inRef && k2 === arr2.length - 1;
-        showBnd(remote.o, (inRef && !live) ? arr2[k2].time : e - d.tf);
+        var t2 = (inRef && !live) ? arr2[k2].time : e - d.tf;
+        showBnd(remote.o, t2);
+        if (mp) { if (remote.pf) mp.show({ start: remote.o, end: e, tf: remote.src, t2: t2, hi: remote.pf.hi, lo: remote.pf.lo, live: remote.pf.last }); else mp.hide(); }  // v131
       } else {
         hideBnd();
+        if (mp) {  // v131: same-tf panel -> profile next to the candle; lower source tf -> none
+          if (remote.pf && remote.o !== null && remote.o !== undefined && remote.src === (d && d.tf)) mp.show({ start: remote.o, end: remote.o + remote.src, tf: remote.src, hi: remote.pf.hi, lo: remote.pf.lo, live: remote.pf.last });
+          else mp.hide();
+        }
         if (x === null || x === undefined || x < 0 || x > paneW) hide(); else showV(x, rt);
       }
       if (!arr || !arr.length || !d.series || remote.price === null) { clearHorz(); return; }
@@ -230,15 +240,16 @@
     try { hook(); } catch (_) {}
     var inst = {
       container: container,
-      set: function (t, price, src, op) {
+      set: function (t, price, src, op, pf) {
         if (pending) return;
-        if (remote && remote.t === t && remote.price === price && remote.src === src && remote.o === op) return;
-        remote = { t: t, price: price, src: src, o: op };
+        if (remote && remote.t === t && remote.price === price && remote.src === src && remote.o === op && sameP(remote.pf, pf)) return;
+        remote = { t: t, price: price, src: src, o: op, pf: pf };
         paintRemote();
       },
       clear: function () {
         if (!remote) return;
         remote = null;
+        if (mp) mp.hide();  // v131
         if (!pending) { hide(); clearHorz(); }
       },
     };
@@ -249,13 +260,14 @@
       var j = Math.round(lg), n = arr.length;
       return j < 0 ? arr[0].time + j * tf : j > n - 1 ? arr[n - 1].time + (j - (n - 1)) * tf : arr[j].time;
     }
-    function broadcast(t, price, op) {
+    function broadcast(t, price, op, pf) {
       var stf = 0;
       if (t !== null) { var sd0 = getData && getData(); stf = (sd0 && sd0.tf) || 0; }  // v129
       if (op === undefined) op = null;
+      if (pf === undefined) pf = null;  // v131
       for (var k = 0; k < ALL.length; k++) {
         if (!ALL[k].container.isConnected) { ALL.splice(k--, 1); continue; }  // destroyed panel
-        if (ALL[k] !== inst) { if (t === null) ALL[k].clear(); else ALL[k].set(t, price, stf, op); }
+        if (ALL[k] !== inst) { if (t === null) ALL[k].clear(); else ALL[k].set(t, price, stf, op, pf); }
       }
     }
 
@@ -331,12 +343,12 @@
       container._fcWasMagnet = !!mg;
       var paneW = ts.width(), axisH = ts.height();
       var paneH = container.clientHeight - axisH;
-      if (x < 0 || x > paneW || y < 0 || y > container.clientHeight) { hide(); broadcast(null); return; }
+      if (x < 0 || x > paneW || y < 0 || y > container.clientHeight) { hide(); if (mp) mp.hide(); broadcast(null); return; }
       if (mg) x = mx;
       lastLog = null;
       var t = mg ? mg.time : timeAt(x);
       showV(x, t);
-      if (t === null) { broadcast(null); return; }
+      if (t === null) { if (mp) mp.hide(); broadcast(null); return; }
       var price = null;  // v127: sync other charts at this time/price
       if (mg) price = mg.price;
       else if (y <= paneH) {
@@ -345,7 +357,13 @@
       }
       var pd = getData();  // v130
       var op = mg ? mg.time : (pd ? nearestOpen(lastLog, pd.candles, pd.tf) : null);
-      broadcast(t, price === undefined ? null : price, op);
+      var pf = null;  // v131: Low/High of the hovered candle (only while the icon is on)
+      if (mp && App.MarketProfile.isOn() && pd && pd.tf > App.MarketProfile.minTf && op !== null) {  // v132: none on 1s/5s/15s
+        var pi = indexOfTime(pd.candles, op);
+        if (pi >= 0) { var pc = pd.candles[pi]; pf = { hi: pc.high, lo: pc.low, last: pi === pd.candles.length - 1 }; }
+      }
+      broadcast(t, price === undefined ? null : price, op, pf);
+      if (mp) { if (pf) mp.show({ start: op, end: op + pd.tf, tf: pd.tf, hi: pf.hi, lo: pf.lo, live: pf.last }); else mp.hide(); }
     }
 
     function setNoCursor(on) { container.classList.toggle("fc-nocursor", !!on); }
@@ -357,7 +375,7 @@
                   pending.y >= 0 && pending.y <= container.clientHeight - ts.height());
       if (!raf) raf = requestAnimationFrame(paint);
     });
-    container.addEventListener("pointerleave", function () { pending = null; setNoCursor(false); hide(); broadcast(null); });
+    container.addEventListener("pointerleave", function () { pending = null; setNoCursor(false); hide(); if (mp) mp.hide(); broadcast(null); });
     // the view can move under a still mouse (zoom/live scroll): repaint label
     chart.timeScale().subscribeVisibleLogicalRangeChange(function () {
       if (pending && !raf) raf = requestAnimationFrame(paint);

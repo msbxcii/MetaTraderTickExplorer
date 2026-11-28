@@ -95,6 +95,12 @@
           description: "Maximum number of notifications stacked on screen at the same time (bottom-left). When the limit is reached the oldest notification is dismissed first. Allowed range 1 to 30. Takes effect immediately."
         },
         {
+          // v132: live Market Profile row count; typing above max is cut to max at once
+          key: "MARKET_PROFILE_ROWS", type: "int", step: "1", unit: "rows", min: 2, max: 100,
+          title: "Market Profile Rows",
+          description: "Number of price rows the Market Profile splits a candle (or Ruler range) into. Default 12. Allowed range 2 to 100; a larger number is changed to 100 automatically. More rows give a finer profile. Takes effect immediately."
+        },
+        {
           key: "DISABLE_CONNECTION_ALERTS", type: "bool",
           title: "Disable Connection Notifications",
           description: "Hides all MT5 connection notifications: connection lost, Connected to MT5 and data Sync messages. The connection status dot is not affected. On by default. Takes effect immediately."
@@ -198,6 +204,7 @@
       if (k === "NEWS_DELAY_MIN") d[k] = 1;                 // v111
       if (k === "NEWS_DELAY_MAX") d[k] = 3;
       if (k === "DISABLE_CONNECTION_ALERTS") d[k] = true;   // v101
+      if (k === "MARKET_PROFILE_ROWS") d[k] = 12;           // v132
     });
     return d;
   }
@@ -378,9 +385,15 @@
           input.classList.add("appcfg-input-invalid");
           return; // don't persist an unparsable value
         }
+        if (field.max !== undefined && parsed > field.max) { parsed = field.max; input.value = String(parsed); }  // v132
         input.classList.remove("appcfg-input-invalid");
         current[field.key] = parsed;
         scheduleSave();
+      });
+      if (field.min !== undefined) input.addEventListener("change", function () {  // v132: below min -> min on leaving the field
+        var n = parseInt(input.value, 10);
+        if (isNaN(n) || n >= field.min) return;
+        input.value = String(field.min); current[field.key] = field.min; scheduleSave();
       });
 
       row.appendChild(input);
@@ -510,6 +523,12 @@
     };
   }
 
+  // v132: Market Profile row count, read live (2..100, default 12).
+  function getMarketProfileRows() {
+    var n = Math.round(Number(loaded ? current.MARKET_PROFILE_ROWS : NaN));
+    return n > 0 ? Math.min(100, Math.max(2, n)) : 12;
+  }
+
   // v111: live Min/Max wait between Economic News weeks (read when a job starts,
   // so a change applies to the very next Extend / BackFill). null = not loaded/invalid.
   function getNewsDelay() {
@@ -525,5 +544,5 @@
   if (hasBridge("get_app_config")) preload();
   else window.addEventListener("pywebviewready", preload);
 
-  App.AppConfig = { activate: activate, deactivate: deactivate, isToolHintEnabled: isToolHintEnabled, getAlertSettings: getAlertSettings, getNewsDelay: getNewsDelay };
+  App.AppConfig = { activate: activate, deactivate: deactivate, isToolHintEnabled: isToolHintEnabled, getAlertSettings: getAlertSettings, getNewsDelay: getNewsDelay, getMarketProfileRows: getMarketProfileRows };
 })();

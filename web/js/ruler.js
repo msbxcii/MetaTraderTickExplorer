@@ -1,13 +1,34 @@
+// v132: the toolbar Ruler button does the same without Shift (button -> click start -> click end).
 // V82: MT5-style Ruler. Shift+Left Click on any chart panel sets the anchor
 // (v89: previewed on every multi-chart panel; disabled while drawing/editing an object);
 // moving the mouse shows a line + label "time, points, %"; the next Left Click
 // ends it. Drawn on one lightweight overlay canvas per ruler session (only
 // repainted on mousemove), clicks are swallowed so drawing tools never react.
+// v132: while Market Profile is off, the Ruler also draws dynamic Fibonacci retracement levels (10%..100%).
 (function () {
   "use strict";
   var App = window.App;
   var r = null; // active ruler session
   var eatUntilClick = false; // swallow the rest of the start/end click
+  var armed = false;         // v132: toolbar Ruler button pressed, waiting for the start click (no Shift needed)
+  function notify() { document.dispatchEvent(new CustomEvent("App:rulerChanged")); }
+  function setArmed(v) {
+    v = !!v;
+    if (armed === v) return;
+    armed = v;
+    document.documentElement.classList.toggle("ruler-armed", armed);
+    notify();
+  }
+  function disarm() { setArmed(false); }
+  function toggleArm() {
+    if (armed) { disarm(); return; }
+    if (r) stop();
+    if (App.DrawingEngine && App.DrawingEngine.returnToCursor) App.DrawingEngine.returnToCursor();  // a drawing tool and the Ruler never run together
+    setArmed(true);
+    if (App.DrawingEngine && App.DrawingEngine.showHint && (!App.AppConfig || App.AppConfig.isToolHintEnabled())) {
+      App.DrawingEngine.showHint("Click to start the ruler, click again to end it");
+    }
+  }
 
   function panelsList() {
     var list = [];
@@ -108,7 +129,7 @@
   // V82.1: "+" precision cursor while the ruler is active (one CSS rule, so
   // the chart's own canvases cannot override it).
   var cursorStyle = document.createElement("style");
-  cursorStyle.textContent = "html.ruler-active, html.ruler-active * { cursor: crosshair !important; }";
+  cursorStyle.textContent = "html.ruler-active, html.ruler-active *, html.ruler-armed, html.ruler-armed * { cursor: crosshair !important; }";
   document.head.appendChild(cursorStyle);
 
   // v89 Update 3: one overlay canvas per visible panel; the panel where the
@@ -124,7 +145,9 @@
   }
 
   function start(hit) {
+    disarm();  // v132: the armed toolbar button is used up by this start click
     document.documentElement.classList.add("ruler-active");
+    if (App.MarketProfile) App.MarketProfile.hideAll();  // v132: Ruler shows only its range profile
     var views = [];
     panelsList().forEach(function (p) {
       if (!p.host.offsetParent) return; // hidden / maximized-away panel
@@ -134,6 +157,14 @@
     var price = ov.panel.series.coordinateToPrice(hit.y);
     r = { panel: ov.panel, views: views, price: price, time: timeAtX(ov.panel, hit.x), timeF: timeAtXf(ov.panel, hit.x),
       x: hit.x, last: null, raf: false };
+    var redraw = function () { if (r && r.px !== undefined && !r.raf) { r.raf = true; window.requestAnimationFrame(function () { if (!r) return; r.raf = false; draw(r.px, r.py); }); } };
+    r.unsub = [];
+    views.forEach(function (v) {  // v132: zoom/pan repaints the ruler at the new candle positions
+      var ts = v.panel.chart.timeScale();
+      ts.subscribeVisibleLogicalRangeChange(redraw);
+      r.unsub.push(function () { try { ts.unsubscribeVisibleLogicalRangeChange(redraw); } catch (e) {} });
+    });
+    notify();  // v132: the toolbar Ruler button shows as selected while a ruler is running (also for Shift + Left Click)
     draw(hit.x, hit.y);
   }
 
@@ -150,7 +181,10 @@
     document.documentElement.classList.remove("ruler-active");
     if (!r) return;
     r.views.forEach(function (v) { if (v.cv.parentNode) v.cv.parentNode.removeChild(v.cv); });
+    if (r.unsub) r.unsub.forEach(function (f) { f(); });
     r = null;
+    if (App.MarketProfile) App.MarketProfile.resetRange();  // v132
+    notify();
   }
 
   // Paints one view: anchor cross-lines, the ruler line and the label.
@@ -195,6 +229,69 @@
     ctx.fillText(text, lx + pad, ly + 3);
   }
 
+  // v132: profile bars between the two ruler times (x), over the range's Low..High (y); drawn on every timeframe (incl. 1s/5s/15s).
+  function paintProfile(v, m, tF) {
+    var p = v.panel;
+    var xa = timeToX(p, r.timeF), xb = timeToX(p, tF);
+    var yA = p.series.priceToCoordinate(m.hi), yB = p.series.priceToCoordinate(m.lo);
+    if (xa === null || xb === null || yA === null || yB === null || yA === undefined || yB === undefined) return;
+    var plotW = p.host.clientWidth - p.chart.priceScale("right").width();
+    var plotH = p.host.clientHeight - p.chart.timeScale().height();
+    var x0 = Math.min(xa, xb), w = Math.max(Math.abs(xb - xa), 12);
+    var ctx = v.cv.getContext("2d");
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, plotW, plotH); ctx.clip();
+    App.MarketProfile.paintBars(ctx, m.c, x0, w, yA, yB);
+    ctx.restore();
+  }
+
+  // v132: dynamic Fibonacci retracement levels, shown only while Market Profile is OFF. The move runs from the
+  // anchor price A to the current price B; 0% = B, 100% = A, one level every 10% from 10% to 100%
+  // (price = B - (B - A) * pct). Lines span the ruler's time range; the percentages are written to the left of
+  // the range's left edge (no prices). The 50% level is solid, thicker and gold. Repainted with the ruler, so it
+  // follows the mouse, zoom and pan, on every panel.
+  var FIB_STEP = 10, FIB_MAX = 100, FIB_KEY = "#f5b942";
+  function paintFib(v, xa, xb, priceB) {
+    var p = v.panel, A = r.price, B = priceB;
+    if (xa === null || xb === null || xa === undefined || xb === undefined) return;
+    if (!Number.isFinite(A) || !Number.isFinite(B) || A === B) return;
+    var plotW = p.host.clientWidth - p.chart.priceScale("right").width();
+    var plotH = p.host.clientHeight - p.chart.timeScale().height();
+    var lo = p.chart.options().layout || {};
+    var fs = Number(lo.fontSize) || 12;  // same size as the Ruler label = Canvas Text Size
+    var ch = (p.chart.options().crosshair || {}).vertLine || {};
+    var color = ch.color || lo.textColor || "#8b95a5";
+    var textColor = lo.textColor || "#d1d4dc";
+    var x0 = Math.min(xa, xb), x1 = Math.max(xa, xb);
+    if (x1 - x0 < 40) x1 = x0 + 40;  // keep the levels readable for very short ranges
+    var lx = Math.max(x0 - 6, 30);   // label edge (right-aligned); stays visible near the left border
+    var ctx = v.cv.getContext("2d");
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, plotW, plotH); ctx.clip();
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "right";
+    // v132: when the levels are so close that the percentages would overlap, hide the percentages (lines stay).
+    // Checked per view (each panel has its own price scale / zoom), so a 5s panel can show them while the 5m panel doesn't.
+    var yA = p.series.priceToCoordinate(B - (B - A) * (FIB_STEP / 100));
+    var yB = p.series.priceToCoordinate(B - (B - A) * (2 * FIB_STEP / 100));
+    var showLabels = !(yA === null || yB === null || yA === undefined || yB === undefined) &&
+      Math.abs(yB - yA) >= fs + 3;
+    for (var pct = FIB_STEP; pct <= FIB_MAX; pct += FIB_STEP) {
+      var y = p.series.priceToCoordinate(B - (B - A) * (pct / 100));
+      if (y === null || y === undefined) continue;
+      var yy = Math.round(y) + 0.5, key = (pct === 50);
+      if (key) { ctx.setLineDash([]); ctx.strokeStyle = FIB_KEY; ctx.lineWidth = 2; ctx.globalAlpha = 1; }
+      else { ctx.setLineDash([4, 3]); ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.globalAlpha = 0.55; }
+      ctx.beginPath(); ctx.moveTo(x0, yy); ctx.lineTo(x1, yy); ctx.stroke();
+      ctx.globalAlpha = 1;
+      if (!showLabels) continue;
+      ctx.fillStyle = key ? FIB_KEY : textColor;
+      ctx.font = (key ? "bold " : "") + fs + "px " + App.FONT_FAMILY;
+      ctx.fillText(pct + "%", lx, yy);
+    }
+    ctx.restore();
+  }
+
   function draw(x, y) {
     var o = r.panel, ov = r.views.filter(function (v) { return v.origin; })[0];
     if (!ov) return;
@@ -216,15 +313,29 @@
         (pct > 0 ? "+" : "") + pct.toFixed(2) + "%";
     }
 
+    // v132: Market Profile of the Ruler's own time range (1s candles), same range on every panel
+    var mpr = null;
+    if (t !== null && r.time !== null && App.MarketProfile && App.MarketProfile.isOn()) {
+      var tA = Math.min(r.time, t), tB = Math.max(r.time, t) + 1;
+      mpr = App.MarketProfile.range(tA, tB, function () { if (r && r.px !== undefined) draw(r.px, r.py); });
+      if (mpr) mpr.tA = tA, mpr.tB = tB;
+    }
+    r.px = x; r.py = y;
+    var showFib = !(App.MarketProfile && App.MarketProfile.isOn());  // v132: fib levels only while Market Profile is off
     r.views.forEach(function (v) {
+      var fa, fb;
       if (v.origin) {
         // anchor re-projected each paint so it stays glued to its price
-        paintView(v, anchorX(), o.series.priceToCoordinate(r.price), x, y, text);
+        fa = anchorX(); fb = x;
+        paintView(v, fa, o.series.priceToCoordinate(r.price), x, y, text);
       } else {
         var p = v.panel;
-        paintView(v, timeToX(p, r.timeF), p.series.priceToCoordinate(r.price),
-          timeToX(p, tF), price === null ? null : p.series.priceToCoordinate(price), text);
+        fa = timeToX(p, r.timeF); fb = timeToX(p, tF);
+        paintView(v, fa, p.series.priceToCoordinate(r.price),
+          fb, price === null ? null : p.series.priceToCoordinate(price), text);
       }
+      if (mpr) paintProfile(v, mpr, tF);
+      if (showFib && price !== null) paintFib(v, fa, fb, price);
     });
   }
 
@@ -232,8 +343,10 @@
   // its time/price via those coordinates, which works correctly across
   // pan (changes relative x) and zoom (time-based). Simpler and more robust
   // than trying to reverse-engineer the coordinate from time via binary search.
+  // v132: the anchor now follows its time on zoom/pan (was a fixed pixel, so the line stayed while candles moved).
   function anchorX() {
-    return r.x !== null ? r.x : null;
+    var ax = r.timeF === null ? null : timeToX(r.panel, r.timeF);
+    return (ax === null || ax === undefined) ? (r.x !== null ? r.x : null) : ax;
   }
 
   function schedule(evt) {
@@ -253,7 +366,7 @@
   window.addEventListener("pointerdown", function (e) {
     if (e.button !== 0) { if (r && e.button === 2) { swallow(e); stop(); } return; }
     if (r) { swallow(e); stop(); eatUntilClick = true; return; } // any left click ends the ruler
-    if (!e.shiftKey) return;
+    if (!e.shiftKey && !armed) return;  // v132: Shift + Left Click, or any Left Click while the toolbar button is armed
     // v89 Update 4: while a drawing tool is armed, an object is being drawn
     // or its points are being edited, Shift+click belongs to the drawing
     // (Shift = lock price); the Ruler shortcut is disabled then.
@@ -274,8 +387,12 @@
   });
   window.addEventListener("pointermove", function (e) { if (r) schedule(e); }, true);
   window.addEventListener("wheel", function (e) { if (r) schedule(e); }, { capture: true, passive: true });
-  window.addEventListener("keydown", function (e) { if (r && e.key === "Escape") stop(); }, true);
+  window.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape") return;
+    if (r) stop(); else if (armed) disarm();  // v132: Esc also un-arms the toolbar button
+  }, true);
   document.addEventListener("App:replayStarted", stop);
 
-  App.Ruler = { stop: stop, isActive: function () { return !!r; } };
+  App.Ruler = { stop: stop, isActive: function () { return !!r; },
+    arm: toggleArm, toggleArm: toggleArm, disarm: disarm, isArmed: function () { return armed || !!r; } };
 })();

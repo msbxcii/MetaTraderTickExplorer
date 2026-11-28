@@ -4134,13 +4134,30 @@
      (its header row stays pinned) when it is taller than the available space. */
   #settings-pane-keyboard-shortcuts.active { display: flex; flex-direction: column; height: 100%; min-height: 0; }
   .kbd-shortcuts-intro { flex: 0 0 auto; }
+  /* v132: the framed box holds a fixed header table and a separate rows scroller, so the scrollbar
+     runs beside the rows only (not the Action / Shortcut titles); both reserve the same gutter to keep columns aligned. */
   .kbd-table-scroll {
-    flex: 0 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden;
+    flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
     border: 1px solid var(--border); border-radius: 8px;
+  }
+  /* v132: the header's reserved scrollbar gutter was transparent, leaving a white strip above the scrollbar;
+     the header container now carries the same background as the title cells and the same gutter width as the body. */
+  .kbd-table-head {
+    flex: 0 0 auto; overflow: hidden; scrollbar-gutter: stable;
+    background: var(--ctl); border-bottom: 1px solid var(--border);
+    scrollbar-width: thin;
+  }
+  .kbd-table-head::-webkit-scrollbar { width: 8px; }
+  .kbd-table-head::-webkit-scrollbar-track { background: transparent; }
+  .kbd-table-head .kbd-shortcuts-table thead th { border-bottom: 0; }
+  .kbd-table-body {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable;
     scrollbar-width: thin; scrollbar-color: var(--border) transparent;
   }
-  .kbd-table-scroll .kbd-shortcuts-table { width: 100%; border: 0; border-radius: 0; overflow: visible; }
-  .kbd-table-scroll .kbd-shortcuts-table thead th { position: sticky; top: 0; z-index: 1; }
+  .kbd-table-body::-webkit-scrollbar { width: 8px; }
+  .kbd-table-body::-webkit-scrollbar-track { background: transparent; }
+  .kbd-table-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  .kbd-table-scroll .kbd-shortcuts-table { width: 100%; border: 0; border-radius: 0; overflow: visible; table-layout: fixed; }
   .kbd-reset-all-btn { flex: 0 0 auto; align-self: flex-start; }
 
   /* shared bits */
@@ -4361,7 +4378,7 @@
   }
 
   /* icon buttons (drawing tools, layout, panel toggles) */
-  header :is(.pill-btn, #replay-bar-toggle, #trade-panel-toggle,
+  header :is(.pill-btn, #replay-bar-toggle, #market-profile-toggle, #trade-panel-toggle,
              #objects-panel-toggle, #settings-toggle, #log-toggle) {
     position: relative;
     appearance: none;
@@ -4379,7 +4396,7 @@
     cursor: pointer;
     transition: background .14s ease, color .14s ease, transform .1s ease;
   }
-  header :is(.pill-btn, #replay-bar-toggle, #trade-panel-toggle,
+  header :is(.pill-btn, #replay-bar-toggle, #market-profile-toggle, #trade-panel-toggle,
              #objects-panel-toggle, #settings-toggle, #log-toggle) svg {
     width: 16px;
     height: 16px;
@@ -4388,20 +4405,20 @@
   }
   header .layout-switcher .pill-btn { padding: 0; }
   header .layout-switcher .pill-btn svg { width: 16px; height: 12px; }
-  header :is(.pill-btn, #replay-bar-toggle, #trade-panel-toggle,
+  header :is(.pill-btn, #replay-bar-toggle, #market-profile-toggle, #trade-panel-toggle,
              #objects-panel-toggle, #settings-toggle, #log-toggle):hover {
     background: var(--tb-hov);
     color: var(--text);
   }
-  header :is(.pill-btn, #replay-bar-toggle, #trade-panel-toggle,
+  header :is(.pill-btn, #replay-bar-toggle, #market-profile-toggle, #trade-panel-toggle,
              #objects-panel-toggle, #settings-toggle, #log-toggle):hover svg {
     transform: scale(1.08);
   }
-  header :is(.pill-btn, #replay-bar-toggle, #trade-panel-toggle,
+  header :is(.pill-btn, #replay-bar-toggle, #market-profile-toggle, #trade-panel-toggle,
              #objects-panel-toggle, #settings-toggle, #log-toggle):active {
     transform: scale(.92);
   }
-  header :is(.pill-btn, #replay-bar-toggle, #trade-panel-toggle,
+  header :is(.pill-btn, #replay-bar-toggle, #market-profile-toggle, #trade-panel-toggle,
              #objects-panel-toggle, #settings-toggle, #log-toggle).active {
     background: var(--tb-sel);
     color: var(--tb-accent);
@@ -4991,6 +5008,7 @@
         <span class="tb-sep" aria-hidden="true"></span>
         <!-- Panels: Bar Replay (v40), Trade (V83), Object Tree (v33/v38). -->
         <div class="pill-group tb-group objects-toggle-wrap">
+          <button id="market-profile-toggle" type="button" title="Market Profile"></button>
           <button id="replay-bar-toggle" type="button" title="Bar Replay"></button>
           <button id="trade-panel-toggle" type="button" title="Trade"></button>
           <button id="objects-panel-toggle" type="button" title="Object Tree"></button>
@@ -5567,7 +5585,9 @@
                inline assign/change control (see keyboard-shortcuts.js). -->
           <div class="settings-pane" id="settings-pane-keyboard-shortcuts">
             <div class="kbd-table-scroll">
+            <div class="kbd-table-head">
             <table class="kbd-shortcuts-table">
+              <colgroup><col class="kbd-col-action"><col class="kbd-col-shortcut"><col class="kbd-col-controls"></colgroup>
               <thead>
                 <tr>
                   <th class="kbd-col-action">Action</th>
@@ -5575,8 +5595,14 @@
                   <th class="kbd-col-controls"></th>
                 </tr>
               </thead>
+            </table>
+            </div>
+            <div class="kbd-table-body">
+            <table class="kbd-shortcuts-table">
+              <colgroup><col class="kbd-col-action"><col class="kbd-col-shortcut"><col class="kbd-col-controls"></colgroup>
               <tbody id="kbd-shortcuts-tbody"></tbody>
             </table>
+            </div>
             </div>
             <button type="button" class="kbd-reset-all-btn" id="kbd-reset-all-btn">Reset to Default</button>
           </div>
@@ -5868,6 +5894,7 @@
 <script src="js/trade-lines.js"></script>
 <script src="js/trade-hover.js"></script>
 <script src="js/replay-trading.js"></script>
+<script src="js/market-profile.js"></script>
 <script src="js/free-crosshair.js"></script>
 <script src="js/chart-core.js"></script>
 <script src="js/candle-countdown.js"></script>

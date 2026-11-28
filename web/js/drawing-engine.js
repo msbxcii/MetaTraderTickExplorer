@@ -299,6 +299,9 @@
     // machinery, so its look and animation match every other tool here
     // for free.
     { id: "fibext", label: "Fib Expansion", icon: App.Icons.fibExpansion() },
+    // v132: Ruler (same as Shift + Left Click). Not a drawing tool: the button arms the Ruler (see ruler.js),
+    // the next click sets its start point and the following click ends it.
+    { id: "ruler", label: "Ruler", icon: App.Icons.ruler() },
   ];
 
   // v33.1 Fix 3: shared with object-panel.js's default label logic — the
@@ -687,26 +690,57 @@
   }
 
   // ---- Toolbar (global — one toolbar, drives every panel's canvas) -------
+  // v132: toolbar tooltip = tool name + its shortcut in brackets, when it has one (taken live from the
+  // Keyboard Shortcuts tab, so a shortcut the user assigns there shows up here too).
+  var TOOL_SHORTCUT_ACTION = { trend: "objTrend", hline: "objHLine", vline: "objVLine", rect: "objRect",
+    fib: "objFib", fibext: "objFibExt", ruler: "objRuler" };
+  function toolTitle(def) {
+    var id = TOOL_SHORTCUT_ACTION[def.id];
+    var ks = id && App.KeyboardShortcuts && App.KeyboardShortcuts.getLabel ? App.KeyboardShortcuts.getLabel(id) : null;
+    return ks ? def.label + " (" + ks + ")" : def.label;
+  }
+  function refreshToolbarTitles() {
+    Array.prototype.forEach.call(dom.toolbarEl.children, function (btn) {
+      if (!btn.dataset.tool) return;  // v132: Market Profile button (not a tool)
+      var def = TOOL_DEFS.filter(function (d) { return d.id === btn.dataset.tool; })[0];
+      if (def) btn.title = toolTitle(def);
+    });
+  }
+  document.addEventListener("App:shortcutsChanged", refreshToolbarTitles);
+
+  var mpToggleEl = null;  // v132: kept so a toolbar rebuild never loses the Market Profile button
   function buildToolbar() {
+    mpToggleEl = mpToggleEl || document.getElementById("market-profile-toggle");
+    if (mpToggleEl && mpToggleEl.parentNode === dom.toolbarEl) dom.toolbarEl.removeChild(mpToggleEl);
     dom.toolbarEl.innerHTML = "";
     TOOL_DEFS.forEach(function (def) {
       var btn = document.createElement("button");
       btn.type = "button";
       btn.className = "pill-btn";
-      btn.title = def.label;
+      btn.title = toolTitle(def);
       btn.dataset.tool = def.id;
       btn.innerHTML = def.icon;
-      btn.addEventListener("click", function () { setTool(def.id); });
+      btn.addEventListener("click", function () {
+        if (def.id === "ruler") { if (App.Ruler && App.Ruler.toggleArm) App.Ruler.toggleArm(); return; }  // v132
+        setTool(def.id);
+      });
       dom.toolbarEl.appendChild(btn);
     });
+    // v132: the Market Profile toggle lives right after the Ruler button (moved here from the panel group;
+    // market-profile.js keeps driving it by id).
+    if (mpToggleEl) dom.toolbarEl.appendChild(mpToggleEl);
     updateToolbarUI();
   }
 
   function updateToolbarUI() {
     Array.prototype.forEach.call(dom.toolbarEl.children, function (btn) {
-      btn.classList.toggle("active", btn.dataset.tool === App.currentTool);
+      if (!btn.dataset.tool) return;  // v132: Market Profile button manages its own state
+      btn.classList.toggle("active", btn.dataset.tool === "ruler"
+        ? !!(App.Ruler && App.Ruler.isArmed && App.Ruler.isArmed())   // v132: Ruler armed or running
+        : btn.dataset.tool === App.currentTool);
     });
   }
+  document.addEventListener("App:rulerChanged", updateToolbarUI);  // v132
 
   // v38: a tool selection is app-wide, not per-panel — picking "Trend
   // Line" once arms EVERY visible chart panel to start one on the very
@@ -715,6 +749,7 @@
   // primary one" means in practice: there is exactly one tool, and every
   // panel's canvas is put into the same drawing-armed state together.
   function setTool(toolId) {
+    if (App.Ruler && App.Ruler.disarm) App.Ruler.disarm();  // v132: picking any tool (incl. Cursor) un-arms the Ruler button
     cancelPendingObject();
     // Switching to a drawing tool starts a new object, so drop any active
     // selection/handles from the cursor tool first.

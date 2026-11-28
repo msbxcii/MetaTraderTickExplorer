@@ -27,8 +27,9 @@
   // reference), drawn with the same currentColor/stroke-width/line-cap
   // convention as every other toolbar glyph in this file so it follows
   // the button's own hover/active state automatically.
+  // v132: Fib Retracement icon - three lines of equal length (the old shortening lines looked like Market Profile).
   function iconFib() {
-    return '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 3.6h12"/><path d="M2 8h9"/><path d="M2 12.4h5.5"/></svg>';
+    return '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 3.5h12M2 8h12M2 12.5h12"/></svg>';
   }
   // v53: Fibonacci Expansion toolbar icon — traced verbatim from the
   // user-supplied FE.svg reference (three level strokes + the diagonal
@@ -36,6 +37,16 @@
   // button's own hover/active state exactly like every other glyph here.
   function iconFibExpansion() {
     return '<svg viewBox="0 0 28 28" fill="currentColor" stroke="none"><g fill-rule="nonzero"><path d="M4 25h22v-1h-22z"/><path d="M4 21h22v-1h-22z"/><path d="M6.5 17h19.5v-1h-19.5z"/><path d="M5 14.5v-3h-1v3zM6.617 9.275l10.158-3.628-.336-.942-10.158 3.628z"/><path d="M18.5 6c.828 0 1.5-.672 1.5-1.5s-.672-1.5-1.5-1.5-1.5.672-1.5 1.5.672 1.5 1.5 1.5zm0 1c-1.381 0-2.5-1.119-2.5-2.5s1.119-2.5 2.5-2.5 2.5 1.119 2.5 2.5-1.119 2.5-2.5 2.5zM4.5 11c.828 0 1.5-.672 1.5-1.5s-.672-1.5-1.5-1.5-1.5.672-1.5 1.5.672 1.5 1.5 1.5zm0 1c-1.381 0-2.5-1.119-2.5-2.5s1.119-2.5 2.5-2.5 2.5 1.119 2.5 2.5-1.119 2.5-2.5 2.5zM4.5 18c.828 0 1.5-.672 1.5-1.5s-.672-1.5-1.5-1.5-1.5.672-1.5 1.5.672 1.5 1.5 1.5zm0 1c-1.381 0-2.5-1.119-2.5-2.5s1.119-2.5 2.5-2.5 2.5 1.119 2.5 2.5-1.119 2.5-2.5 2.5z"/></g></svg>';
+  }
+
+  // v132: Ruler toolbar icon - a diagonal ruler with tick marks.
+  function iconRuler() {
+    return '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><g transform="rotate(-45 8 8)"><rect x="0.8" y="5.4" width="14.4" height="5.2" rx="1"/><path d="M3.6 5.4v2.2M6.2 5.4v1.4M8.8 5.4v2.2M11.4 5.4v1.4"/></g></svg>';
+  }
+
+  // v131: Market Profile toolbar icon - five horizontal bars of different length.
+  function iconMarketProfile() {
+    return '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 2.8h5M2 5.4h9M2 8h12M2 10.6h8M2 13.2h4"/></svg>';
   }
 
   // ---- v33: Object Tree panel icons ---------------------------------------
@@ -217,6 +228,8 @@
     fib: iconFib,
     fibExpansion: iconFibExpansion,
     layers: iconLayers,
+    marketProfile: iconMarketProfile,
+    ruler: iconRuler,
     trade: iconTrade,
     trash: iconTrash,
     modify: iconModify,
